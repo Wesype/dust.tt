@@ -7,8 +7,6 @@ on:
       - sdks/js/**
       - front/**
       - sparkle/**
-      - viz/app/lib/frame-runtime-imports.ts
-      - viz/package.json
       - .github/workflows/build-and-test-front.yml
 
 permissions:
@@ -21,8 +19,8 @@ jobs:
     name: Test Shard ${{ matrix.shardIndex }} of ${{ matrix.shardTotal }}
     strategy:
       matrix:
-        shardIndex: [ 1, 2, 3, 4, 5, 6 ]
-        shardTotal: [ 6 ]
+        shardIndex: [ 1, 2, 3 ]
+        shardTotal: [ 3 ]
     runs-on: ubuntu-latest
     services:
       redis:
@@ -39,6 +37,7 @@ jobs:
       - name: Setup Node Dependencies
         uses: ./.github/actions/setup-node-deps
         with:
+          node-version: "24.14.0"
           build-sdks: "true"
           build-sparkle: "true"
       - name: Install Postgres
@@ -52,8 +51,6 @@ jobs:
           postgresql port: 5433
       - name: Install Sandbox
         run: sudo apt-get update && sudo apt-get install -y ripgrep fd-find sd
-      - name: Install Frame lint tools
-        run: npm install --global oxlint@1.83.0 oxlint-tsgolint@7.0.2001 oxlint-tailwindcss@1.12.0
       - name: Run Tests
         working-directory: front
         env:
@@ -61,7 +58,6 @@ jobs:
           REDIS_CACHE_URI: "redis://localhost:5434"
           REDIS_URI: "redis://localhost:5434"
           NODE_ENV: test
-          NODE_OPTIONS: "--trace-deprecation" # Show stacktrace to eliminate deprecated calls.
         run: npx tsx admin/db.ts && npm run test:ci -- --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }} --outputFile=junit-shard-${{ matrix.shardIndex }}.xml
       - name: Build Tests Report
         if: always()
@@ -79,6 +75,7 @@ jobs:
       - name: Setup Node Dependencies
         uses: ./.github/actions/setup-node-deps
         with:
+          node-version: "24.14.0"
           build-sdks: "true"
           build-sparkle: "true"
       - name: Typecheck
@@ -94,5 +91,19 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - name: Setup Node Dependencies
         uses: ./.github/actions/setup-node-deps
+        with:
+          node-version: "24.14.0"
+      - name: Lint test filenames
+        run: npm -w front run lint:test-filenames
+      - name: Lint swagger annotations
+        run: npm -w front run lint:swagger-annotations
       - name: Lint audit log schemas
         run: npm -w front run lint:audit-log-schemas
+      - name: Check swagger.json is up to date
+        working-directory: front
+        run: |
+          npx next-swagger-doc-cli swagger.json
+          if ! git diff --exit-code public/swagger.json; then
+            echo "Error: public/swagger.json is out of date. Run 'npm run docs' in front/ and commit the result."
+            exit 1
+          fi

@@ -36,6 +36,8 @@ jobs:
 
       - name: Setup Node Dependencies
         uses: ./.github/actions/setup-node-deps
+        with:
+          node-version: "22.22.0"
 
       - name: Resolve version ID
         id: version
@@ -47,11 +49,11 @@ jobs:
             echo "::error::No version ID provided for ${{ matrix.app }}. Cannot promote without an explicit version ID."
             exit 1
           fi
-          echo "id=${VERSION_ID}" >> "$GITHUB_OUTPUT"
+          echo "id=${VERSION_ID}" >> $GITHUB_OUTPUT
           echo "Promoting version: ${VERSION_ID}"
 
       - name: Promote version to production
-        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
+        uses: cloudflare/wrangler-action@da0e0dfe58b7a431659754fdf3f186c529afbe65 # v3.14.1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

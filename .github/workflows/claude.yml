@@ -34,16 +34,26 @@ jobs:
         with:
           fetch-depth: 0 # Full depth for better git operations
 
-      - name: Setup Node Dependencies
-        uses: ./.github/actions/setup-node-deps
+      # Setup Node.js for JS/TS projects
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          build-sdks: "true"
+          node-version: 24.14.0
 
       # Setup Rust for core project
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@aad518f59d88bae90133242f9ddac7f8bbc5dddf # 1.94.1
         with:
           components: rustfmt
+
+      # Pre-build SDK only as it's a dependency for other projects
+      - name: Build SDK
+        run: |
+          # Install global tools
+          npm install -g tsx
+
+          # Pre-build SDK as it's a dependency for front and connectors
+          cd sdks/js && npm install && npm run build && cd ../..
 
       - name: Run Claude Code
         id: claude
@@ -61,7 +71,7 @@ jobs:
             - Never make changes to the codebase that the user did not ask for.
             - Unless explicitly requested to modify code, output must remain strictly conversational.
             - Always make the minimal changes required—never more.
-            - Follow all **CONTRACTS** files in each project directory (core, front). Review them before altering code.
+            - Follow all **CODING_RULES.md** files in each project directory (core, front). Review them before altering code.
             - Avoid "defensive" patterns (default values, removing tests, non-null assertions).
             - Add comments **only** for complex, non-obvious logic; wrap at ~100 characters.
             - Write code that fails fast and explicitly; assume valid inputs.
@@ -125,7 +135,7 @@ jobs:
             - For Rust projects, run `cargo check` before committing
             - SDK is pre-built; rebuild only if you modify it
             - Never run servers or execute applications, only build/lint/typecheck
-            - Follow all CONTRACTS files in each project directory
+            - Follow all CODING_RULES.md files in each project directory
             - Let exceptions propagate, avoid defensive patterns
             - Make minimal changes required
             - Use normalizeError() instead of `err as Error`"

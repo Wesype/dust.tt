@@ -1,18 +1,17 @@
 name: Revert Workflow
-run-name: Revert ${{ inputs.component }} in ${{ inputs.cells }}
+run-name: Revert ${{ inputs.component }} in ${{ inputs.regions }}
 
 on:
   workflow_dispatch:
     inputs:
-      cells:
-        description: "Cells to revert (cell-00000 is us-central1, cell-00001 europe-west1)"
+      regions:
+        description: "Regions to revert"
         required: true
         default: "all"
         type: choice
         options:
-          - "cell-00000"
-          - "cell-00001"
-          - "cell-00002"
+          - "us-central1"
+          - "europe-west1"
           - "all"
       image_tag:
         description: "The image tag/SHA to deploy"
@@ -26,16 +25,24 @@ on:
           - core
           - front
           - front-edge
-          - front-sse
+          - metabase
           - oauth
           - prodbox
           - viz
         required: true
-      enforce_main:
-        description: "Require revert to run from main branch"
-        required: false
-        default: false
-        type: boolean
+    secrets:
+      SLACK_CHANNEL_ID:
+        required: true
+      SLACK_BOT_TOKEN:
+        required: true
+      INFRA_DISPATCH_APP_ID:
+        required: true
+      INFRA_DISPATCH_APP_PRIVATE_KEY:
+        required: true
+      GCLOUD_US_PROJECT_ID:
+        required: true
+      GCLOUD_EU_PROJECT_ID:
+        required: true
 
 permissions:
   contents: read
@@ -56,41 +63,56 @@ jobs:
   notify-start:
     runs-on: ubuntu-latest
     outputs:
-      thread_ts: ${{ steps.card.outputs.thread_ts }}
-      card: ${{ steps.card.outputs.card }}
+      thread_ts: ${{ steps.build_message.outputs.thread_ts }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Generate infra token
-        id: infra-token
-        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+      - name: Notify Start
+        id: build_message
+        uses: ./.github/actions/slack-notify
         with:
-          client-id: ${{ secrets.INFRA_DISPATCH_APP_ID }}
-          private-key: ${{ secrets.INFRA_DISPATCH_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: dust-infra
-
-      - name: Post the deployment card
-        id: card
-        uses: ./.github/actions/deploy-card
-        with:
+          step: "start"
+          channel: ${{ secrets.SLACK_CHANNEL_ID }}
           component: ${{ inputs.component }}
           image_tag: ${{ inputs.image_tag }}
-          cells: ${{ inputs.cells }}
-          is_revert: "true"
-          channel: ${{ secrets.SLACK_CHANNEL_ID }}
+          region: ${{ inputs.regions }}
           slack_token: ${{ secrets.SLACK_BOT_TOKEN }}
-          infra_token: ${{ steps.infra-token.outputs.token }}
+          is_revert: true
 
-  # Images are built once into the global registry, so one check covers every region.
+  create-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        run: |
+          if [ "${{ inputs.regions }}" = "all" ]; then
+            echo "matrix=[\"us-central1\",\"europe-west1\"]" >> $GITHUB_OUTPUT
+          else
+            echo "matrix=[\"${{ inputs.regions }}\"]" >> $GITHUB_OUTPUT
+          fi
+
   validate-image:
     permissions:
       contents: read
       id-token: write
-    needs: [notify-start]
+    needs: [notify-start, create-matrix]
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        region: ${{ fromJson(needs.create-matrix.outputs.matrix) }}
+      fail-fast: true
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set project ID
+        id: project
+        run: |
+          if [ "${{ matrix.region }}" = "us-central1" ]; then
+            echo "PROJECT_ID=${{ secrets.GCLOUD_US_PROJECT_ID }}" >> $GITHUB_OUTPUT
+          else
+            echo "PROJECT_ID=${{ secrets.GCLOUD_EU_PROJECT_ID }}" >> $GITHUB_OUTPUT
+          fi
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
@@ -98,22 +120,16 @@ jobs:
         with:
           create_credentials_file: true
           workload_identity_provider: "projects/357744735673/locations/global/workloadIdentityPools/github-pool-apps/providers/github-provider-apps"
-          service_account: "github-build-invoker@dust-infra.iam.gserviceaccount.com"
+          service_account: "github-build-invoker@${{ steps.project.outputs.PROJECT_ID }}.iam.gserviceaccount.com"
 
       - name: "Set up Cloud SDK"
         uses: "google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db" # v3.0.1
 
       - name: Validate image tag exists
         run: |
-          # The front releases run the front-api images.
-          case "${{ inputs.component }}" in
-            front|front-sse) IMAGE="front-api" ;;
-            front-edge) IMAGE="front-api-edge" ;;
-            *) IMAGE="${{ inputs.component }}" ;;
-          esac
-          IMAGE_REPO="us-central1-docker.pkg.dev/dust-infra/dust-images/${IMAGE}"
+          echo "Validating image tag ${{ inputs.image_tag }} exists for ${{ inputs.component }} in ${{ matrix.region }}"
 
-          echo "Validating image tag ${{ inputs.image_tag }} exists in ${IMAGE_REPO}"
+          IMAGE_REPO="${{ matrix.region }}-docker.pkg.dev/${{ steps.project.outputs.PROJECT_ID }}/dust-images/${{ inputs.component }}"
 
           if ! gcloud container images describe "${IMAGE_REPO}:${{ inputs.image_tag }}" --quiet >/dev/null 2>&1; then
             echo "❌ Image tag '${{ inputs.image_tag }}' not found in registry ${IMAGE_REPO}"
@@ -125,7 +141,7 @@ jobs:
             exit 1
           fi
 
-          echo "✅ Image tag '${{ inputs.image_tag }}' exists in ${IMAGE_REPO}" >> "$GITHUB_STEP_SUMMARY"
+          echo "✅ Image tag '${{ inputs.image_tag }}' exists in ${{ matrix.region }} registry" >> $GITHUB_STEP_SUMMARY
 
       - name: Notify Failure
         if: failure()
@@ -135,7 +151,7 @@ jobs:
           channel: ${{ secrets.SLACK_CHANNEL_ID }}
           component: ${{ inputs.component }}
           image_tag: ${{ inputs.image_tag }}
-          region: ${{ inputs.cells }}
+          region: ${{ matrix.region }}
           slack_token: ${{ secrets.SLACK_BOT_TOKEN }}
           thread_ts: "${{ needs.notify-start.outputs.thread_ts }}"
           is_revert: true
@@ -150,7 +166,7 @@ jobs:
         id: generate-token
         uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
         with:
-          client-id: ${{ secrets.INFRA_DISPATCH_APP_ID }}
+          app-id: ${{ secrets.INFRA_DISPATCH_APP_ID }}
           private-key: ${{ secrets.INFRA_DISPATCH_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: dust-infra
@@ -165,11 +181,10 @@ jobs:
               repo: 'dust-infra',
               event_type: 'trigger-component-revert',
               client_payload: {
-                cells: '${{ inputs.cells }}',
+                regions: '${{ inputs.regions }}',
                 component: '${{ inputs.component }}',
                 image_tag: '${{ inputs.image_tag }}',
                 slack_thread_ts: "${{ needs.notify-start.outputs.thread_ts }}",
-                card: ${{ toJSON(needs.notify-start.outputs.card) }},
                 slack_channel: '${{ secrets.SLACK_CHANNEL_ID }}',
                 run_playwright: false,
               }
@@ -183,7 +198,7 @@ jobs:
           channel: ${{ secrets.SLACK_CHANNEL_ID }}
           component: ${{ inputs.component }}
           image_tag: ${{ inputs.image_tag }}
-          region: ${{ inputs.cells }}
+          region: ${{ inputs.regions }}
           slack_token: ${{ secrets.SLACK_BOT_TOKEN }}
           thread_ts: "${{ needs.notify-start.outputs.thread_ts }}"
           is_revert: true
