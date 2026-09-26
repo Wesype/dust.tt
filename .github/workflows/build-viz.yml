@@ -4,9 +4,7 @@ on:
   push:
     paths:
       - package-lock.json
-      - sparkle/**
       - viz/**
-      - dockerfiles/viz.Dockerfile
       - .github/workflows/build-viz.yml
 
 permissions:
@@ -21,7 +19,7 @@ jobs:
       - name: Setup Node Dependencies
         uses: ./.github/actions/setup-node-deps
         with:
-          build-sparkle: "true"
+          node-version: "24.14.0"
       - name: Build
         run: npm -w viz run build
   test:
@@ -31,6 +29,6 @@ jobs:
       - name: Setup Node Dependencies
         uses: ./.github/actions/setup-node-deps
         with:
-          build-sparkle: "true"
+          node-version: "24.14.0"
       - name: Test
         run: npm -w viz run test
