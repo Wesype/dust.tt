@@ -1,0 +1,50 @@
+name: Sync fork with upstream (dust-tt/dust)
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+
+      - name: Sync upstream (reset-based, no merge conflicts possible)
+        run: |
+          git remote add upstream https://github.com/dust-tt/dust.git
+          git fetch upstream main
+
+          if git diff --quiet HEAD upstream/main; then
+            echo "✅ Already up to date"
+            exit 0
+          fi
+
+          # Sauvegarder nos workflows avant reset
+          mkdir -p /tmp/wesype-workflows
+          cp -r .github/workflows/. /tmp/wesype-workflows/
+
+          # Reset complet sur upstream — plus de merge, plus de conflits possibles
+          git reset --hard upstream/main
+
+          # Restaurer nos workflows par-dessus
+          rm -rf .github/workflows
+          mkdir -p .github/workflows
+          cp -r /tmp/wesype-workflows/. .github/workflows/
+
+          git add .github/workflows/
+          git commit -m "chore: sync upstream dust-tt/dust $(date -u '+%Y-%m-%d')" --allow-empty
+          git push --force origin main
+          echo "✅ Done"
