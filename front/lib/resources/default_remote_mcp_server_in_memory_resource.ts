@@ -9,6 +9,33 @@ import type { RemoteMCPServerType } from "@app/lib/api/mcp";
 import type { Authenticator } from "@app/lib/auth";
 import { getFeatureFlags } from "@app/lib/auth";
 import { isCreditBasedPlan } from "@app/lib/plans/plan_codes";
+import type { WhitelistableFeature } from "@app/types/shared/feature_flags";
+
+/**
+ * @cc [owner:smb2268,label:product] feature-flag-overrides-plan-gate
+ * A preset with `creditBasedPlansOnly` MUST be available when the workspace's plan satisfies
+ * `isCreditBasedPlan` or the workspace has the preset's `featureFlag`, and unavailable otherwise.
+ * A preset without `creditBasedPlansOnly` MUST be unavailable when it has a `featureFlag` the
+ * workspace lacks.
+ */
+export function isAvailableToWorkspace(
+  config: DefaultRemoteMCPServerConfig,
+  {
+    featureFlags,
+    isCreditBased,
+  }: { featureFlags: WhitelistableFeature[]; isCreditBased: boolean }
+): boolean {
+  const hasFlag =
+    config.featureFlag !== undefined &&
+    featureFlags.includes(config.featureFlag);
+
+  if (config.creditBasedPlansOnly) {
+    // The flag lets a workspace in regardless of its plan.
+    return isCreditBased || hasFlag;
+  }
+  // Without a plan gate, the flag is simply required when set.
+  return config.featureFlag === undefined || hasFlag;
+}
 
 export class DefaultRemoteMCPServerInMemoryResource {
   readonly id: string;
@@ -36,11 +63,6 @@ export class DefaultRemoteMCPServerInMemoryResource {
     return new this(sId, config);
   }
 
-  /**
-   * @cc [owner:smb2268,label:product] credit-based-presets-hidden-from-other-plans
-   * A preset with `creditBasedPlansOnly` MUST be omitted unless the workspace's plan satisfies
-   * `isCreditBasedPlan` (credit-priced or Dust company), in addition to its `featureFlag` gate.
-   */
   static async listAvailableDefaultRemoteMCPServers(
     auth: Authenticator
   ): Promise<DefaultRemoteMCPServerInMemoryResource[]> {
@@ -49,10 +71,7 @@ export class DefaultRemoteMCPServerInMemoryResource {
     const isCreditBased = isCreditBasedPlan(auth.getNonNullablePlan());
 
     for (const config of DEFAULT_REMOTE_MCP_SERVERS) {
-      if (config.featureFlag && !featureFlags.includes(config.featureFlag)) {
-        continue;
-      }
-      if (config.creditBasedPlansOnly && !isCreditBased) {
+      if (!isAvailableToWorkspace(config, { featureFlags, isCreditBased })) {
         continue;
       }
 
