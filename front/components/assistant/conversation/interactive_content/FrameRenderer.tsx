@@ -445,6 +445,7 @@ export function FrameRenderer({
                 spaceId={frameSpaceId ?? undefined}
                 framePackageRoot={framePackageRoot}
                 frameId={renderMode === "v2" ? fileId : undefined}
+                frameFileId={fileId}
                 isInDrawer={true}
                 functionTarget="latest"
                 isEditable={isEditable}

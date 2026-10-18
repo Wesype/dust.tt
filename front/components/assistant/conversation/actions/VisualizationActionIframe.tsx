@@ -807,6 +807,8 @@ export interface VisualizationActionIframeProps {
    * `"latest"` (the draft for editors, live otherwise); omitted, the live publication runs.
    */
   functionTarget?: FramePublicationTarget;
+  /** The rendered Frame's file, legacy or v2, whose saved allowlist admits out-of-scope reads. */
+  frameFileId?: string | null;
   isEditable?: boolean;
   /**
    * Frames v2 authors only: edits are staged in the viz until Save. Switching between Preview and
@@ -1003,6 +1005,8 @@ export const VisualizationActionIframe = forwardRef<
     conversationId,
     spaceId,
     packageRoot: props.framePackageRoot,
+    frameFileId: props.frameFileId,
+    frameContent: visualization.code ?? null,
     canWrite:
       Boolean(props.frameId) && runtimeAccess.userIdentity.isWorkspaceMember,
   });

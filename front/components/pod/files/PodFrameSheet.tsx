@@ -272,6 +272,7 @@ function PodFrameSheetWithFile({
                   spaceId={fileMetadata?.useCaseMetadata.spaceId}
                   framePackageRoot={framePackageRoot}
                   frameId={isV2 ? fileId : undefined}
+                  frameFileId={fileId}
                   isInDrawer={true}
                   isEditable={isEditable}
                   stagedEditMode={canEditV2 ? editSession.mode : undefined}
