@@ -17,7 +17,8 @@ use crate::{
     storage::{
         self,
         resources::{
-            SUBJECT_MAX_BYTES, directory, file, keys::tenant_subspace, page, tenant::TenantResource,
+            SUBJECT_MAX_BYTES, SUPERUSER_SUBJECT, directory, file, keys::tenant_subspace, page,
+            tenant::TenantResource,
         },
     },
 };
@@ -591,7 +592,8 @@ impl ObjectResource {
     /**
      * @cc [owner:spolu,label:backend] object-grant-identity
      * Grants MUST select one variant and use only mode bits 0o6, including zero. ALLOW subjects
-     * MUST contain 1-1024 UTF-8 bytes, preserved exactly. Invalid grants MUST return InvalidGrant.
+     * MUST contain 1-1024 UTF-8 bytes, preserved exactly, and MUST NOT equal the reserved superuser
+     * subject, including on removal. Invalid grants MUST return InvalidGrant.
      * Keys MUST preserve the complete grant identity, including distinct modes for one subject.
      * Reverse ALLOW keys MUST place the ALLOW tag before the subject.
      */
@@ -601,6 +603,7 @@ impl ObjectResource {
             Some(grant::Kind::Allow(AllowGrant { subject, mode }))
                 if !subject.is_empty()
                     && subject.len() <= SUBJECT_MAX_BYTES
+                    && subject != SUPERUSER_SUBJECT
                     && mode & !GRANT_MODE_MASK == 0 =>
             {
                 Ok((

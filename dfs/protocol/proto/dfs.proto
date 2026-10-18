@@ -147,7 +147,7 @@ message ExtendedMetadata {
   map<string, bytes> xattrs = 4;
 }
 
-// Exactly one rule is required. Rules inherit from root to object; a deeper ALLOW can restore bits.
+// Exactly one rule is required. Ordinary sessions inherit rules from root to object.
 // At each object, subjectless DENY modes remove inherited bits before matching ALLOW modes are added.
 message Grant {
   oneof kind {
@@ -159,6 +159,7 @@ message Grant {
 message AllowGrant {
   // @cc [owner:spolu,label:api] dfs-allow-subject-size
   // Subjects MUST contain 1-1,024 UTF-8 bytes, matched exactly against session subjects.
+  // The reserved subject "superuser" MUST fail with INVALID_INPUT, including in grant removals.
   required string subject = 1;
   // @cc [owner:spolu,label:api] dfs-allow-mode
   // Mode MUST use only r=4 and w=2, with no bits outside 0o6. Matching ALLOW modes MUST add
@@ -170,7 +171,7 @@ message AllowGrant {
 message DenyGrant {
   // @cc [owner:spolu,label:api] dfs-deny-mode
   // Mode MUST use only r=4 and w=2, with no bits outside 0o6. DENY modes MUST remove these
-  // inherited permissions for every subject before matching local ALLOW modes are added. They
+  // inherited permissions for ordinary sessions before matching local ALLOW modes are added. They
   // MUST NOT remove permissions granted by an ALLOW at the same object. Zero MUST leave
   // permission bits unchanged. Other bits, including x=1, MUST fail with INVALID_INPUT.
   required uint32 mode = 1;
@@ -196,6 +197,11 @@ message Tenant {
 // @cc [owner:spolu,label:api] dfs-create-session-limits
 // Subjects MUST contain at most 512 distinct values, each containing 1-1,024 UTF-8 bytes.
 // Repeated values MUST be deduplicated.
+
+// @cc [owner:spolu,label:api;security] dfs-superuser-subject
+// Tenant-key callers MUST be able to include the exact subject "superuser" in normal creation.
+// These sessions MUST receive read/write on every existing real object in their tenant regardless
+// of grants, including DENY. Other tenants and tenant-key RPCs MUST remain inaccessible.
 message CreateSessionRequest {
   repeated string subjects = 1;
 }

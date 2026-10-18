@@ -149,6 +149,11 @@ The tenant key holder asserts the session's subjects, such as `u:<userSId>` and 
 Subjects are opaque, case-sensitive strings matched exactly; the server does not resolve group
 membership or infer additional subjects. Sessions contain subjects, not grants or permission masks.
 
+The exact subject `superuser` is reserved: tenant-key callers may include it in normal session
+creation to get RW on every real object in that tenant, ignoring all grants, including DENY.
+ALLOW grants for `superuser` are invalid, including removals. Tenant-key RPCs still require a tenant
+key.
+
 Object grants have two variants:
 
 ```text
@@ -164,13 +169,14 @@ DenyGrant {
 }
 ```
 
-ALLOW requires a nonempty subject. DENY has no subject and applies to every session. A grant must
+ALLOW requires a nonempty subject. DENY has no subject and applies to ordinary sessions. A grant must
 select exactly one variant. Modes use only the POSIX read/write bits: `r=0o4`, `w=0o2`, and
 `rw=0o6`. Zero is valid and leaves permission bits unchanged; bits outside `0o6`, including the
 execute bit (`0o1`), are invalid. `Attr.mode` reports the resulting read/write permissions in the
 POSIX owner bits and adds execute/traverse only for readable directories, as described above.
 
-Grants inherit from the stored tenant root down to the target object. Start with no permissions.
+For ordinary sessions, grants inherit from the stored tenant root down to the target object.
+Start with no permissions.
 At each object, remove inherited permissions covered by any DENY grants attached there, then add
 the modes of all local ALLOW grants whose subjects match the session:
 
@@ -223,8 +229,8 @@ permissions. Tenant administration uses its tenant key and is not restricted by 
 Ordinary reads conceal inaccessible objects as `NOT_FOUND`. Mutation permission failures use
 `FORBIDDEN`.
 
-Every permission check reads the target and its ancestry in the operation's FDB transaction.
-Local tree hints schedule reads and reuse grants only when the freshly read `grants_version`
+Permission checks read targets in the operation's FDB transaction. Ordinary sessions also read
+ancestry. Local tree hints schedule reads and reuse grants only when the freshly read `grants_version`
 matches. Search indexing has independent lag.
 
 Keys are opaque 64-character bearer strings. A tenant key authorizes administration for that tenant;
@@ -293,9 +299,10 @@ Session {
 Clients address the virtual `root`; the server resolves the stored root directory from the session's
 tenant. The root directory ID belongs to tenant state, not session state.
 
-Subjects may be included before any ALLOW grants reference them. Sessions are stored in FoundationDB
-and survive server restarts. They initially expire after one hour; an active session can extend its
-expiry through `RefreshSession`. Its subject set is fixed; create a new session to change subjects.
+Subjects may be included before any ALLOW grants reference them; `superuser` needs no grant.
+Sessions are stored in FoundationDB and survive server restarts. They initially expire after one
+hour; an active session can extend its expiry through `RefreshSession`. Its subject set is fixed;
+create a new session to change subjects.
 Expired sessions fail authentication immediately and are removed asynchronously by periodic cleanup.
 
 ### CurrentSession

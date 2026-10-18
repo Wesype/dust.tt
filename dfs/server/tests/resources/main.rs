@@ -68,6 +68,7 @@ fn resources() -> Result<()> {
         object::grant_creation_and_update_validation_preserve_state().await?;
         object::grant_pagination_handles_full_pages_and_object_deletion().await?;
         object::modes_for_session_evaluate_full_paths_and_all_grants().await?;
+        object::superuser_modes_bypass_grants_and_preserve_tenant_scope().await?;
         object::grant_cache_skips_matching_versions_and_preserves_session_snapshots().await?;
         object::tree_hints_follow_moves_and_recheck_grants().await?;
         object::ancestry_reads_follow_stale_hints_without_reading_grants().await?;

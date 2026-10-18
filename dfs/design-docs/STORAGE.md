@@ -144,7 +144,8 @@ parent record in the same transaction. Concurrent sibling changes may conflict a
 
 ## Grants
 
-Store ALLOW subjects directly as strings. Sessions may contain subjects with no attachments.
+Store ALLOW subjects directly as strings, rejecting the reserved `superuser` value.
+Sessions may contain subjects with no attachments, including `superuser`, stored like any subject.
 Store each grant's complete identity, including its mode, so listing and detaching preserve distinct
 grant values.
 
@@ -166,7 +167,8 @@ missing object fails and a concurrent deletion conflicts with updates. Listing r
 entry beyond the page limit and uses the last returned key, encoded as URL-safe unpadded base64, as
 an exclusive cursor. Cursors are validated against the authenticated tenant and requested object.
 
-Authorization walks the real ancestor chain in one transaction. At each level, DENY removes inherited
+Superuser sessions fetch targets in their tenant and return RW without reading grants or ancestry.
+Ordinary authorization walks the real ancestor chain in one transaction. DENY removes inherited
 bits, then matching ALLOW adds bits. Only read/write bits exist; a deeper ALLOW can reopen access.
 Shared listing merges bounded per-subject reverse scans in object-ID order, deduplicates candidates,
 and checks effective read. Lookup parses `name--<object-id>`, checks explicit ALLOW membership, and

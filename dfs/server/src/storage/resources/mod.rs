@@ -12,5 +12,7 @@ pub mod tenant;
  */
 const SUBJECT_MAX_BYTES: usize = 1_024;
 
+const SUPERUSER_SUBJECT: &str = "superuser";
+
 /// Caps in-flight FDB reads; each buffered task must keep at most one read in flight.
 const CONCURRENT_READS: usize = 32;

@@ -28,6 +28,7 @@ pub(crate) async fn creates_durable_sessions_for_authenticated_tenants() -> Resu
             vec!["g:engineering", "u:test"],
         ),
         (vec![], vec![]),
+        (vec!["superuser", "superuser"], vec!["superuser"]),
     ] {
         let tenant = client
             .create_tenant(with_authorization(

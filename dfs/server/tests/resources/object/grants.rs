@@ -209,6 +209,7 @@ pub(crate) async fn grant_creation_and_update_validation_preserve_state() -> Res
     let invalid = vec![
         Grant::default(),
         allow("", 4),
+        allow("superuser", 6),
         allow(&"é".repeat(513), 4),
         allow("a", 1),
         deny(8),

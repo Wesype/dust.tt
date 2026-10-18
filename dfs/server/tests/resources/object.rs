@@ -30,7 +30,9 @@ pub(crate) use modes::{
     grant_cache_skips_matching_versions_and_preserves_session_snapshots,
     modes_for_session_evaluate_full_paths_and_all_grants,
     modes_for_session_isolate_tenants_and_reject_invalid_ancestry,
-    permission_reads_conflict_with_changes_and_retry, tree_hints_follow_moves_and_recheck_grants,
+    permission_reads_conflict_with_changes_and_retry,
+    superuser_modes_bypass_grants_and_preserve_tenant_scope,
+    tree_hints_follow_moves_and_recheck_grants,
 };
 pub(crate) use stat::{
     metadata_reads_preserve_snapshot_and_tenant_scope,

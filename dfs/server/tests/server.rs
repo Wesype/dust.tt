@@ -65,6 +65,7 @@ fn server() -> Result<()> {
         api::apply::apply_returns_per_operation_errors_and_rejects_invalid_requests().await?;
         api::capacity::oversized_transactions_return_capacity_without_committing().await?;
         api::create_session::creates_durable_sessions_for_authenticated_tenants().await?;
+        api::superuser::superuser_sessions_read_and_write_despite_denies().await?;
         api::session::session_rpcs_enforce_credentials_and_preserve_identity().await?;
         api::session::session_authentication_requires_and_caches_existing_tenants().await?;
         tokio::try_join!(

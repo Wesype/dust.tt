@@ -103,6 +103,7 @@ export interface DfsSession {
   // Identifies the session for `revokeSession`; not a credential.
   id: string;
   tenantId: string;
+  // The exact subject "superuser" bypasses object grants within this tenant.
   subjects: string[];
   // Empty string when returned by `currentSession` or `refreshSession`.
   sessionKey: string;
@@ -112,9 +113,9 @@ export interface DfsSession {
 // Grants. Modes use r=4 and w=2 only (at most 0o6); directory traversal follows read access.
 
 export type DfsGrant =
-  // Adds `mode` for sessions holding exactly `subject` (e.g. `u:<userSId>`, `g:<groupSId>`).
+  // Adds `mode` for sessions holding exactly `subject`; "superuser" is reserved and rejected.
   | { type: "allow"; subject: string; mode: number }
-  // Removes `mode` for every session.
+  // Removes `mode` for ordinary sessions.
   | { type: "deny"; mode: number };
 
 export interface DfsGrantPage {

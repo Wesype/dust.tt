@@ -29,6 +29,7 @@ pub(crate) mod read_files;
 pub(crate) mod session;
 pub(crate) mod shared;
 pub(crate) mod stat;
+pub(crate) mod superuser;
 
 fn allow(subject: &str, mode: u32) -> Grant {
     Grant {

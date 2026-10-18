@@ -112,7 +112,20 @@ pub(crate) async fn grants_are_scoped_paginated_and_atomic() -> Result<()> {
                 remove: false,
             },
         ],
-    ] {
+    ]
+    .into_iter()
+    .chain([false, true].map(|remove| {
+        vec![
+            GrantUpdate {
+                grant: added.clone(),
+                remove: true,
+            },
+            GrantUpdate {
+                grant: super::allow("superuser", 6),
+                remove,
+            },
+        ]
+    })) {
         let error = client
             .update_grants(with_authorization(
                 UpdateGrantsRequest {

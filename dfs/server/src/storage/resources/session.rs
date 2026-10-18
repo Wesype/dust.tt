@@ -12,7 +12,7 @@ use crate::{
     storage::{
         self,
         resources::{
-            SUBJECT_MAX_BYTES,
+            SUBJECT_MAX_BYTES, SUPERUSER_SUBJECT,
             keys::{namespace_subspace, tenant_subspace},
             object::TreeHints,
             tenant::{self, TenantResource},
@@ -107,6 +107,7 @@ impl SessionResource {
      * @cc [owner:spolu,label:api;security] session-subject-validation
      * Subjects MUST contain at most 512 distinct values of 1-1,024 UTF-8 bytes each. Values MUST
      * remain exact and be deduplicated; the empty set MUST be accepted without consulting grants.
+     * The reserved superuser subject MUST be accepted through the same creation flow.
      */
     /**
      * @cc [owner:spolu,label:backend;security] session-creation-state
@@ -139,6 +140,10 @@ impl SessionResource {
             tree_hints: TreeHints::shared(),
         };
         Ok((session, session_key))
+    }
+
+    pub fn is_superuser(&self) -> bool {
+        self.subjects.contains(SUPERUSER_SUBJECT)
     }
 
     /**

@@ -85,6 +85,76 @@ async fn grants_were_read(tx: &Transaction, tenant: &TenantResource, id: ObjectI
     Ok(!tx.get_range(&range, 1, true).await?.is_empty())
 }
 
+pub(crate) async fn superuser_modes_bypass_grants_and_preserve_tenant_scope() -> Result<()> {
+    let (tenant, _) = TenantResource::new(ObjectId::new_v7().to_string())?;
+    let (other, _) = TenantResource::new(ObjectId::new_v7().to_string())?;
+    let root = ObjectResource::new_root(&tenant)?;
+    let leaf = child(&tenant, root.object_id)?;
+    let tx = fdb::database()?.create_trx()?;
+    root.create(&tx, &[deny(6)]).await?;
+    leaf.create(&tx, &[deny(6)]).await?;
+    ObjectResource::new_root(&other)?.create(&tx, &[]).await?;
+    tx.commit().await?;
+
+    let ids = [
+        leaf.object_id,
+        root.object_id,
+        ObjectId::new_v7(),
+        other.root_id,
+        leaf.object_id,
+    ];
+    for (subjects, expected_mode) in [
+        (vec!["superuser"], 6),
+        (vec!["reader", "superuser"], 6),
+        (vec!["Superuser", "superuser ", "u:superuser", "root"], 0),
+        (vec![], 0),
+    ] {
+        let (session, _) =
+            SessionResource::new(&tenant, subjects.into_iter().map(str::to_owned).collect())?;
+        let tx = fdb::database()?.create_trx()?;
+        let modes = ObjectResource::modes_for_session(&tx, &session, &ids).await?;
+        for (index, entry) in modes.iter().enumerate() {
+            if let Some((object, _)) = entry {
+                assert_eq!(object.object_id, ids[index]);
+                assert_eq!(object.tenant.tenant_id, tenant.tenant_id);
+                assert!(object.metadata.is_none());
+            }
+        }
+        assert_eq!(
+            bits(modes),
+            [
+                Some(expected_mode),
+                Some(expected_mode),
+                None,
+                None,
+                Some(expected_mode)
+            ]
+        );
+        if expected_mode == 6 {
+            assert!(!grants_were_read(&tx, &tenant, root.object_id).await?);
+            assert!(!grants_were_read(&tx, &tenant, leaf.object_id).await?);
+        }
+    }
+
+    let (session, _) = SessionResource::new(&tenant, vec!["superuser".to_owned()])?;
+    let tx = fdb::database()?.create_trx()?;
+    tx.set_read_version(1);
+    assert!(matches!(
+        ObjectResource::modes_for_session(&tx, &session, &[leaf.object_id, ObjectId::default()])
+            .await,
+        Err(storage::Error::Resource(object::Error::InvalidId))
+    ));
+    let Err(storage::Error::Transaction(error)) =
+        ObjectResource::modes_for_session(&tx, &session, &[leaf.object_id]).await
+    else {
+        anyhow::bail!("expected a transaction failure");
+    };
+    assert_eq!(error.get_fdb_error().map(|error| error.code()), Some(1007));
+    cleanup(&tenant).await?;
+    cleanup(&other).await?;
+    Ok(())
+}
+
 pub(crate) async fn grant_cache_skips_matching_versions_and_preserves_session_snapshots()
 -> Result<()> {
     let (tenant, _) = TenantResource::new(ObjectId::new_v7().to_string())?;

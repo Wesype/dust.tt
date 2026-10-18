@@ -7,7 +7,9 @@ use dfs_protocol::{
 use foundationdb::{FdbBindingError, RangeOption, Transaction};
 use futures::{StreamExt, TryStreamExt, stream};
 
-use super::{Error, GRANT_READ_MODE, GRANT_WRITE_MODE, ObjectResource, hints::Hint};
+use super::{
+    Error, GRANT_MODE_MASK, GRANT_READ_MODE, GRANT_WRITE_MODE, ObjectResource, hints::Hint,
+};
 use crate::storage::{
     self,
     resources::{CONCURRENT_READS, session::SessionResource},
@@ -40,27 +42,35 @@ struct ObjectMode {
 impl ObjectResource {
     /**
      * @cc [owner:spolu,label:backend;security] object-granted-modes
-     * Every call MUST read each target and its full ancestry through the session's tenant root in
+     * Ordinary sessions MUST read each target and its full ancestry through the tenant root in
      * the caller's transaction with conflict tracking. Changed parents MUST be followed from fresh
      * records. Complete cached grants MUST replace grant reads only when grants_version matches;
      * cache misses MUST read every explicit grant in that transaction with conflict tracking.
      * Results MUST preserve input order and duplicates, with None for missing targets and zero
-     * mode for existing targets without access. Broken or cyclic ancestry MUST fail closed.
-     * Each returned object MUST be the record used to evaluate its mode, without optional metadata.
+     * mode for existing targets without access. Ordinary sessions MUST fail closed on broken or
+     * cyclic ancestry. Each returned object MUST be the record used to evaluate its mode, without
+     * optional metadata.
+     */
+    /**
+     * @cc [owner:spolu,label:backend;security] superuser-granted-modes
+     * Sessions containing the exact subject "superuser" MUST receive read and write on every
+     * existing object in their tenant, regardless of grants. Checks MUST still fetch targets in
+     * the caller's transaction with conflict tracking, preserving missing objects and invalid-ID
+     * errors. Ancestry and grants need not be read; other tenants MUST remain inaccessible.
      */
     /**
      * @cc [owner:spolu,label:backend;security] grant-cache-committed-state
      * Callers MUST NOT stage grant updates before or concurrently with modes_for_session. Namespace
-     * writes MAY precede it: parents are always re-read, and newly created objects MUST have empty
-     * grants. Within an object's lifetime, cached grants and their versions MUST describe the same
-     * state. Staged nonempty grants MUST NOT enter the shared cache.
+     * writes MAY precede it: ordinary sessions re-read parents, and newly created objects MUST
+     * have empty grants. Within an object's lifetime, cached grants and their versions MUST
+     * describe the same state. Staged nonempty grants MUST NOT enter the shared cache.
      */
     /**
      * @cc [owner:spolu,label:backend;security] inherited-grant-evaluation
-     * Starting with zero at the root, each object MUST remove all local DENY bits from inherited
-     * permissions before adding ALLOW bits whose subjects exactly match the session. Evaluation
-     * MUST continue through zero permissions so a deeper ALLOW can restore access. Only read and
-     * write bits may be returned.
+     * For ordinary sessions, starting with zero at the root, each object MUST remove local DENY
+     * bits from inherited permissions before adding ALLOW bits whose subjects exactly match the
+     * session. Evaluation MUST continue through zero permissions so a deeper ALLOW can restore
+     * access. Only read and write bits may be returned.
      */
     pub async fn modes_for_session(
         tx: &Transaction,
@@ -68,6 +78,23 @@ impl ObjectResource {
         object_ids: &[ObjectId],
     ) -> Result<Vec<Option<(Self, Mode)>>, storage::Error<Error>> {
         let tenant = &session.tenant;
+        if session.is_superuser() {
+            for id in object_ids {
+                id.validate().map_err(|_| Error::InvalidId)?;
+            }
+            let reads: Vec<_> = object_ids
+                .iter()
+                .map(|id| async move {
+                    Ok(Self::fetch(tx, tenant, id)
+                        .await?
+                        .map(|object| (object, Mode(GRANT_MODE_MASK))))
+                })
+                .collect();
+            return stream::iter(reads)
+                .buffered(CONCURRENT_READS)
+                .try_collect()
+                .await;
+        }
         let hints = &session.tree_hints;
         let objects = hints.fetch_ancestry(tx, tenant, object_ids).await?;
 

@@ -61,12 +61,17 @@ pub(crate) async fn dfs_rejects_invalid_tenant_creation() -> Result<()> {
     let mut client = DfsClient::new(serve().await?);
     let authorization = format!("Bearer {MASTER_KEY}");
     let invalid_grants_id = ObjectId::new_v7().to_string();
+    let reserved_subject_id = ObjectId::new_v7().to_string();
     let too_many_grants_id = ObjectId::new_v7().to_string();
     let inputs = [
         (String::new(), vec![]),
         ("é".repeat(129), vec![]),
         ("tenant\0suffix".to_owned(), vec![]),
         (invalid_grants_id.clone(), vec![Grant::default()]),
+        (
+            reserved_subject_id.clone(),
+            vec![super::allow("superuser", 6)],
+        ),
         (
             too_many_grants_id.clone(),
             (0..513)
@@ -98,7 +103,7 @@ pub(crate) async fn dfs_rejects_invalid_tenant_creation() -> Result<()> {
         assert_eq!(status.message(), "Invalid input.");
     }
     let tx = fdb::database()?.create_trx()?;
-    for tenant_id in [invalid_grants_id, too_many_grants_id] {
+    for tenant_id in [invalid_grants_id, reserved_subject_id, too_many_grants_id] {
         let range = foundationdb::RangeOption::from(tenant_subspace(&tenant_id).range());
         assert!(tx.get_range(&range, 1, false).await?.is_empty());
     }
