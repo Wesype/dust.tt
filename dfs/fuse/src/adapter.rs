@@ -1,6 +1,6 @@
 //! Serves `dfs_mount::Fs` to the kernel through `fuser`.
 
-use dfs_mount::{Attributes, Errno, Fs, Kind};
+use dfs_mount::{Attributes, Errno, Fs, Ino, Kind};
 use dfs_protocol::READ_MAX_BYTES;
 use fuser::{
     AccessFlags, BsdFileFlags, Config, FileAttr, FileHandle, FileType, Filesystem, Generation,
@@ -133,6 +133,45 @@ fn file_type(kind: Kind) -> FileType {
 
 fn errno(errno: Errno) -> fuser::Errno {
     fuser::Errno::from_i32(errno.0)
+}
+
+// Permissions are written in octal (`0o`), one digit per class of users: owner, group, others.
+// Each digit adds up read (4), write (2) and execute (1), so `0o750` is `rwx` for the owner, `r-x`
+// for the group and nothing for others. Each digit takes 3 bits.
+
+/// Shifting permissions right by this drops the group and others digits, leaving the owner's:
+/// `0o750 >> 6` is `0o7`.
+const OWNER_PERMISSIONS_SHIFT: u16 = 6;
+/// Keeps only the last digit: read, write and execute. `AccessFlags` uses the same values
+/// (`R_OK` 4, `W_OK` 2, `X_OK` 1), so the owner's digit compares directly with what is asked.
+const RWX_BITS: i32 = 0o7;
+
+/**
+ * @cc [owner:fontanierh,label:security] owner-bits
+ * `allows` MUST be true only when the owner bits of `permissions` include every bit `mask` asks
+ * for. `F_OK` asks for none.
+ */
+fn allows(permissions: u16, mask: AccessFlags) -> bool {
+    // Allowed when every bit asked for is set in the owner's digit.
+    let owner = i32::from(permissions >> OWNER_PERMISSIONS_SHIFT) & RWX_BITS;
+    let wanted = mask.bits() & RWX_BITS;
+    owner & wanted == wanted
+}
+
+/// The attributes of `ino`. Fails with `EACCES` unless its owner bits allow `mask`.
+/**
+ * @cc [owner:fontanierh,label:security] check-keeps-getattr-errors
+ * `check` MUST fail with `fs.getattr`'s error unchanged when it fails, so an object the session
+ * cannot read stays `ENOENT`. When `fs.getattr` succeeds, `check` MUST fail with `EACCES` exactly
+ * when `allows` is false.
+ */
+async fn check(fs: &Fs, ino: Ino, mask: AccessFlags) -> Result<Attributes, Errno> {
+    let attributes = fs.getattr(ino).await?;
+    if allows(attributes.permissions, mask) {
+        Ok(attributes)
+    } else {
+        Err(Errno::EACCES)
+    }
 }
 
 /**
@@ -445,8 +484,14 @@ impl Filesystem for Adapter {
 
     /// Says whether the caller may read, write or execute an inode, for `access`. Checks the mode
     /// bits for the owner.
-    fn access(&self, _req: &Request, _ino: INodeNo, _mask: AccessFlags, _reply: ReplyEmpty) {
-        todo!()
+    fn access(&self, _req: &Request, ino: INodeNo, mask: AccessFlags, reply: ReplyEmpty) {
+        let fs = self.fs.clone();
+        self.runtime.spawn(async move {
+            match check(&fs, ino.0, mask).await {
+                Ok(_) => reply.ok(),
+                Err(e) => reply.error(errno(e)),
+            }
+        });
     }
 
     /// Creates a regular file and opens it as `open` does, in one call, for `open` with `O_CREAT`.
@@ -522,5 +567,14 @@ mod tests {
         assert_eq!((attr.perm, attr.nlink), (0o400, 1));
         assert_eq!((attr.uid, attr.gid), (UID, GID));
         assert_eq!(attr.crtime, ctime);
+    }
+
+    #[test]
+    fn only_the_owner_bits_grant_access() {
+        assert!(allows(0o500, AccessFlags::R_OK | AccessFlags::X_OK));
+        assert!(!allows(0o500, AccessFlags::W_OK));
+        assert!(!allows(0o500, AccessFlags::R_OK | AccessFlags::W_OK));
+        assert!(!allows(0o077, AccessFlags::R_OK));
+        assert!(allows(0o000, AccessFlags::F_OK));
     }
 }
