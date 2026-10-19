@@ -86,7 +86,7 @@ export function FilePreviewPanel({
   // and window focus, so the preview refreshes after the file is touched (and
   // the reload button forces an immediate revalidation).
   // TODO: use E2B events of "files are updated", when they are merged
-  const { sandboxFiles } = useConversationSandboxFiles({
+  const { sandboxFiles, isSandboxFilesLoading } = useConversationSandboxFiles({
     conversationId: conversation.sId,
     owner,
     options: { disabled: !path },
@@ -98,6 +98,7 @@ export function FilePreviewPanel({
       target={target}
       path={path}
       listedFile={findListedFile(sandboxFiles, path)}
+      isListingLoading={isSandboxFilesLoading}
     />
   );
 }
@@ -107,6 +108,7 @@ interface FilePreviewPanelViewProps {
   target: FilePreviewTarget | null;
   path: string | null;
   listedFile: FileSystemFileEntry | undefined;
+  isListingLoading: boolean;
 }
 
 /**
@@ -119,6 +121,7 @@ export function FilePreviewPanelView({
   target,
   path,
   listedFile,
+  isListingLoading,
 }: FilePreviewPanelViewProps) {
   const { t } = useLingui();
   const { openPanel } = useConversationSidePanelContext();
@@ -221,12 +224,12 @@ export function FilePreviewPanelView({
     processedContent: preview.processedContent,
   });
 
-  if (!entry || !urls) {
+  if (isListingLoading || !entry || !urls) {
     return (
       <div className="flex h-panel flex-col">
         <ConversationSidePanelHeader onClose={closePanel} />
         <CenteredState>
-          {isFileMetadataLoading ? (
+          {isFileMetadataLoading || isListingLoading ? (
             <Spinner />
           ) : (
             <p className="text-sm text-muted-foreground">

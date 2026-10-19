@@ -1,3 +1,4 @@
+import { useConversationSidePanelContext } from "@app/components/assistant/conversation/ConversationSidePanelContext";
 import {
   FileDropProvider,
   useFileDrop,
@@ -23,7 +24,6 @@ import {
   ARCHIVE_FILE_EXTENSION,
   partitionArchiveFiles,
 } from "@app/components/pod/files/podArchiveUpload";
-import { PodFrameSheet } from "@app/components/pod/files/PodFrameSheet";
 import SpaceManagedDatasourcesViewsModal from "@app/components/spaces/SpaceManagedDatasourcesViewsModal";
 import { useFileUploaderService } from "@app/hooks/useFileUploaderService";
 import { useFolderPathUrlState } from "@app/hooks/useFolderPathUrlState";
@@ -263,11 +263,7 @@ export function PodFileExplorer({ owner, pod }: PodFileExplorerProps) {
 
 function PodFileExplorerContent({ owner, pod }: PodFileExplorerProps) {
   const { t } = useLingui();
-  const [framePreview, setFramePreview] = useState<{
-    fileId: string;
-    path: string;
-    fileName: string;
-  } | null>(null);
+  const { openPanel } = useConversationSidePanelContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentFolderPath, setCurrentFolderPath] = useFolderPathUrlState();
   const [showRenameDialog, setShowRenameDialog] = useState(false);
@@ -696,6 +692,17 @@ function PodFileExplorerContent({ owner, pod }: PodFileExplorerProps) {
 
   const onDownload = useFileExplorerDownload({ owner, getFileResponse });
 
+  const onOpenInteractive = (entry: { fileId: string }) =>
+    openPanel({ type: "interactive_content", fileId: entry.fileId });
+
+  const onOpenInPanel = (entry: FileEntry): boolean => {
+    if (isFilePreviewableContentType(entry.contentType)) {
+      openPanel({ type: "file_preview", kind: "path", filePath: entry.path });
+      return true;
+    }
+    return false;
+  };
+
   const handleCloseOverlay = useCallback(() => {
     setActiveOverlay(null);
   }, []);
@@ -836,22 +843,6 @@ function PodFileExplorerContent({ owner, pod }: PodFileExplorerProps) {
 
   return (
     <>
-      <PodFrameSheet
-        owner={owner}
-        fileId={framePreview?.fileId ?? null}
-        framePath={framePreview?.path ?? null}
-        fileName={framePreview?.fileName}
-        podId={pod.sId}
-        pinnedFramePath={pod.pinnedFramePath ?? null}
-        fileTabs={pod.frameTabs ?? []}
-        tabsOrder={pod.tabsOrder ?? []}
-        isEditor={isEditor}
-        isMember={pod.isMember}
-        isArchived={isArchived}
-        isOpen={framePreview !== null}
-        onClose={() => setFramePreview(null)}
-      />
-
       {createFileTabDraft && (
         <EditPodFileTabDialog
           key={createFileTabDraft.path}
@@ -937,15 +928,8 @@ function PodFileExplorerContent({ owner, pod }: PodFileExplorerProps) {
         onDelete={!isArchived ? onDelete : undefined}
         onMoveFile={!isArchived ? onMoveFile : undefined}
         onRename={!isArchived ? onRename : undefined}
-        onOpenInteractive={(entry) => {
-          if (entry.fileId) {
-            setFramePreview({
-              fileId: entry.fileId,
-              path: entry.path,
-              fileName: entry.fileName,
-            });
-          }
-        }}
+        onOpenInteractive={onOpenInteractive}
+        onOpenInPanel={onOpenInPanel}
         getExtraFileMenuItems={getExtraFileMenuItems}
         toolbarExtraActions={addButton}
         isLoading={isLoading}
