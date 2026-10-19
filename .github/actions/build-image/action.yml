@@ -204,8 +204,11 @@ runs:
           )
 
           # Convert the build arguments collected above to Bake target overrides.
-          for ((i = 1; i < ${#build_args[@]}; i += 2)); do
-            BAKE_OVERRIDES+=(--set "*.args.${build_args[$i]}")
+          # Entries are either a "--build-arg" "KEY=VAL" pair or a single
+          # "--build-arg KEY=VAL" string; normalize both to KEY=VAL.
+          for arg in "${build_args[@]}"; do
+            [[ "$arg" == "--build-arg" ]] && continue
+            BAKE_OVERRIDES+=(--set "*.args.${arg#--build-arg }")
           done
 
           if [[ "$ENV" == "prod" && "$COMPONENT" == "$BASE_COMPONENT" && "${{ github.ref_name }}" == "main" ]]; then
