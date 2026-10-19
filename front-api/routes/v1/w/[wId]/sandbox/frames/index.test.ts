@@ -1,17 +1,18 @@
 // Legacy Frame publishing runs esbuild, whose TextEncoder invariant requires Node rather than jsdom.
 // @vitest-environment node
 
-import { generateSandboxExecToken } from "@app/lib/api/sandbox/access_tokens";
 import { buildAgentMessageBillingPlan } from "@app/lib/credits/agent_message_billing";
 import { ConversationModel } from "@app/lib/models/agent/conversation";
 import { AgentMCPActionResource } from "@app/lib/resources/agent_mcp_action_resource";
 import { FileResource } from "@app/lib/resources/file_resource";
-import { AgentMCPActionFactory } from "@app/tests/utils/AgentMCPActionFactory";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import { FileFactory } from "@app/tests/utils/FileFactory";
 import { GroupFactory } from "@app/tests/utils/GroupFactory";
 import { fileStorageMock } from "@app/tests/utils/mocks/file_storage";
-import { createSandboxTokenTestContext } from "@app/tests/utils/SandboxTokenFactory";
+import {
+  createPersistedSandboxActionToken,
+  createSandboxTokenTestContext,
+} from "@app/tests/utils/SandboxTokenFactory";
 import { SpaceFactory } from "@app/tests/utils/SpaceFactory";
 import { FRAME_MANIFEST_FILE } from "@app/types/api/frame_manifest";
 import { frameContentType, frameV2ContentType } from "@app/types/files";
@@ -151,35 +152,6 @@ async function setupLegacyFrame() {
   return { ...context, frame, sourcePath };
 }
 
-// The shared token context signs a mock action that is never persisted. Billing records the publish
-// under its parent `sandbox` action, so these tests sign a token for a real one.
-async function withPersistedSandboxAction(
-  context: Awaited<ReturnType<typeof createSandboxTokenTestContext>>
-) {
-  const { action: parentAction } = await AgentMCPActionFactory.create(
-    context.auth,
-    {
-      workspace: context.workspace,
-      conversationModelId: context.conversation.id,
-      agentMessageModelId: context.agentMessage.agentMessageId,
-      status: "running",
-      functionCallName: "sandbox__bash",
-      toolName: "bash",
-      mcpServerName: "sandbox",
-    }
-  );
-  const token = await generateSandboxExecToken(context.auth, {
-    agentConfiguration: context.agentConfig,
-    agentMessage: context.agentMessage,
-    conversation: context.conversation,
-    sandbox: context.sandbox,
-    execId: `test-exec-${parentAction.sId}`,
-    sandboxAction: parentAction.toJSON(),
-  });
-
-  return { parentAction, token };
-}
-
 async function listFramePublishActions(
   context: Awaited<ReturnType<typeof createSandboxTokenTestContext>>,
   parentActionId: string
@@ -239,7 +211,8 @@ describe("POST /api/v1/w/[wId]/sandbox/frames", () => {
   it("publishes a registered Frame through the sandbox token", async () => {
     const context = await setup();
     assert(context.frame);
-    const { parentAction, token } = await withPersistedSandboxAction(context);
+    const { parentAction, token } =
+      await createPersistedSandboxActionToken(context);
 
     const response = await requestFramePublish(
       context.workspace.sId,
@@ -523,7 +496,8 @@ describe("POST /api/v1/w/[wId]/sandbox/frames", () => {
 describe("POST /api/v1/w/[wId]/sandbox/frames/publish billing", () => {
   it("charges a new v2 Frame as a create and its republish as an edit", async () => {
     const context = await setup({ registered: false });
-    const { parentAction, token } = await withPersistedSandboxAction(context);
+    const { parentAction, token } =
+      await createPersistedSandboxActionToken(context);
 
     const first = await requestFramePublish(
       context.workspace.sId,
@@ -562,7 +536,8 @@ describe("POST /api/v1/w/[wId]/sandbox/frames/publish billing", () => {
 
   it("charges a legacy Frame publish as an edit", async () => {
     const context = await setupLegacyFrame();
-    const { parentAction, token } = await withPersistedSandboxAction(context);
+    const { parentAction, token } =
+      await createPersistedSandboxActionToken(context);
 
     const response = await requestFramePublish(
       context.workspace.sId,
@@ -583,7 +558,8 @@ describe("POST /api/v1/w/[wId]/sandbox/frames/publish billing", () => {
 
   it("does not charge a failed publish", async () => {
     const context = await setup();
-    const { parentAction, token } = await withPersistedSandboxAction(context);
+    const { parentAction, token } =
+      await createPersistedSandboxActionToken(context);
 
     const response = await requestFramePublish(
       context.workspace.sId,

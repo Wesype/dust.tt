@@ -1014,6 +1014,34 @@ export async function publishFramePublication(
           status: "live" as const,
         });
       }
+
+      const pendingDraftId = freshFrame.pendingDraftPublicationId;
+      if (pendingDraftId) {
+        const pending = await withFramePublishTimingResult(
+          "compare",
+          timingContext,
+          () =>
+            loadFramePublicationDescriptor(auth, {
+              frame: freshFrame,
+              publicationId: pendingDraftId,
+            })
+        );
+        // A pending draft whose publication is gone is never the same content: this publish
+        // replaces it.
+        if (pending.isErr() && pending.error.code !== "publication_not_found") {
+          return pending;
+        }
+        // Republishing the same draft keeps its id, so a Make live click on it does not 409.
+        if (
+          pending.isOk() &&
+          isSameFramePublicationContent(pending.value, descriptor)
+        ) {
+          return new Ok({
+            publicationId: pendingDraftId,
+            status: "draft" as const,
+          });
+        }
+      }
     }
 
     const rows = await withFramePublishTimingResult(

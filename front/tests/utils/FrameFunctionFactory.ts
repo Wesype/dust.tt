@@ -65,6 +65,31 @@ export async function createTestFrameFile(
 }
 
 /**
+ * A Frames v2 file in the conversation `conversationId`, with no publication stored, mounted in its
+ * `folderName` folder. Not "ready", for the same reasons as `createTestFrameFile`.
+ */
+export async function createTestConversationFrameFile(
+  auth: Authenticator,
+  {
+    conversationId,
+    folderName = "Frame",
+  }: { conversationId: string; folderName?: string }
+): Promise<FileResource> {
+  return FileFactory.create(auth, null, {
+    contentType: frameV2ContentType,
+    fileName: FRAME_MANIFEST_FILE,
+    fileSize: 100,
+    status: "created",
+    useCase: "conversation",
+    useCaseMetadata: { conversationId },
+    mountFilePath: `${getConversationFilesBasePath({
+      workspaceId: auth.getNonNullableWorkspace().sId,
+      conversationId,
+    })}${folderName}/${FRAME_MANIFEST_FILE}`,
+  });
+}
+
+/**
  * Stores the single function definition `createTestFrameFunction` publishes, for one publication
  * of an existing Frame. Does not touch the Frame's publication pointers.
  */

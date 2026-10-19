@@ -10,6 +10,7 @@ import { SandboxFunctionResource } from "@app/lib/resources/sandbox_function_res
 import { generateRandomModelSId } from "@app/lib/resources/string_ids_server";
 import { withTransaction } from "@app/lib/utils/sql_utils";
 import { AgentConfigurationFactory } from "@app/tests/utils/AgentConfigurationFactory";
+import { AgentMCPActionFactory } from "@app/tests/utils/AgentMCPActionFactory";
 import { AgentMCPServerConfigurationFactory } from "@app/tests/utils/AgentMCPServerConfigurationFactory";
 import { ConversationFactory } from "@app/tests/utils/ConversationFactory";
 import { FileFactory } from "@app/tests/utils/FileFactory";
@@ -144,6 +145,38 @@ export async function createSandboxTokenTestContext({
     agentMessage,
     token,
   };
+}
+
+/**
+ * `createSandboxTokenTestContext` signs a mock action that is never persisted. This persists a
+ * running `sandbox` parent action in the context's agent message and signs an exec token for it,
+ * for code that records child actions under, or attaches results to, the token's action.
+ */
+export async function createPersistedSandboxActionToken(
+  context: Awaited<ReturnType<typeof createSandboxTokenTestContext>>
+) {
+  const { action: parentAction } = await AgentMCPActionFactory.create(
+    context.auth,
+    {
+      workspace: context.workspace,
+      conversationModelId: context.conversation.id,
+      agentMessageModelId: context.agentMessage.agentMessageId,
+      status: "running",
+      functionCallName: "sandbox__bash",
+      toolName: "bash",
+      mcpServerName: "sandbox",
+    }
+  );
+  const token = await generateSandboxExecToken(context.auth, {
+    agentConfiguration: context.agentConfig,
+    agentMessage: context.agentMessage,
+    conversation: context.conversation,
+    sandbox: context.sandbox,
+    execId: `test-exec-${parentAction.sId}`,
+    sandboxAction: parentAction.toJSON(),
+  });
+
+  return { parentAction, token };
 }
 
 export async function createSandboxFunctionInvocationTokenTestContext() {
