@@ -1,10 +1,11 @@
 use crate::errno::Errno;
 use dfs_protocol::{
-    LIST_MAX_ENTRIES, LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, STAT_MAX_REFERENCES,
+    LIST_MAX_ENTRIES, LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, READ_FILES_MAX_OBJECTS,
+    STAT_MAX_REFERENCES,
     rpc::{
-        ApplyRequest, Attr, AttrBatch, Empty, Entry, ListRequest, LookupRequest, LookupTarget,
-        Mutation, Operation, ReadData, ReadRequest, Session, StatRequest, dfs_client::DfsClient,
-        operation,
+        ApplyRequest, Attr, AttrBatch, Empty, Entry, ErrorCode, ListRequest, LookupRequest,
+        LookupTarget, Mutation, Operation, ReadData, ReadFilesRequest, ReadRequest, Session,
+        StatRequest, dfs_client::DfsClient, operation,
     },
 };
 use tonic::{Request, metadata::AsciiMetadataValue, transport::Channel};
@@ -197,6 +198,59 @@ impl Remote {
                 (Some(mutation), None) => Ok(mutation),
                 (None, Some(error)) => Err(error.code().into()),
                 _ => Err(Errno::EIO),
+            })
+            .collect())
+    }
+
+    /// Reads whole files with their attributes, all from one server snapshot. A file is `Ok(None)` when
+    /// it does not fit the reply, being over `READ_MAX_BYTES` or past the reply's budget: `read` it
+    /// instead. At most `READ_FILES_MAX_OBJECTS` objects.
+    /**
+     * @cc [owner:fontanierh,label:api] read-files-batch
+     * On success, `read_files` MUST return exactly one result per object, in the same order, from a
+     * single `ReadFiles` request. More than `READ_FILES_MAX_OBJECTS` objects MUST fail with `EINVAL`
+     * and no objects MUST return no results, both without a request.
+     */
+    /**
+     * @cc [owner:fontanierh,label:api] read-files-capacity
+     * A per-file `CAPACITY` error MUST become `Ok(None)`, not an errno, so the caller can tell a file
+     * that did not fit from one it cannot read.
+     */
+    pub async fn read_files(
+        &self,
+        objects: &[ObjectId],
+    ) -> Result<Vec<Result<Option<ReadData>, Errno>>, Errno> {
+        if objects.len() > READ_FILES_MAX_OBJECTS {
+            return Err(Errno::EINVAL);
+        }
+        if objects.is_empty() {
+            return Ok(Vec::new());
+        }
+        let response = self
+            .client
+            .clone()
+            .read_files(self.request(ReadFilesRequest {
+                object_ids: objects.to_vec(),
+            }))
+            .await?
+            .into_inner();
+        if response.results.len() != objects.len() {
+            return Err(Errno::EIO);
+        }
+        Ok(response
+            .results
+            .into_iter()
+            .zip(objects)
+            .map(|(result, object)| {
+                if result.object_id != *object {
+                    return Err(Errno::EIO);
+                }
+                match (result.object, result.data, result.error) {
+                    (Some(object), Some(data), None) => Ok(Some(ReadData { data, object })),
+                    (None, None, Some(error)) if error.code() == ErrorCode::Capacity => Ok(None),
+                    (None, None, Some(error)) => Err(error.code().into()),
+                    _ => Err(Errno::EIO),
+                }
             })
             .collect())
     }

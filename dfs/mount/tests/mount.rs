@@ -24,7 +24,8 @@ use dfs_api::{
 };
 use dfs_mount::{DirEntry, Errno, Folder, Fs, Kind, ROOT_INO, Remote};
 use dfs_protocol::{
-    LIST_MAX_ENTRIES, LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, READ_MAX_BYTES, STAT_MAX_REFERENCES,
+    LIST_MAX_ENTRIES, LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, READ_FILES_MAX_OBJECTS,
+    READ_MAX_BYTES, STAT_MAX_REFERENCES,
     rpc::{
         AllowGrant, CreateOperation, CreateSessionRequest, CreateTenantRequest, DenyGrant, Grant,
         GrantUpdate, LookupTarget, ObjectKind, RemoveOperation, WriteOperation,
@@ -70,7 +71,8 @@ fn mount() -> Result<()> {
         root_lists_readable_folders(&channel, &tenant).await?;
         root_looks_up_readable_folders(&channel, &tenant).await?;
         list_returns_every_page(&channel, &tenant).await?;
-        apply_returns_one_ordered_result_per_operation(&channel, &tenant).await
+        apply_returns_one_ordered_result_per_operation(&channel, &tenant).await?;
+        read_files_returns_one_ordered_result_per_object(&channel, &tenant).await
     })
 }
 
@@ -521,5 +523,56 @@ async fn apply_returns_one_ordered_result_per_operation(
     assert_eq!(remote.read(file, 0, 1).await.err(), Some(Errno::ENOENT));
 
     assert!(remote.apply(Vec::new()).await?.is_empty());
+    Ok(())
+}
+
+async fn read_files_returns_one_ordered_result_per_object(
+    channel: &Channel,
+    tenant: &Tenant,
+) -> Result<()> {
+    let remote = tenant.remote(channel).await?;
+    // A readable file over `READ_MAX_BYTES`, which no `ReadFiles` reply can hold.
+    let tenant_id = remote.current_session().await?.tenant_id;
+    let tx = fdb::database()?.create_trx()?;
+    let resource = TenantResource::fetch(&tx, &tenant_id)
+        .await?
+        .context("missing tenant")?;
+    let mut large = ObjectResource::new_root(&resource)?;
+    large.object_id = ObjectId::new_v7();
+    large.parent_id = Some(tenant.root_id);
+    large.name = "large.bin".to_owned();
+    large.kind = ObjectKind::File;
+    large.size = u64::from(READ_MAX_BYTES) + 1;
+    large.create(&tx, &[]).await?;
+    tx.commit().await?;
+
+    let missing = ObjectId::new_v7();
+    let objects = [
+        tenant.file_id,
+        large.object_id,
+        tenant.root_id,
+        tenant.unreadable_id,
+        missing,
+        tenant.file_id,
+    ];
+    let results = remote.read_files(&objects).await?;
+
+    assert_eq!(results.len(), objects.len());
+    for index in [0, 5] {
+        let read = results[index].as_ref().map_err(|errno| *errno)?;
+        let read = read.as_ref().context("file did not fit")?;
+        assert_eq!(read.data, FILE_CONTENT, "result {index}");
+        assert_eq!(read.object.id, tenant.file_id.into(), "result {index}");
+    }
+    // Too large for the reply: read it with `read` instead.
+    assert_eq!(results[1], Ok(None));
+    assert_eq!(results[2], Err(Errno(libc::EISDIR)));
+    // An object the session cannot read looks missing.
+    assert_eq!(results[3], Err(Errno::ENOENT));
+    assert_eq!(results[4], Err(Errno::ENOENT));
+
+    assert!(remote.read_files(&[]).await?.is_empty());
+    let too_many = vec![tenant.file_id; READ_FILES_MAX_OBJECTS + 1];
+    assert_eq!(remote.read_files(&too_many).await, Err(Errno::EINVAL));
     Ok(())
 }
