@@ -1,9 +1,9 @@
 use crate::errno::Errno;
 use dfs_protocol::{
-    LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, STAT_MAX_REFERENCES,
+    LIST_MAX_ENTRIES, LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, STAT_MAX_REFERENCES,
     rpc::{
-        Attr, AttrBatch, Empty, LookupRequest, LookupTarget, ReadData, ReadRequest, Session,
-        StatRequest, dfs_client::DfsClient,
+        Attr, AttrBatch, Empty, Entry, ListRequest, LookupRequest, LookupTarget, ReadData,
+        ReadRequest, Session, StatRequest, dfs_client::DfsClient,
     },
 };
 use tonic::{Request, metadata::AsciiMetadataValue, transport::Channel};
@@ -102,6 +102,36 @@ impl Remote {
             results.extend(attr_results(response, chunk.len())?);
         }
         Ok(results)
+    }
+
+    /// Lists the entries of the directory `directory` the session can read, in the server's order.
+    /// Each page is a separate request, so changes made to the directory while it is listed may or
+    /// may not show.
+    /**
+     * @cc [owner:fontanierh,label:api] list-every-page
+     * On success, `list` MUST return the entries of every page of `directory`, asking for the next
+     * page until the server returns one without `next_after`. Any failed page MUST fail `list`.
+     */
+    pub async fn list(&self, directory: ObjectRef) -> Result<Vec<Entry>, Errno> {
+        let mut entries = Vec::new();
+        let mut after = None;
+        loop {
+            let page = self
+                .client
+                .clone()
+                .list(self.request(ListRequest {
+                    directory_id: directory,
+                    after,
+                    limit: LIST_MAX_ENTRIES,
+                }))
+                .await?
+                .into_inner();
+            entries.extend(page.entries);
+            match page.next_after {
+                Some(next_after) => after = Some(next_after),
+                None => return Ok(entries),
+            }
+        }
     }
 
     /// Reads up to `length` bytes of the file `object` from `offset`, with its attributes. The data

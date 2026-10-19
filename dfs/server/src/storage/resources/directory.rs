@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt, time::Duration};
 
-use dfs_protocol::{NAME_MAX_BYTES, ObjectId, is_valid_name, rpc::ObjectKind};
+use dfs_protocol::{LIST_MAX_ENTRIES, NAME_MAX_BYTES, ObjectId, is_valid_name, rpc::ObjectKind};
 use foundationdb::{
     FdbBindingError, Transaction,
     tuple::{Subspace, pack, unpack},
@@ -24,7 +24,7 @@ mod lookup;
 mod shared;
 
 const FAMILY: &str = "child";
-const PAGE_MAX_ENTRIES: usize = 4_096;
+const PAGE_MAX_ENTRIES: usize = LIST_MAX_ENTRIES as usize;
 const CREATE_OBJECT_ID_MAX_AGE: Duration = Duration::from_secs(5 * 60);
 pub const VIRTUAL_SHARED_NAME: &str = "shared";
 

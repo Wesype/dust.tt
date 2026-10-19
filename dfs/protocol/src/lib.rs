@@ -24,6 +24,9 @@ pub const LOOKUP_MAX_TARGETS: usize = 256;
 /// Most bytes one `Read` request may ask for.
 pub const READ_MAX_BYTES: u32 = 1024 * 1024;
 
+/// Most entries one `List` page may hold.
+pub const LIST_MAX_ENTRIES: u32 = 4_096;
+
 /// Most object IDs one `ReadFiles` request may carry.
 pub const READ_FILES_MAX_OBJECTS: usize = 256;
 

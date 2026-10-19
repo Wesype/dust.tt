@@ -24,7 +24,7 @@ use dfs_api::{
 };
 use dfs_mount::{DirEntry, Errno, Folder, Fs, Kind, ROOT_INO, Remote};
 use dfs_protocol::{
-    LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, READ_MAX_BYTES, STAT_MAX_REFERENCES,
+    LIST_MAX_ENTRIES, LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, READ_MAX_BYTES, STAT_MAX_REFERENCES,
     rpc::{
         AllowGrant, CreateSessionRequest, CreateTenantRequest, DenyGrant, Grant, GrantUpdate,
         LookupTarget, ObjectKind, dfs_client::DfsClient, grant,
@@ -42,6 +42,11 @@ const FILE_CONTENT: &[u8] = b"hello";
 const MANY_REFERENCES: usize = STAT_MAX_REFERENCES + 4;
 /// More than one `Lookup` request can carry.
 const MANY_TARGETS: usize = LOOKUP_MAX_TARGETS + 3;
+/// More entries than one `List` page holds.
+const MANY_ENTRIES: u32 = LIST_MAX_ENTRIES + 3;
+/// Most children one seeding transaction creates, to stay well within FoundationDB's transaction
+/// time and size limits.
+const SEED_BATCH_SIZE: usize = 512;
 
 /// The FDB network boots once per process and cannot restart once stopped, so every mount check
 /// runs under this one test, which holds the guard and drops it before the binary exits.
@@ -62,7 +67,8 @@ fn mount() -> Result<()> {
         lookup_returns_one_ordered_result_per_target(&channel, &tenant).await?;
         read_returns_file_ranges(&channel, &tenant).await?;
         root_lists_readable_folders(&channel, &tenant).await?;
-        root_looks_up_readable_folders(&channel, &tenant).await
+        root_looks_up_readable_folders(&channel, &tenant).await?;
+        list_returns_every_page(&channel, &tenant).await
     })
 }
 
@@ -340,6 +346,114 @@ async fn root_looks_up_readable_folders(channel: &Channel, tenant: &Tenant) -> R
             Err(Errno::ENOENT),
             "{name}"
         );
+    }
+    Ok(())
+}
+
+/// Creates the children `names` of the directory `parent`, written directly to FoundationDB, and
+/// returns them in order.
+async fn create_children(
+    tenant_id: &str,
+    parent: ObjectId,
+    kind: ObjectKind,
+    names: &[String],
+) -> Result<Vec<ObjectResource>> {
+    let mut children = Vec::with_capacity(names.len());
+    for batch in names.chunks(SEED_BATCH_SIZE) {
+        let tx = fdb::database()?.create_trx()?;
+        let tenant = TenantResource::fetch(&tx, tenant_id)
+            .await?
+            .context("missing tenant")?;
+        let parent = ObjectResource::fetch(&tx, &tenant, &parent)
+            .await?
+            .context("missing parent")?;
+        let mut parent = DirectoryResource::try_from(parent)?;
+        for name in batch {
+            let child = parent
+                .create_child(
+                    &tx,
+                    ObjectId::new_v7(),
+                    name.clone(),
+                    kind,
+                    None,
+                    HashMap::new(),
+                )
+                .await?;
+            children.push(child);
+        }
+        tx.commit().await?;
+    }
+    Ok(children)
+}
+
+async fn list_returns_every_page(channel: &Channel, tenant: &Tenant) -> Result<()> {
+    let remote = tenant.remote(channel).await?;
+    let tenant_id = remote.current_session().await?.tenant_id;
+    let directory = create_children(
+        &tenant_id,
+        tenant.root_id,
+        ObjectKind::Directory,
+        &["listing".to_owned()],
+    )
+    .await?
+    .remove(0)
+    .object_id;
+    // Zero-padded, so name order is creation order.
+    let names: Vec<String> = (0..MANY_ENTRIES)
+        .map(|index| format!("{index:05}"))
+        .collect();
+    create_children(&tenant_id, directory, ObjectKind::File, &names).await?;
+    let hidden = create_children(
+        &tenant_id,
+        directory,
+        ObjectKind::File,
+        &["hidden".to_owned()],
+    )
+    .await?
+    .remove(0)
+    .object_id;
+    // Grants are updated on the object as read in the same transaction.
+    let tx = fdb::database()?.create_trx()?;
+    let resource = TenantResource::fetch(&tx, &tenant_id)
+        .await?
+        .context("missing tenant")?;
+    let mut hidden = ObjectResource::fetch(&tx, &resource, &hidden)
+        .await?
+        .context("missing hidden file")?;
+    hidden.update_grants(
+        &tx,
+        &[GrantUpdate {
+            grant: Grant {
+                kind: Some(grant::Kind::Deny(DenyGrant { mode: 0o4 })),
+            },
+            remove: false,
+        }],
+    )?;
+    tx.commit().await?;
+
+    let entries = remote.list(directory.into()).await?;
+    // Left out: `hidden`, which the session cannot read.
+    assert_eq!(
+        entries
+            .iter()
+            .map(|entry| entry.name.as_str())
+            .collect::<Vec<_>>(),
+        names
+    );
+    assert!(entries.iter().all(|entry| {
+        entry
+            .object
+            .as_ref()
+            .is_some_and(|attr| attr.kind() == ObjectKind::File)
+    }));
+
+    for (object, expected) in [
+        (tenant.file_id, Errno(libc::ENOTDIR)),
+        (tenant.unreadable_id, Errno::ENOENT),
+        (ObjectId::new_v7(), Errno::ENOENT),
+    ] {
+        let result = remote.list(object.into()).await;
+        assert_eq!(result.err(), Some(expected), "listing {object}");
     }
     Ok(())
 }
