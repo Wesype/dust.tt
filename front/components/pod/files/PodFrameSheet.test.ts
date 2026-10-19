@@ -109,6 +109,10 @@ vi.mock("@app/lib/auth/AuthContext", () => ({
   useFeatureFlags: () => ({ hasFeature: () => false }),
 }));
 
+vi.mock("@app/lib/context/clientType", () => ({
+  useClientType: () => "web",
+}));
+
 vi.mock("@app/lib/swr/files", () => ({
   useFileContent: (args: Record<string, unknown>) => {
     mocks.contentCalls.push(args);
@@ -128,6 +132,9 @@ vi.mock("@app/lib/swr/files", () => ({
       isFileMetadataLoading: false,
     };
   },
+  useShareInteractiveContentFile: () => ({
+    fileShare: { shareUrl: "https://dust.tt/share/frame/token" },
+  }),
 }));
 
 vi.mock("@app/lib/swr/frames", () => ({
@@ -179,8 +186,11 @@ vi.mock("@dust-tt/sparkle", async () => {
     CodeBlock: ({ children }: PropsWithChildren) =>
       createElement("pre", null, children),
     Eye: Empty,
+    LinkExternal01: Empty,
     Maximize01: Empty,
     Minimize01: Empty,
+    RefreshCw01: Empty,
+    ReverseLeft: Empty,
     Sheet,
     SheetClose: Container,
     SheetContent: Container,
@@ -228,27 +238,26 @@ const openSheetProps = {
 };
 
 describe("PodFrameSheet", () => {
-  it("names a Frame v2 after the folder holding its manifest", () => {
-    render(createElement(PodFrameSheet, openSheetProps));
+  it("renders shared chrome without a sheet title for Frames v2 and legacy Frames", () => {
+    const { rerender } = render(createElement(PodFrameSheet, openSheetProps));
 
-    expect(screen.getByText("App")).toBeInTheDocument();
-  });
+    expect(screen.getByLabelText("Close")).toBeInTheDocument();
+    expect(screen.queryByText("App")).not.toBeInTheDocument();
 
-  it("names a legacy Frame, which has no manifest, after its file", () => {
     mocks.fileMetadata = {
       contentType: "text/vnd.dust.attachment.slack.thread",
       fileName: "Legacy.tsx",
       useCaseMetadata: { spaceId: "vlt_project" },
     };
-
-    render(
+    rerender(
       createElement(PodFrameSheet, {
         ...openSheetProps,
         framePath: "pod-vlt_project/Legacy.tsx",
       })
     );
 
-    expect(screen.getByText("Legacy.tsx")).toBeInTheDocument();
+    expect(screen.getByLabelText("Close")).toBeInTheDocument();
+    expect(screen.queryByText("Legacy.tsx")).not.toBeInTheDocument();
   });
 
   it("marks a Frame declaring functions as beta", () => {
