@@ -1,17 +1,21 @@
 //! Serves `dfs_mount::Fs` to the kernel through `fuser`.
 
-use dfs_mount::{Attributes, Errno, Fs, Ino, Kind};
+use dfs_mount::{Attributes, DirEntry, Errno, Fs, Ino, Kind};
 use dfs_protocol::READ_MAX_BYTES;
 use fuser::{
-    AccessFlags, BsdFileFlags, Config, FileAttr, FileHandle, FileType, Filesystem, Generation,
-    INodeNo, InitFlags, IoctlFlags, KernelConfig, LockOwner, MountOption, OpenFlags, RenameFlags,
-    ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyIoctl,
-    ReplyOpen, ReplyStatfs, ReplyWrite, Request, SessionACL, TimeOrNow, WriteFlags,
+    AccessFlags, BsdFileFlags, Config, FileAttr, FileHandle, FileType, Filesystem, FopenFlags,
+    Generation, INodeNo, InitFlags, IoctlFlags, KernelConfig, LockOwner, MountOption, OpenFlags,
+    RenameFlags, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry,
+    ReplyIoctl, ReplyOpen, ReplyStatfs, ReplyWrite, Request, SessionACL, TimeOrNow, WriteFlags,
 };
 use std::{
+    collections::HashMap,
     ffi::OsStr,
     io,
-    sync::Arc,
+    sync::{
+        Arc, Mutex, MutexGuard, PoisonError,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, SystemTime},
 };
 use tokio::runtime::Handle;
@@ -75,6 +79,10 @@ pub(crate) struct Adapter {
     fs: Arc<Fs>,
     runtime: Handle,
     owner: Owner,
+    /// The listings `opendir` took, by file handle.
+    dirs: Arc<Mutex<HashMap<u64, OpenDir>>>,
+    /// The handle number the next `opendir` hands out. Numbers are never reused.
+    next_fh: AtomicU64,
 }
 
 /// The owner of every inode: the user running the adapter, the only one who can use the mount.
@@ -82,6 +90,12 @@ pub(crate) struct Adapter {
 struct Owner {
     uid: u32,
     gid: u32,
+}
+
+/// A directory listing taken by `opendir`.
+struct OpenDir {
+    ino: Ino,
+    entries: Vec<DirEntry>,
 }
 
 impl Adapter {
@@ -93,7 +107,14 @@ impl Adapter {
                 uid: nix::unistd::getuid().as_raw(),
                 gid: nix::unistd::getgid().as_raw(),
             },
+            dirs: Arc::default(),
+            next_fh: AtomicU64::new(1),
         }
+    }
+
+    /// Must not be held across an `.await`.
+    fn dirs(&self) -> MutexGuard<'_, HashMap<u64, OpenDir>> {
+        self.dirs.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
@@ -129,6 +150,30 @@ fn file_type(kind: Kind) -> FileType {
         Kind::Directory => FileType::Directory,
         Kind::File => FileType::RegularFile,
     }
+}
+
+/// The entries of the directory `ino` from `offset`, each with the offset of the next one.
+fn listing(
+    ino: Ino,
+    entries: &[DirEntry],
+    offset: u64,
+) -> impl Iterator<Item = (u64, Ino, Kind, &str)> {
+    // The kernel resolves `..` itself; its inode number in a listing is informational.
+    let dots = [".", ".."].map(|name| (ino, Kind::Directory, name));
+    // Resume by indexing, not by scanning: entry `i` of the listing, dots included, has offset
+    // `i + 1`, so the entries before `offset` are its first `offset`.
+    let start = usize::try_from(offset).unwrap_or(usize::MAX);
+    let entries = entries
+        .get(start.saturating_sub(dots.len())..)
+        .unwrap_or_default()
+        .iter()
+        .map(|entry| (entry.ino, entry.kind, entry.name.as_str()));
+    // `zip` polls the entries first, so the offsets are never counted past the last entry.
+    dots.into_iter()
+        .skip(start)
+        .chain(entries)
+        .zip(offset.saturating_add(1)..)
+        .map(|((ino, kind, name), next)| (next, ino, kind, name))
 }
 
 fn errno(errno: Errno) -> fuser::Errno {
@@ -421,8 +466,34 @@ impl Filesystem for Adapter {
 
     /// Opens a directory and returns a handle, which the `readdir` and `releasedir` calls on that
     /// open directory carry. Takes the directory listing once, for `readdir` to page through.
-    fn opendir(&self, _req: &Request, _ino: INodeNo, _flags: OpenFlags, _reply: ReplyOpen) {
-        todo!()
+    /**
+     * @cc [owner:fontanierh,label:product] unique-handles
+     * `opendir` MUST give each open directory a handle no other directory opened on this mount has
+     * had, so a `readdir` never pages through another directory's listing.
+     */
+    fn opendir(&self, _req: &Request, ino: INodeNo, _flags: OpenFlags, reply: ReplyOpen) {
+        let fh = self.next_fh.fetch_add(1, Ordering::Relaxed);
+        let fs = self.fs.clone();
+        let dirs = self.dirs.clone();
+        self.runtime.spawn(async move {
+            let listed = async {
+                check(&fs, ino.0, AccessFlags::R_OK).await?;
+                fs.readdir(ino.0).await
+            };
+            match listed.await {
+                Ok(entries) => {
+                    dirs.lock().unwrap_or_else(PoisonError::into_inner).insert(
+                        fh,
+                        OpenDir {
+                            ino: ino.0,
+                            entries,
+                        },
+                    );
+                    reply.opened(FileHandle(fh), FopenFlags::empty());
+                }
+                Err(e) => reply.error(errno(e)),
+            }
+        });
     }
 
     /// Returns the entries of an open directory from `offset`, as many as fit in the reply. The
@@ -436,23 +507,38 @@ impl Filesystem for Adapter {
         &self,
         _req: &Request,
         _ino: INodeNo,
-        _fh: FileHandle,
-        _offset: u64,
-        _reply: ReplyDirectory,
+        fh: FileHandle,
+        offset: u64,
+        mut reply: ReplyDirectory,
     ) {
-        todo!()
+        let dirs = self.dirs();
+        let Some(dir) = dirs.get(&fh.0) else {
+            return reply.error(fuser::Errno::EBADF);
+        };
+        for (next, ino, kind, name) in listing(dir.ino, &dir.entries, offset) {
+            if reply.add(INodeNo(ino), next, file_type(kind), name) {
+                break;
+            }
+        }
+        reply.ok();
     }
 
     /// Ends an open directory once its last descriptor is closed. Drops the listing `opendir` took.
+    /**
+     * @cc [owner:fontanierh,label:performance] release-frees-listing
+     * `releasedir` MUST remove the listing stored under its handle, so the mount holds a listing
+     * only while its directory is open.
+     */
     fn releasedir(
         &self,
         _req: &Request,
         _ino: INodeNo,
-        _fh: FileHandle,
+        fh: FileHandle,
         _flags: OpenFlags,
-        _reply: ReplyEmpty,
+        reply: ReplyEmpty,
     ) {
-        todo!()
+        self.dirs().remove(&fh.0);
+        reply.ok();
     }
 
     /// Makes changes durable, for `fsync` on a directory. Same as `fsync`.
@@ -528,6 +614,7 @@ impl Filesystem for Adapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dfs_mount::ROOT_INO;
     use std::time::UNIX_EPOCH;
 
     const UID: u32 = 1000;
@@ -576,5 +663,33 @@ mod tests {
         assert!(!allows(0o500, AccessFlags::R_OK | AccessFlags::W_OK));
         assert!(!allows(0o077, AccessFlags::R_OK));
         assert!(allows(0o000, AccessFlags::F_OK));
+    }
+
+    #[test]
+    fn listings_resume_after_the_offset() {
+        let entries = [entry(2, "a"), entry(3, "b")];
+        let names = |offset| {
+            listing(ROOT_INO, &entries, offset)
+                .map(|(next, _, _, name)| (next, name))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(names(0), [(1, "."), (2, ".."), (3, "a"), (4, "b")]);
+        assert_eq!(names(3), [(4, "b")]);
+        assert_eq!(names(1), [(2, ".."), (3, "a"), (4, "b")]);
+        assert!(names(4).is_empty());
+        assert!(names(u64::MAX).is_empty());
+        assert!(
+            listing(5, &entries, 0)
+                .take(2)
+                .all(|(_, ino, kind, _)| ino == 5 && kind == Kind::Directory)
+        );
+    }
+
+    fn entry(ino: Ino, name: &str) -> DirEntry {
+        DirEntry {
+            ino,
+            kind: Kind::Directory,
+            name: name.to_owned(),
+        }
     }
 }
