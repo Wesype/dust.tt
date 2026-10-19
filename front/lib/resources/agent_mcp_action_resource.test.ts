@@ -21,7 +21,6 @@ import { AgentStepContentResource } from "@app/lib/resources/agent_step_content_
 import { ConversationResource } from "@app/lib/resources/conversation_resource";
 import type { SpaceResource } from "@app/lib/resources/space_resource";
 import { frontSequelize } from "@app/lib/resources/storage";
-import { heartbeatWithoutCancelCheck } from "@app/lib/temporal";
 import { AgentConfigurationFactory } from "@app/tests/utils/AgentConfigurationFactory";
 import { AgentMCPActionFactory } from "@app/tests/utils/AgentMCPActionFactory";
 import { ConversationFactory } from "@app/tests/utils/ConversationFactory";
@@ -93,11 +92,6 @@ vi.mock("@app/lib/file_storage", async (importOriginal) => {
 });
 
 // Bypass Redis caching, pass through to the underlying function.
-vi.mock("@app/lib/temporal", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@app/lib/temporal")>();
-  return { ...actual, heartbeatWithoutCancelCheck: vi.fn() };
-});
-
 vi.mock("@app/lib/utils/cache", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@app/lib/utils/cache")>();
   return {
@@ -762,16 +756,22 @@ describe("Output items with GCS storage", () => {
     return { action, outputItems, outputItemRows };
   };
 
-  it("heartbeats after each GCS write and each GCS path update", async () => {
-    vi.mocked(heartbeatWithoutCancelCheck).mockClear();
+  it("reports progress after each GCS write and each GCS path update", async () => {
+    const action = await createAction();
+    const onProgress = vi.fn();
 
-    await createActionWithOutputItems([
-      { type: "text", text: "first" },
-      { type: "text", text: "second" },
-      { type: "text", text: "third" },
-    ]);
+    const result = await action.createOutputItems(
+      auth,
+      [
+        { content: { type: "text", text: "first" } },
+        { content: { type: "text", text: "second" } },
+        { content: { type: "text", text: "third" } },
+      ],
+      { onProgress }
+    );
 
-    expect(heartbeatWithoutCancelCheck).toHaveBeenCalledTimes(6);
+    expect(result.isOk()).toBe(true);
+    expect(onProgress).toHaveBeenCalledTimes(6);
   });
 
   it("should create output items in both DB and GCS", async () => {
@@ -840,19 +840,21 @@ describe("Output items with GCS storage", () => {
     expect(gcsStore.size).toBe(0);
   });
 
-  it("heartbeats after each failed GCS write attempt and uses a timed, non-retrying bucket for the write and cleanup", async () => {
+  it("reports progress after each failed GCS write attempt and uses a timed, non-retrying bucket for the write and cleanup", async () => {
     const action = await createAction();
     gcsSaveFailureMarker = "fail-this-write";
-    vi.mocked(heartbeatWithoutCancelCheck).mockClear();
+    const onProgress = vi.fn();
     vi.mocked(getPrivateUploadBucket).mockClear();
 
-    const result = await action.createOutputItems(auth, [
-      { content: { type: "text", text: "fail-this-write" } },
-    ]);
+    const result = await action.createOutputItems(
+      auth,
+      [{ content: { type: "text", text: "fail-this-write" } }],
+      { onProgress }
+    );
 
     expect(result.isErr()).toBe(true);
     // 3 write attempts, then 1 cleanup delete.
-    expect(heartbeatWithoutCancelCheck).toHaveBeenCalledTimes(4);
+    expect(onProgress).toHaveBeenCalledTimes(4);
     // 1 bucket for the write, then 1 for the cleanup.
     const bucketCalls = vi.mocked(getPrivateUploadBucket).mock.calls;
     expect(bucketCalls).toHaveLength(2);

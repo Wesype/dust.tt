@@ -41,6 +41,12 @@ import assert from "assert";
  * to ensure consistent error reporting and proper conversation flow control.
  */
 /**
+ * @cc [owner:tdraier,label:performance] heartbeat-on-output-persist-progress
+ * Every tool output persist it starts (`processToolNotification`, `processToolResults`,
+ * `handleMCPActionError`) MUST be given `onPersistProgress` heartbeating the current Temporal
+ * activity, if any.
+ */
+/**
  * @cc [owner:tdraier,label:error-handling] pause-events-err-ends-action
  * When `getExitOrPauseEvents` returns an `Err`, this MUST end the action through
  * `handleMCPActionError` and MUST NOT throw.
@@ -117,7 +123,7 @@ export async function* runToolWithStreaming(
       const { event, outputItems } = await processToolNotification(
         auth,
         notification,
-        { toolContext }
+        { toolContext, onPersistProgress: heartbeatWithoutCancelCheck }
       );
       intermediateOutputItems.push(...outputItems);
       return event;
@@ -135,6 +141,7 @@ export async function* runToolWithStreaming(
       status,
       errorContent: toolCallResult.content,
       executionDurationMs: endDate - startDate,
+      onPersistProgress: heartbeatWithoutCancelCheck,
     });
     return;
   }
@@ -149,6 +156,7 @@ export async function* runToolWithStreaming(
           toolCallResultContent: toolCallResult.content,
           toolCallResultStructuredContent: toolCallResult.structuredContent,
           toolContext,
+          onPersistProgress: heartbeatWithoutCancelCheck,
         }),
       {
         intervalMs: TOOL_RESULT_PROCESSING_HEARTBEAT_INTERVAL_MS,
@@ -187,6 +195,7 @@ export async function* runToolWithStreaming(
           { type: "text", text: agentPauseEventsRes.error.message },
         ],
         executionDurationMs: performance.now() - startDate,
+        onPersistProgress: heartbeatWithoutCancelCheck,
       });
       return;
     }

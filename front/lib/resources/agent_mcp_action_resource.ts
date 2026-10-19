@@ -59,7 +59,6 @@ import type { ReadonlyAttributesType } from "@app/lib/resources/storage/types";
 import type { ModelStaticWorkspaceAware } from "@app/lib/resources/storage/wrappers/workspace_models";
 import { getResourceIdFromSId, makeSId } from "@app/lib/resources/string_ids";
 import type { ResourceFindOptions } from "@app/lib/resources/types";
-import { heartbeatWithoutCancelCheck } from "@app/lib/temporal";
 import { concurrentExecutor } from "@app/lib/utils/async_utils";
 import { withTransaction } from "@app/lib/utils/sql_utils";
 import { statsDMetrics } from "@app/lib/utils/statsd";
@@ -1102,7 +1101,7 @@ export class AgentMCPActionResource extends BaseResource<AgentMCPActionModel> {
       content: CallToolResult["content"][number];
       fileId?: ModelId;
     }>,
-    options?: { deferDurablePersist?: boolean }
+    options?: { deferDurablePersist?: boolean; onProgress?: () => void }
   ): Promise<Result<ToolOutputItemType[], Error>> {
     // Leave `contentGcsPath` null until the GCS write succeeds — readers with a null
     // path use the DB content column (legacy path); staged Redis covers the hot window.
@@ -1152,7 +1151,9 @@ export class AgentMCPActionResource extends BaseResource<AgentMCPActionModel> {
       );
     }
 
-    const durablePersist = this.persistOutputItemsToGcs(auth, outputItems);
+    const durablePersist = this.persistOutputItemsToGcs(auth, outputItems, {
+      onProgress: options?.onProgress,
+    });
 
     if (options?.deferDurablePersist) {
       this.deferredOutputPersist = durablePersist;
@@ -1196,9 +1197,8 @@ export class AgentMCPActionResource extends BaseResource<AgentMCPActionModel> {
   }
 
   /**
-   * @cc [owner:tdraier,label:performance] heartbeat-per-gcs-path-update
-   * MUST heartbeat the current Temporal activity, if any, after each output item
-   * `contentGcsPath` update.
+   * @cc [owner:tdraier,label:performance] progress-per-gcs-path-update
+   * MUST call `onProgress`, if given, after each output item `contentGcsPath` update.
    */
   /**
    * @cc [owner:tdraier,label:logging] slow-persist-timing
@@ -1208,7 +1208,8 @@ export class AgentMCPActionResource extends BaseResource<AgentMCPActionModel> {
    */
   private async persistOutputItemsToGcs(
     auth: Authenticator,
-    outputItems: AgentMCPActionOutputItemModel[]
+    outputItems: AgentMCPActionOutputItemModel[],
+    { onProgress }: { onProgress?: () => void }
   ): Promise<Result<void, Error>> {
     const startMs = performance.now();
     let gcsWriteMs: number | null = null;
@@ -1233,7 +1234,8 @@ export class AgentMCPActionResource extends BaseResource<AgentMCPActionModel> {
     const gcsResult = await batchWriteContentsToGcs(
       auth,
       this,
-      outputItems.map((item) => item.content)
+      outputItems.map((item) => item.content),
+      { onProgress }
     );
     gcsWriteMs = performance.now() - startMs;
 
@@ -1254,7 +1256,7 @@ export class AgentMCPActionResource extends BaseResource<AgentMCPActionModel> {
           const contentGcsPath = gcsResult.value[index];
           assert(contentGcsPath, "GCS path not found for output item.");
           await item.update({ contentGcsPath });
-          heartbeatWithoutCancelCheck();
+          onProgress?.();
         })
       );
     } catch (err) {

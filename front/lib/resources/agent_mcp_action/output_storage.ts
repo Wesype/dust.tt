@@ -5,7 +5,6 @@ import { getPrivateUploadBucket } from "@app/lib/file_storage";
 import { isGCSNotFoundError } from "@app/lib/file_storage/types";
 import type { AgentMCPActionResource } from "@app/lib/resources/agent_mcp_action_resource";
 import { makeSId } from "@app/lib/resources/string_ids";
-import { heartbeatWithoutCancelCheck } from "@app/lib/temporal";
 import { concurrentExecutor, withRetry } from "@app/lib/utils/async_utils";
 import { cacheWithRedis, warmCacheWithRedis } from "@app/lib/utils/cache";
 import logger from "@app/logger/logger";
@@ -55,9 +54,9 @@ function getGcsPath(
 }
 
 /**
- * @cc [owner:tdraier,label:performance] heartbeat-per-gcs-write
- * MUST heartbeat the current Temporal activity, if any, after each object write attempt, so that
- * writing many objects is not mistaken for a stalled activity.
+ * @cc [owner:tdraier,label:performance] progress-per-gcs-write
+ * MUST call `onProgress`, if given, after each object write attempt and each cleanup delete
+ * attempt.
  */
 /**
  * @cc [owner:tdraier,label:performance] bounded-gcs-write-attempt
@@ -67,7 +66,8 @@ function getGcsPath(
  */
 async function batchWriteContentsToGcsAtPaths(
   action: AgentMCPActionResource,
-  itemsWithPaths: Array<{ content: OutputContent; gcsPath: string }>
+  itemsWithPaths: Array<{ content: OutputContent; gcsPath: string }>,
+  { onProgress }: { onProgress?: () => void }
 ): Promise<Result<string[], Error>> {
   let firstError: Error | null = null;
   let successCount = 0;
@@ -89,7 +89,7 @@ async function batchWriteContentsToGcsAtPaths(
               resumable: false,
             });
           } finally {
-            heartbeatWithoutCancelCheck();
+            onProgress?.();
           }
         },
         { initialDelayMs: GCS_RETRY_INITIAL_DELAY_MS }
@@ -120,7 +120,8 @@ async function batchWriteContentsToGcsAtPaths(
     // A failed save may still have persisted its object before returning an error. Delete every
     // attempted path so callers never have to reason about partial GCS writes.
     const cleanupResult = await deleteContentsFromGcs(
-      itemsWithPaths.map(({ gcsPath }) => gcsPath)
+      itemsWithPaths.map(({ gcsPath }) => gcsPath),
+      { onProgress }
     );
     if (cleanupResult.isErr()) {
       logger.error(
@@ -142,14 +143,16 @@ async function batchWriteContentsToGcsAtPaths(
 export async function batchWriteContentsToGcs(
   auth: Authenticator,
   action: AgentMCPActionResource,
-  contents: OutputContent[]
+  contents: OutputContent[],
+  { onProgress }: { onProgress?: () => void } = {}
 ): Promise<Result<string[], Error>> {
   return batchWriteContentsToGcsAtPaths(
     action,
     contents.map((content) => ({
       content,
       gcsPath: getGcsPath(auth, action, randomUUID()),
-    }))
+    })),
+    { onProgress }
   );
 }
 
@@ -310,7 +313,8 @@ export async function batchFetchContentsFromGcs(
  * one or more actions — prefix delete is far cheaper than per-object deletes.
  */
 export async function deleteContentsFromGcs(
-  gcsPaths: string[]
+  gcsPaths: string[],
+  { onProgress }: { onProgress?: () => void } = {}
 ): Promise<Result<void, Error>> {
   if (gcsPaths.length === 0) {
     return new Ok(undefined);
@@ -326,7 +330,7 @@ export async function deleteContentsFromGcs(
           try {
             await bucket.delete(gcsPath, { ignoreNotFound: true });
           } finally {
-            heartbeatWithoutCancelCheck();
+            onProgress?.();
           }
         },
         { initialDelayMs: GCS_RETRY_INITIAL_DELAY_MS }

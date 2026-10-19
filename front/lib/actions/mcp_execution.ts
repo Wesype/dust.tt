@@ -192,8 +192,10 @@ export async function processToolNotification(
   notification: MCPProgressNotificationType,
   {
     toolContext,
+    onPersistProgress,
   }: {
     toolContext: ToolContext;
+    onPersistProgress: () => void;
   }
 ): Promise<{
   event: ToolNotificationEvent;
@@ -212,7 +214,8 @@ export async function processToolNotification(
       auth,
       output.contents.map((content) => ({
         content: sanitizeStringsDeep(content),
-      }))
+      })),
+      { onProgress: onPersistProgress }
     );
     if (outputRes.isErr()) {
       throw outputRes.error;
@@ -306,6 +309,7 @@ export async function processToolResults(
     toolCallResultContent,
     toolCallResultStructuredContent,
     toolContext,
+    onPersistProgress,
   }: {
     localLogger: Logger;
     toolCallResultContent: CallToolResult["content"];
@@ -313,6 +317,7 @@ export async function processToolResults(
     // function actions; agent-loop actions only persist the model-facing content blocks.
     toolCallResultStructuredContent?: CallToolResult["structuredContent"];
     toolContext: ToolContext;
+    onPersistProgress: () => void;
   }
 ): Promise<{
   outputItems: ToolOutputItemType[];
@@ -649,6 +654,7 @@ export async function processToolResults(
       })
     : await runContext.action.createOutputItems(auth, cleanContentItems, {
         deferDurablePersist: true,
+        onProgress: onPersistProgress,
       });
   recordMcpPersistOutputMs(roundMs(persistOutputStarted));
 

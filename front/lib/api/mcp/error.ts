@@ -11,6 +11,7 @@ type HandleErrorParams = {
   errorContent: CallToolResult["content"];
   status: ToolExecutionStatus;
   executionDurationMs: number;
+  onPersistProgress: () => void;
 };
 
 /**
@@ -18,11 +19,18 @@ type HandleErrorParams = {
  */
 export async function handleMCPActionError(
   auth: Authenticator,
-  { action, errorContent, status, executionDurationMs }: HandleErrorParams
+  {
+    action,
+    errorContent,
+    status,
+    executionDurationMs,
+    onPersistProgress,
+  }: HandleErrorParams
 ): Promise<MCPErrorEvent | MCPSuccessEvent> {
   const outputRes = await action.createOutputItems(
     auth,
-    errorContent.map((item) => ({ content: item }))
+    errorContent.map((item) => ({ content: item })),
+    { onProgress: onPersistProgress }
   );
   if (outputRes.isErr()) {
     throw outputRes.error;

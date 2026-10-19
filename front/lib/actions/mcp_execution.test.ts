@@ -351,6 +351,7 @@ describe("processToolResults", () => {
 
     const { generatedFiles } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [
         {
@@ -377,6 +378,7 @@ describe("processToolResults", () => {
 
     const { outputItems, generatedFiles } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext: clientSideToolContext,
       toolCallResultContent: [makeToolGeneratedFileBlock(upload.sId)],
     });
@@ -405,6 +407,7 @@ describe("processToolResults", () => {
 
     const { generatedFiles } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext: clientSideToolContext,
       toolCallResultContent: [makeToolGeneratedFileBlock(conversationFile.sId)],
     });
@@ -420,6 +423,7 @@ describe("processToolResults", () => {
 
     const { outputItems, generatedFiles } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [{ type: "text", text: largeText }],
     });
@@ -462,6 +466,7 @@ describe("processToolResults", () => {
 
     const { outputItems, generatedFiles } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [
         {
@@ -498,6 +503,7 @@ describe("processToolResults", () => {
 
     const { outputItems } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [{ type: "text", text: smallText }],
     });
@@ -511,6 +517,23 @@ describe("processToolResults", () => {
     }
   });
 
+  it("reports durable persist progress through onPersistProgress", async () => {
+    const { auth, toolContext } = await setupTest();
+    const onPersistProgress = vi.fn();
+
+    const { awaitDurablePersist } = await processToolResults(auth, {
+      localLogger: logger.child({ test: true }),
+      onPersistProgress,
+      toolContext,
+      toolCallResultContent: [{ type: "text", text: "hello world" }],
+    });
+    const persistResult = await awaitDurablePersist();
+
+    expect(persistResult.isOk()).toBe(true);
+    // 1 GCS write, then 1 GCS path update.
+    expect(onPersistProgress).toHaveBeenCalledTimes(2);
+  });
+
   it("should merge many text blocks into a single output item", async () => {
     const { auth, toolContext } = await setupTest();
 
@@ -518,6 +541,7 @@ describe("processToolResults", () => {
 
     const { outputItems } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: rows.map((text) => ({ type: "text", text })),
     });
@@ -538,6 +562,7 @@ describe("processToolResults", () => {
 
     const { outputItems } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [{ type: "text", text: largeText }],
     });
@@ -558,6 +583,7 @@ describe("processToolResults", () => {
 
     const { outputItems } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [
         {
@@ -586,6 +612,7 @@ describe("processToolResults", () => {
 
     const { outputItems, generatedFiles } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [
         {
@@ -646,6 +673,7 @@ describe("processToolResults", () => {
 
     await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [
         {
@@ -684,6 +712,7 @@ describe("processToolResults", () => {
 
     const { outputItems } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [{ type: "resource", resource: browseResult }],
     });
@@ -728,6 +757,7 @@ describe("processToolResults", () => {
 
     const { outputItems } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [{ type: "resource", resource: browseResult }],
     });
@@ -771,6 +801,7 @@ describe("processToolResults", () => {
 
     await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [{ type: "text", text: largeText }],
     });
@@ -796,6 +827,7 @@ describe("processToolResults", () => {
 
     await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [{ type: "text", text: largeJson }],
     });
@@ -870,6 +902,7 @@ describe("processToolResults", () => {
       auth,
       {
         localLogger: logger.child({ test: true }),
+        onPersistProgress: () => {},
         toolContext,
         toolCallResultContent: [
           {
@@ -909,6 +942,7 @@ describe("processToolResults", () => {
     const { outputItems, generatedFiles, awaitDurablePersist } =
       await processToolResults(auth, {
         localLogger: logger.child({ test: true }),
+        onPersistProgress: () => {},
         toolContext,
         toolCallResultContent,
       });
@@ -944,6 +978,7 @@ describe("processToolResults", () => {
 
     const { outputItems } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: Array.from({ length: 100 }, (_, i) => ({
         type: "text",
@@ -965,6 +1000,7 @@ describe("processToolResults", () => {
       auth,
       {
         localLogger: logger.child({ test: true }),
+        onPersistProgress: () => {},
         toolContext,
         toolCallResultContent: [{ type: "text", text: largeJson }],
       }
@@ -999,6 +1035,7 @@ describe("processToolResults", () => {
       auth,
       {
         localLogger: logger.child({ test: true }),
+        onPersistProgress: () => {},
         toolContext,
         toolCallResultContent: [{ type: "text", text: largeText }],
       }
@@ -1024,6 +1061,7 @@ describe("processToolResults", () => {
 
     const { outputItems } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [{ type: "text", text: largeJson }],
     });
@@ -1059,6 +1097,7 @@ describe("processToolResults", () => {
 
     const { outputItems } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [
         {
@@ -1093,6 +1132,7 @@ describe("processToolResults", () => {
       auth,
       {
         localLogger: logger.child({ test: true }),
+        onPersistProgress: () => {},
         toolContext,
         toolCallResultContent,
         toolCallResultStructuredContent: structuredContent,
@@ -1122,6 +1162,7 @@ describe("processToolResults", () => {
 
     const { awaitDurablePersist } = await processToolResults(auth, {
       localLogger: logger.child({ test: true }),
+      onPersistProgress: () => {},
       toolContext,
       toolCallResultContent: [{ type: "text", text: "some output" }],
     });
