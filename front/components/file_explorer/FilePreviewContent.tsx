@@ -277,8 +277,7 @@ export interface FilePreviewContentData {
 }
 
 /**
- * Shared data-fetching/processing for file previews, used by both the
- * FilePreviewDialog (modal) and the FilePreviewPanel (conversation side panel).
+ * Shared data-fetching/processing for file previews, used by the FilePreviewPanel (side panel).
  * It fetches text content when the file category requires it and derives the
  * processed/markdown/record-count views.
  */

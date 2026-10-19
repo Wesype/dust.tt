@@ -31,11 +31,7 @@ import { usePinPodBanner } from "@app/hooks/usePinPodBanner";
 import { usePodFileTabs } from "@app/hooks/usePodFileTabs";
 import { isContentNodeAttachmentType } from "@app/lib/api/assistant/conversation/attachments";
 import { useAppRouter } from "@app/lib/platform";
-import {
-  downloadFile,
-  getFilePathViewUrl,
-  useDeleteFileByPath,
-} from "@app/lib/swr/files";
+import { downloadFile, useDeleteFileByPath } from "@app/lib/swr/files";
 import {
   useAddPodContextContentNodes,
   useExtractPodArchive,
@@ -679,12 +675,6 @@ function PodFileExplorerContent({ owner, pod }: PodFileExplorerProps) {
     [movePodFile, pod.sId, refreshPodFiles]
   );
 
-  const getFileUrl = useCallback(
-    // path is the canonical scoped path, e.g. "pod-{sId}/subdir/file.txt".
-    (path: string) => getFilePathViewUrl(owner, path),
-    [owner]
-  );
-
   const getFileResponse = useCallback(
     (path: string) => downloadFile(owner, path),
     [owner]
@@ -695,13 +685,8 @@ function PodFileExplorerContent({ owner, pod }: PodFileExplorerProps) {
   const onOpenInteractive = (entry: { fileId: string }) =>
     openPanel({ type: "interactive_content", fileId: entry.fileId });
 
-  const onOpenInPanel = (entry: FileEntry): boolean => {
-    if (isFilePreviewableContentType(entry.contentType)) {
-      openPanel({ type: "file_preview", kind: "path", filePath: entry.path });
-      return true;
-    }
-    return false;
-  };
+  const onOpenInPanel = (entry: FileEntry) =>
+    openPanel({ type: "file_preview", kind: "path", filePath: entry.path });
 
   const handleCloseOverlay = useCallback(() => {
     setActiveOverlay(null);
@@ -921,7 +906,6 @@ function PodFileExplorerContent({ owner, pod }: PodFileExplorerProps) {
         displayFramePackages={true}
         emptyState={hasFiles ? undefined : emptyState}
         files={podGCSFiles}
-        getFileUrl={getFileUrl}
         currentFolderPath={currentFolderPath}
         onCurrentFolderChange={setCurrentFolderPath}
         onDownload={onDownload}
@@ -933,7 +917,6 @@ function PodFileExplorerContent({ owner, pod }: PodFileExplorerProps) {
         getExtraFileMenuItems={getExtraFileMenuItems}
         toolbarExtraActions={addButton}
         isLoading={isLoading}
-        owner={owner}
       />
     </>
   );
