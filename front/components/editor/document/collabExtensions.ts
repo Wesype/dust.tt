@@ -1,9 +1,8 @@
 import { agentEdits } from "@app/components/editor/document/AgentEdits";
-import { parseMarkdownBlocks } from "@app/components/editor/document/content";
 import { getDocumentComments } from "@app/components/editor/document/DocumentComments";
 import type { DocumentImageOptions } from "@app/components/editor/document/DocumentImage";
-import type { Translate } from "@app/components/editor/document/extensions";
-import { buildDocumentEditorExtensions } from "@app/components/editor/document/extensions";
+import type { Translate } from "@app/components/editor/document/editorExtensions";
+import { buildDocumentEditorExtensions } from "@app/components/editor/document/editorExtensions";
 import type { CommentChannel } from "@app/lib/client/collab/comments";
 import type { DfmComment } from "@app/lib/markdown/dfm";
 import { BODY_FRAGMENT_NAME } from "@app/types/collab";
@@ -97,7 +96,6 @@ export const buildCollabExtensions = ({
   ...buildDocumentEditorExtensions(t, {
     live: true,
     resolveImageSource,
-    parsePastedMarkdown: parseMarkdownBlocks,
   }),
   collabCommentThreads(comments),
   ...(provider ? [agentEdits(provider)] : []),

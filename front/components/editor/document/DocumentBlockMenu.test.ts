@@ -1,5 +1,5 @@
 import { useDocumentBlockMenu } from "@app/components/editor/document/DocumentBlockMenu";
-import { buildDocumentEditorExtensions } from "@app/components/editor/document/extensions";
+import { buildDocumentEditorExtensions } from "@app/components/editor/document/editorExtensions";
 import type { DocumentEmbeddableFiles } from "@app/components/editor/document/types";
 import { DocumentEmbeddableFileFactory } from "@app/tests/utils/DocumentEmbeddableFileFactory";
 import type { MessageDescriptor } from "@lingui/core";

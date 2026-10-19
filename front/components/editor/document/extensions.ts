@@ -10,7 +10,6 @@ import { DocumentFrame } from "@app/components/editor/document/DocumentFrame";
 import type { DocumentImageOptions } from "@app/components/editor/document/DocumentImage";
 import { DocumentImage } from "@app/components/editor/document/DocumentImage";
 import { DocumentListItem } from "@app/components/editor/document/DocumentListItem";
-import { DocumentListJoin } from "@app/components/editor/document/DocumentListJoin";
 import type { DocumentOrderedListOptions } from "@app/components/editor/document/DocumentOrderedList";
 import { DocumentOrderedList } from "@app/components/editor/document/DocumentOrderedList";
 import {
@@ -20,16 +19,11 @@ import {
 } from "@app/components/editor/document/DocumentTable";
 import { createDocumentMarked } from "@app/components/editor/document/marked_instance";
 import { cn } from "@dust-tt/sparkle";
-import type { MessageDescriptor } from "@lingui/core";
-import { msg } from "@lingui/core/macro";
 import type { AnyExtension } from "@tiptap/core";
 import { Code } from "@tiptap/extension-code";
-import { Placeholder } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
 import type { StarterKitOptions } from "@tiptap/starter-kit";
 import { StarterKit } from "@tiptap/starter-kit";
-
-export type Translate = (descriptor: MessageDescriptor) => string;
 
 /**
  * @cc [owner:tdraier,label:product] document-link-click
@@ -95,7 +89,7 @@ const DocumentMarkdown = Markdown.extend({
 });
 
 /** The schema; a live document protects comment marks without a thread and drops StarterKit's undo. */
-const buildSchemaExtensions = ({
+export const buildSchemaExtensions = ({
   live,
   resolveImageSource,
   parsePastedMarkdown = null,
@@ -151,36 +145,3 @@ const buildSchemaExtensions = ({
 ];
 
 export const documentExtensions = buildSchemaExtensions({ live: false });
-
-/**
- * The editor's extensions. A live document drops StarterKit's undo history for the
- * collaboration one, and protects comment marks whose thread its editor does not hold.
- */
-export const buildDocumentEditorExtensions = (
-  t: Translate,
-  {
-    live = false,
-    resolveImageSource,
-    parsePastedMarkdown,
-  }: {
-    live?: boolean;
-    resolveImageSource: DocumentImageOptions["resolveSource"];
-    /** Reads a numbered list pasted as text; without it, the list is pasted as plain text. */
-    parsePastedMarkdown?: DocumentOrderedListOptions["parsePastedMarkdown"];
-  }
-): AnyExtension[] => [
-  ...buildSchemaExtensions({ live, resolveImageSource, parsePastedMarkdown }),
-  DocumentListJoin,
-  Placeholder.configure({
-    placeholder: ({ node, pos, editor }) =>
-      node.type.name === "heading"
-        ? pos === 0
-          ? t(msg`Untitled`)
-          : t(msg`Heading`)
-        : node.type.name === "paragraph"
-          ? editor.isEmpty
-            ? t(msg`Start writing, or type / for elements…`)
-            : t(msg`Type / for elements…`)
-          : "",
-  }),
-];

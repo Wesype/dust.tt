@@ -1,9 +1,8 @@
-import { parseMarkdownBlocks } from "@app/components/editor/document/content";
 import {
   loadDfm,
   saveDfm,
 } from "@app/components/editor/document/dfm_persistence";
-import { buildDocumentEditorExtensions } from "@app/components/editor/document/extensions";
+import { buildDocumentEditorExtensions } from "@app/components/editor/document/editorExtensions";
 import type { MessageDescriptor } from "@lingui/core";
 import { Editor } from "@tiptap/core";
 import { afterAll, beforeAll, expect, vi } from "vitest";
@@ -32,7 +31,6 @@ export function openEditor(markdown: string, { live = false } = {}) {
     extensions: buildDocumentEditorExtensions(translate, {
       live,
       resolveImageSource: () => null,
-      parsePastedMarkdown: parseMarkdownBlocks,
     }),
     content: loaded.value.content,
   });

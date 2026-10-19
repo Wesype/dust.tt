@@ -1,4 +1,3 @@
-import { parseMarkdownBlocks } from "@app/components/editor/document/content";
 import {
   loadDfm,
   loggableRefusal,
@@ -8,7 +7,7 @@ import {
   getDocumentJSONComments,
   withDocumentJSONComments,
 } from "@app/components/editor/document/DocumentComments";
-import { buildDocumentEditorExtensions } from "@app/components/editor/document/extensions";
+import { buildDocumentEditorExtensions } from "@app/components/editor/document/editorExtensions";
 import type { DocumentProps } from "@app/components/editor/document/types";
 import { useImageSourceResolver } from "@app/components/editor/document/useImageSourceResolver";
 import { isEditableTarget } from "@app/lib/utils/dom";
@@ -107,7 +106,6 @@ export const useDocumentEditor = ({
     () =>
       buildDocumentEditorExtensions(t, {
         resolveImageSource: resolveSource,
-        parsePastedMarkdown: parseMarkdownBlocks,
       }),
     [t, resolveSource]
   );

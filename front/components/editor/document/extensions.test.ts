@@ -1,5 +1,5 @@
 import { getMarkedCommentIds } from "@app/components/editor/document/DocumentCommentAnchor";
-import { buildDocumentEditorExtensions } from "@app/components/editor/document/extensions";
+import { buildDocumentEditorExtensions } from "@app/components/editor/document/editorExtensions";
 import type { MessageDescriptor } from "@lingui/core";
 import { Editor } from "@tiptap/core";
 import { MarkdownManager } from "@tiptap/markdown";

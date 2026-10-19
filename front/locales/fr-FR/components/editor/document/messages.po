@@ -478,19 +478,19 @@ msgstr "Afficher une image depuis les fichiers"
 msgid "Choose an image"
 msgstr "Choisir une image"
 
-#: front/components/editor/document/extensions.ts
+#: front/components/editor/document/editorExtensions.ts
 msgid "Untitled"
 msgstr "Sans titre"
 
-#: front/components/editor/document/extensions.ts
+#: front/components/editor/document/editorExtensions.ts
 msgid "Heading"
 msgstr "Titre"
 
-#: front/components/editor/document/extensions.ts
+#: front/components/editor/document/editorExtensions.ts
 msgid "Start writing, or type / for elements…"
 msgstr "Commencez à écrire, ou tapez / pour insérer des éléments…"
 
-#: front/components/editor/document/extensions.ts
+#: front/components/editor/document/editorExtensions.ts
 msgid "Type / for elements…"
 msgstr "Tapez / pour insérer des éléments…"
 
