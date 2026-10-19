@@ -1,3 +1,5 @@
+import type { FrameToolCallPair } from "@app/types/api/frame_publication";
+
 export type GetFramePermissionsResponseBody = {
   canWriteFrameSource: boolean;
   /**
@@ -21,4 +23,17 @@ export type GetFramePermissionsResponseBody = {
    * callers who can edit the Frame.
    */
   draftPublicationId: string | null;
+  /** Live publication's frame-level tools.call pairs; empty when none or no publication. */
+  requiredTools: FrameToolCallPair[];
+  /** True when the current user published the live publication. */
+  isLastPublisher: boolean;
+  /**
+   * True when the viewer may use the Frame's tools without further consent:
+   * no required tools, last publisher, or stored authorization covers requiredTools.
+   */
+  hasAuthorizedRequiredTools: boolean;
+};
+
+export type PostFrameToolAuthorizationResponseBody = {
+  authorizedTools: FrameToolCallPair[];
 };
