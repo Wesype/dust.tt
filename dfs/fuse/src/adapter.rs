@@ -30,6 +30,14 @@ const MAX_WRITE_BYTES: u32 = 1024 * 1024;
 const FUSE_THREADS: usize = 1;
 /// How many background requests, such as readahead, the kernel may have pending.
 const MAX_BACKGROUND: u16 = 32;
+/// The block size `statfs` reports.
+const STATFS_BLOCK_BYTES: u32 = 4096;
+/// The total and free blocks `statfs` reports: 1 PiB.
+const STATFS_BLOCKS: u64 = 1 << 38;
+/// The total and free inodes `statfs` reports.
+const STATFS_FILES: u64 = 1 << 32;
+/// The longest name `statfs` reports: the longest dfs name, which fits Linux `NAME_MAX`.
+const STATFS_NAME_MAX_BYTES: u32 = dfs_protocol::NAME_MAX_BYTES as u32;
 
 /**
  * @cc [owner:fontanierh,label:security] owner-only
@@ -251,6 +259,19 @@ impl Filesystem for Adapter {
         todo!()
     }
 
+    /// Creates a symbolic link, for `symlink`. Fails with `EPERM`, as POSIX asks of a filesystem
+    /// without symbolic links.
+    fn symlink(
+        &self,
+        _req: &Request,
+        _parent: INodeNo,
+        _link_name: &OsStr,
+        _target: &std::path::Path,
+        reply: ReplyEntry,
+    ) {
+        reply.error(fuser::Errno::EPERM);
+    }
+
     /// Moves an entry to a new name, possibly in another directory, for `rename` and `renameat2`.
     /// `flags` can ask not to replace an existing target.
     fn rename(
@@ -264,6 +285,19 @@ impl Filesystem for Adapter {
         _reply: ReplyEmpty,
     ) {
         todo!()
+    }
+
+    /// Adds a name for an existing file, for `link`. Fails with `EPERM`, as POSIX asks of a
+    /// filesystem without hard links.
+    fn link(
+        &self,
+        _req: &Request,
+        _ino: INodeNo,
+        _newparent: INodeNo,
+        _newname: &OsStr,
+        reply: ReplyEntry,
+    ) {
+        reply.error(fuser::Errno::EPERM);
     }
 
     /// Opens a file and returns a handle, which the `read`, `write`, `flush` and `release` calls on
@@ -396,8 +430,17 @@ impl Filesystem for Adapter {
 
     /// Returns the filesystem's size and free space, for `statfs` and `df`. Reports plenty of free
     /// space, so tools that check it before writing go ahead: dfs has no fixed capacity.
-    fn statfs(&self, _req: &Request, _ino: INodeNo, _reply: ReplyStatfs) {
-        todo!()
+    fn statfs(&self, _req: &Request, _ino: INodeNo, reply: ReplyStatfs) {
+        reply.statfs(
+            STATFS_BLOCKS,
+            STATFS_BLOCKS,
+            STATFS_BLOCKS,
+            STATFS_FILES,
+            STATFS_FILES,
+            STATFS_BLOCK_BYTES,
+            STATFS_NAME_MAX_BYTES,
+            STATFS_BLOCK_BYTES,
+        );
     }
 
     /// Says whether the caller may read, write or execute an inode, for `access`. Checks the mode
@@ -431,9 +474,9 @@ impl Filesystem for Adapter {
         _cmd: u32,
         _in_data: &[u8],
         _out_size: u32,
-        _reply: ReplyIoctl,
+        reply: ReplyIoctl,
     ) {
-        todo!()
+        reply.error(fuser::Errno::ENOTTY);
     }
 }
 
