@@ -890,6 +890,14 @@ msgstr "Add reaction"
 msgid "More reactions"
 msgstr "More reactions"
 
+#: front/components/assistant/conversation/MessageTimeline.tsx
+msgid "Message timeline"
+msgstr "Message timeline"
+
+#: front/components/assistant/conversation/MessageTimeline.tsx
+msgid "Go to message {messageNumber}"
+msgstr "Go to message {messageNumber}"
+
 #: front/components/assistant/conversation/SidebarMenu.tsx
 msgid "Today"
 msgstr "Today"
