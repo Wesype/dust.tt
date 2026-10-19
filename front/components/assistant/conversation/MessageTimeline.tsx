@@ -1,11 +1,12 @@
 import type { AgentMessageWithStreaming } from "@app/components/assistant/conversation/types";
+import type { MessageTimelineStore } from "@app/components/assistant/conversation/useMessageTimeline";
 import type { UserMessageTypeWithContentFragments } from "@app/types/assistant/conversation";
 import { removeNulls } from "@app/types/shared/utils/general";
 import { stripMarkdown } from "@app/types/shared/utils/markdown";
 import { cn } from "@dust-tt/sparkle";
 import { useLingui } from "@lingui/react/macro";
 import type { WheelEvent } from "react";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 // Width of a bar by its distance to the closest highlighted bar (dock-style magnification): 20px down
 // to 8px in 4px steps over three neighbors, then the resting width. Widths rather than a horizontal
@@ -76,8 +77,7 @@ function MessageTimelinePreviewCard({
 }
 
 interface MessageTimelineProps {
-  messages: UserMessageTypeWithContentFragments[];
-  activeMessageId: string | null;
+  store: MessageTimelineStore;
   getMessageAnswer: (
     message: UserMessageTypeWithContentFragments
   ) => AgentMessageWithStreaming | null;
@@ -86,14 +86,22 @@ interface MessageTimelineProps {
 }
 
 export function MessageTimeline({
-  messages,
-  activeMessageId,
+  store,
   getMessageAnswer,
   onMessageClick,
   onWheel,
 }: MessageTimelineProps) {
   const { t } = useLingui();
+  const { messages, activeMessageId } = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+    store.getSnapshot
+  );
   const [hovered, setHovered] = useState<HoveredTimelineMessage | null>(null);
+
+  if (messages.length < 2) {
+    return null;
+  }
 
   const activeIndex = messages.findIndex((m) => m.sId === activeMessageId);
   // The bar of the message in view stays highlighted while another bar is hovered, each one

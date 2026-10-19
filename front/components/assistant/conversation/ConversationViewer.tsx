@@ -515,8 +515,7 @@ export const ConversationViewer = ({
 
   const isMessageTimelineVisible = showMessageTimeline && !isMobile;
   const {
-    timelineMessages,
-    activeTimelineMessageId,
+    timelineStore,
     syncTimeline,
     onScrollerScroll,
     onTimelineWheel,
@@ -1496,10 +1495,9 @@ export const ConversationViewer = ({
             enforceStickyFooterAtBottom
           />
         </VirtuosoMessageListLicense>
-        {isMessageTimelineVisible && timelineMessages.length > 1 && (
+        {isMessageTimelineVisible && (
           <MessageTimeline
-            messages={timelineMessages}
-            activeMessageId={activeTimelineMessageId}
+            store={timelineStore}
             getMessageAnswer={getTimelineMessageAnswer}
             onMessageClick={scrollToTimelineMessage}
             onWheel={onTimelineWheel}

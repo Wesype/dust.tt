@@ -154,6 +154,62 @@ function isMessageInViewport(
   );
 }
 
+interface MessageTimelineSnapshot {
+  messages: UserMessageTypeWithContentFragments[];
+  activeMessageId: string | null;
+}
+
+/**
+ * State of the message timeline, kept outside React: the list updates it on every scroll event, and
+ * only the timeline subscribes to it, so the conversation does not re-render when it changes.
+ */
+export class MessageTimelineStore {
+  private snapshot: MessageTimelineSnapshot = {
+    messages: [],
+    activeMessageId: null,
+  };
+  private readonly listeners = new Set<() => void>();
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+
+  getSnapshot = (): MessageTimelineSnapshot => this.snapshot;
+
+  // Keeps the previous array while the entries are unchanged to avoid re-rendering the timeline on
+  // every scroll event.
+  setMessages(messages: UserMessageTypeWithContentFragments[]) {
+    const current = this.snapshot.messages;
+    if (
+      current.length === messages.length &&
+      current.every((message, index) => message === messages[index])
+    ) {
+      return;
+    }
+
+    this.snapshot = { ...this.snapshot, messages };
+    this.notify();
+  }
+
+  setActiveMessageId(activeMessageId: string | null) {
+    if (activeMessageId === this.snapshot.activeMessageId) {
+      return;
+    }
+
+    this.snapshot = { ...this.snapshot, activeMessageId };
+    this.notify();
+  }
+
+  private notify() {
+    for (const listener of this.listeners) {
+      listener();
+    }
+  }
+}
+
 interface UseMessageTimelineProps {
   virtuosoMessageListRef: RefObject<MessageListMethods>;
   isEnabled: boolean;
@@ -162,8 +218,8 @@ interface UseMessageTimelineProps {
 }
 
 /**
- * State of the message timeline of a conversation: its entries (one per visible user message) and
- * the message being read, derived from the Virtuoso list.
+ * Keeps the message timeline of a conversation in sync with the Virtuoso list: its entries (one per
+ * visible user message) and the message being read.
  *
  * Virtuoso exposes no subscription to its data, so the caller calls `syncTimeline` from the list's
  * `onRenderedDataChange` and passes `onScrollerScroll` to its `onScrollCapture`.
@@ -173,12 +229,7 @@ export function useMessageTimeline({
   isEnabled,
   scrollBehavior,
 }: UseMessageTimelineProps) {
-  const [timelineMessages, setTimelineMessages] = useState<
-    UserMessageTypeWithContentFragments[]
-  >([]);
-  const [activeTimelineMessageId, setActiveTimelineMessageId] = useState<
-    string | null
-  >(null);
+  const [timelineStore] = useState(() => new MessageTimelineStore());
   // Message clicked in the timeline. It stays active while the list scrolls to it and until it
   // leaves the viewport, even when the list cannot bring it to the top (last messages).
   const pinnedTimelineMessageRef = useRef<{
@@ -186,21 +237,13 @@ export function useMessageTimeline({
     isScrolling: boolean;
   } | null>(null);
 
-  // Keeps the previous array while the entries are unchanged to avoid re-rendering the timeline on
-  // every scroll event.
   const syncTimeline = useCallback(() => {
     if (!isEnabled || !virtuosoMessageListRef.current) {
       return;
     }
 
-    const entries = virtuosoMessageListRef.current.data
-      .get()
-      .filter(isMessageTimelineEntry);
-    setTimelineMessages((current) =>
-      current.length === entries.length &&
-      current.every((message, index) => message === entries[index])
-        ? current
-        : entries
+    timelineStore.setMessages(
+      virtuosoMessageListRef.current.data.get().filter(isMessageTimelineEntry)
     );
 
     if (pinnedTimelineMessageRef.current) {
@@ -210,8 +253,8 @@ export function useMessageTimeline({
     const activeEntry = getActiveMessageTimelineEntry(
       virtuosoMessageListRef.current
     );
-    setActiveTimelineMessageId(activeEntry?.sId ?? null);
-  }, [isEnabled, virtuosoMessageListRef]);
+    timelineStore.setActiveMessageId(activeEntry?.sId ?? null);
+  }, [isEnabled, timelineStore, virtuosoMessageListRef]);
 
   // Virtuoso's `onScroll` is muted while it scrolls programmatically (initial positioning, jump to a
   // sent message), so the timeline follows the scroller's own scroll events.
@@ -285,7 +328,7 @@ export function useMessageTimeline({
         sId: message.sId,
         isScrolling: true,
       };
-      setActiveTimelineMessageId(message.sId);
+      timelineStore.setActiveMessageId(message.sId);
 
       // "start-no-overflow" stops at the end of the list for the last messages instead of padding
       // the bottom of the list with blank space to bring them to the top.
@@ -303,12 +346,11 @@ export function useMessageTimeline({
         },
       });
     },
-    [scrollBehavior, virtuosoMessageListRef]
+    [scrollBehavior, timelineStore, virtuosoMessageListRef]
   );
 
   return {
-    timelineMessages,
-    activeTimelineMessageId,
+    timelineStore,
     syncTimeline,
     onScrollerScroll,
     onTimelineWheel,
