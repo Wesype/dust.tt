@@ -130,6 +130,7 @@ struct FrameFilePayload: Encodable {
 
 struct FrameHostRequest: Decodable {
     enum Command: String, Decodable {
+        case callFunction
         case getFile
         case getUserIdentity
         case setErrorMessage
@@ -138,4 +139,48 @@ struct FrameHostRequest: Decodable {
     let command: Command
     let fileId: String?
     let errorMessage: String?
+    let functionName: String?
+    let input: JSONValue?
+}
+
+struct FrameFunctionCallReply: Encodable {
+    let result: JSONValue?
+    let error: SandboxFunctionCallError?
+
+    static func success(_ result: JSONValue?) -> FrameFunctionCallReply {
+        FrameFunctionCallReply(result: result, error: nil)
+    }
+
+    static func failure(_ error: SandboxFunctionCallError) -> FrameFunctionCallReply {
+        FrameFunctionCallReply(result: nil, error: error)
+    }
+}
+
+enum FrameFunctionScope {
+    case frameV2(frameId: String)
+    case legacy
+
+    private static let bareFunctionName = #/^[a-z0-9]+(?:-[a-z0-9]+)*$/#
+
+    /**
+     * @cc [owner:adrsimon,label:product;security] frame-function-reference-resolution
+     * A `callFunction` name from a frame MUST resolve exactly like the web host's
+     * `resolveFrameFunctionReference`: in a v2 frame, a bare slug (lowercase alphanumeric segments
+     * joined by single hyphens) resolves to `<frameId>/<slug>`, and anything else fails with
+     * `not_supported`. Every name from a legacy frame MUST fail with `not_supported`. A failed
+     * resolution MUST NOT reach the server.
+     */
+    func resolve(_ functionName: String) -> Result<String, SandboxFunctionCallError> {
+        switch self {
+        case let .frameV2(frameId):
+            guard functionName.wholeMatch(of: Self.bareFunctionName) != nil else {
+                return .failure(.notSupported(
+                    "'\(functionName)' is not a Frames v2 function name: expected a bare manifest function name."
+                ))
+            }
+            return .success("\(frameId)/\(functionName)")
+        case .legacy:
+            return .failure(.notSupported("Function calls are not available in this Frame."))
+        }
+    }
 }

@@ -218,25 +218,43 @@ enum ErrorCategory: String, Decodable {
     case invalidResponseFormatConfiguration = "invalid_response_format_configuration"
 }
 
+struct ToolApprovalPrompt {
+    let toolName: String?
+    let mcpServerName: String?
+    let stake: ToolStake?
+
+    /// Pre-computed displayable inputs.
+    let displayableInputs: [(key: String, value: String)]
+
+    var canAlwaysAllow: Bool {
+        stake == .low || stake == .medium
+    }
+
+    init(toolName: String?, mcpServerName: String?, stake: ToolStake?, inputs: [String: ToolInputValue]?) {
+        self.toolName = toolName
+        self.mcpServerName = mcpServerName
+        self.stake = stake
+        self.displayableInputs = (inputs ?? [:]).compactMap { key, val in
+            guard let display = val.displayValue else { return nil }
+            let truncated = display.count > 300
+                ? String(display.prefix(300)) + "…"
+                : display
+            return (key: key.humanized, value: truncated)
+        }
+        .sorted { $0.key < $1.key }
+    }
+}
+
 struct ToolApprovalInfo: Equatable {
     let actionId: String
     let messageId: String
     let conversationId: String
     /// sId of the user whose turn triggered the action; only they may approve it.
     let triggeringUserId: String?
-    let toolName: String?
-    let mcpServerName: String?
     let agentName: String?
-    let stake: ToolStake?
     let inputs: [String: ToolInputValue]?
     let argumentsRequiringApproval: [String]?
-
-    var canAlwaysAllow: Bool {
-        stake == .low || stake == .medium
-    }
-
-    /// Pre-computed displayable inputs.
-    let displayableInputs: [(key: String, value: String)]
+    let prompt: ToolApprovalPrompt
 
     init(
         actionId: String,
@@ -254,21 +272,10 @@ struct ToolApprovalInfo: Equatable {
         self.messageId = messageId
         self.conversationId = conversationId
         self.triggeringUserId = triggeringUserId
-        self.toolName = toolName
-        self.mcpServerName = mcpServerName
         self.agentName = agentName
-        self.stake = stake
         self.inputs = inputs
         self.argumentsRequiringApproval = argumentsRequiringApproval
-
-        self.displayableInputs = (inputs ?? [:]).compactMap { key, val in
-            guard let display = val.displayValue else { return nil }
-            let truncated = display.count > 300
-                ? String(display.prefix(300)) + "…"
-                : display
-            return (key: key.humanized, value: truncated)
-        }
-        .sorted { $0.key < $1.key }
+        self.prompt = ToolApprovalPrompt(toolName: toolName, mcpServerName: mcpServerName, stake: stake, inputs: inputs)
     }
 
     static func == (lhs: ToolApprovalInfo, rhs: ToolApprovalInfo) -> Bool {

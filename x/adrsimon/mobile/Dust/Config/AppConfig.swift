@@ -87,6 +87,32 @@ enum AppConfig {
             "/api/w/\(workspaceId)/frames/\(frameId)/permissions"
         }
 
+        static func sandboxFunctionInvocations(workspaceId: String, functionIdOrSlug: String) -> String {
+            let pathSegmentAllowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
+            let encoded = functionIdOrSlug.addingPercentEncoding(withAllowedCharacters: pathSegmentAllowed)
+                ?? functionIdOrSlug
+            return "/api/w/\(workspaceId)/sandbox-functions/\(encoded)/invocations"
+        }
+
+        static func sandboxFunctionInvocationEvents(
+            workspaceId: String,
+            functionId: String,
+            invocationId: String
+        ) -> String {
+            let invocations = sandboxFunctionInvocations(workspaceId: workspaceId, functionIdOrSlug: functionId)
+            return "\(invocations)/\(invocationId)/events"
+        }
+
+        static func sandboxFunctionAction(
+            workspaceId: String,
+            functionId: String,
+            invocationId: String,
+            actionId: String
+        ) -> String {
+            let invocations = sandboxFunctionInvocations(workspaceId: workspaceId, functionIdOrSlug: functionId)
+            return "\(invocations)/\(invocationId)/actions/\(actionId)"
+        }
+
         static func spaceFiles(workspaceId: String, spaceId: String) -> String {
             "/api/w/\(workspaceId)/spaces/\(spaceId)/files"
         }

@@ -9,7 +9,7 @@ struct AttachmentViewerView: View {
     let tokenProvider: TokenProvider
     let sourceUrl: String?
 
-    @State private var frameHost: FrameHostBridge
+    @StateObject private var frameHost: FrameHostBridge
     @Environment(\.dismiss) private var dismiss
     @State private var fileData: Data?
     @State private var isLoading = true
@@ -33,7 +33,7 @@ struct AttachmentViewerView: View {
         self.workspaceId = workspaceId
         self.tokenProvider = tokenProvider
         self.sourceUrl = sourceUrl
-        _frameHost = State(initialValue: FrameHostBridge(
+        _frameHost = StateObject(wrappedValue: FrameHostBridge(
             workspaceId: workspaceId,
             file: file,
             contentType: contentType,
@@ -129,7 +129,18 @@ struct AttachmentViewerView: View {
             if frameIsLoading {
                 ProgressView()
             }
+            if let approval = frameHost.pendingApprovals.first {
+                Color.black.opacity(0.4).ignoresSafeArea()
+                ToolApprovalInlineView(
+                    approval: approval.prompt,
+                    isLoading: frameHost.isValidatingAction,
+                    onValidate: { approved in Task { await frameHost.validate(approved) } }
+                )
+                .id(approval.id)
+                .padding()
+            }
         }
+        .onDisappear { frameHost.cancelFunctionCalls() }
     }
 
     private func buildFrameWrapperHTML(code: String) -> String {
@@ -158,7 +169,6 @@ struct AttachmentViewerView: View {
         const FRAME_CODE = `\(escapedCode)`;
         const IDENTIFIER = '\(vizIdentifier)';
         const READ_ONLY_MESSAGE = 'Frames are read-only in the Dust iOS app.';
-        const FUNCTIONS_UNSUPPORTED_MESSAGE = 'Frame functions are not available in the Dust iOS app yet.';
         const host = window.webkit.messageHandlers.\(FrameHostBridge.handlerName);
 
         async function askHost(request) {
@@ -214,7 +224,15 @@ struct AttachmentViewerView: View {
               reply({ result: { success: false, error: READ_ONLY_MESSAGE } });
               break;
             case 'callFunction':
-              reply({ error: { code: 'not_supported', message: FUNCTIONS_UNSUPPORTED_MESSAGE } });
+              try {
+                reply(await askHost({
+                  command: 'callFunction',
+                  functionName: data.params.functionIdOrSlug,
+                  input: data.params.input
+                }));
+              } catch (error) {
+                reply({ error: { code: 'transport_error', message: String(error) } });
+              }
               break;
             case 'setErrorMessage':
               askHost({ command: 'setErrorMessage', errorMessage: data.params && data.params.errorMessage });

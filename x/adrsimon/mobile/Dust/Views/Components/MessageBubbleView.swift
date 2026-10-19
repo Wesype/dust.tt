@@ -228,7 +228,7 @@ struct AgentMessageBubble: View {
                 switch streamingPhase {
                 case let .approvalRequired(approval):
                     ToolApprovalInlineView(
-                        approval: approval,
+                        approval: approval.prompt,
                         isLoading: isValidatingAction,
                         canRespond: canRespondToBlockedAction(
                             triggeringUserId: approval.triggeringUserId,
@@ -568,7 +568,7 @@ private struct FlowLayout: Layout {
 // MARK: - Tool Approval
 
 struct ToolApprovalInlineView: View {
-    let approval: ToolApprovalInfo
+    let approval: ToolApprovalPrompt
     var isLoading: Bool = false
     var canRespond: Bool = true
     var onValidate: ((ActionApproval) -> Void)?
