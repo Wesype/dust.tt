@@ -44,7 +44,6 @@ import {
   roundMs,
 } from "@app/lib/api/sandbox_functions/sandbox_function_mcp_action_server_timings";
 import type { Authenticator } from "@app/lib/auth";
-import { ConversationResource } from "@app/lib/resources/conversation_resource";
 import { FileResource } from "@app/lib/resources/file_resource";
 import { concurrentExecutor } from "@app/lib/utils/async_utils";
 import type { Logger } from "@app/logger/logger";
@@ -52,7 +51,6 @@ import type { FileUseCase, FileUseCaseMetadata } from "@app/types/files";
 import {
   extensionsForContentType,
   getFileDisplayName,
-  isConversationFileUseCase,
   isSupportedFileContentType,
 } from "@app/types/files";
 import type { Result } from "@app/types/shared/result";
@@ -278,48 +276,21 @@ export async function processToolNotification(
 
 /**
  * @cc [owner:achilleburah,label:security] client-tool-file-read-access
- * Client-side MCP servers run user-controlled code, so a file referenced by a tool result that does
- * not come from a server-side tool MUST be returned only if the caller can read it: a conversation
- * file bound to a conversation MUST be fetchable by the caller through
- * `ConversationResource.fetchById`, an unbound one MUST pass `canAccessUnattachedConversationFile`.
- * Any other file MUST be returned as `null`, like an unknown id. `processToolResults` MUST bind only
- * a file returned by this function.
+ * Client-side MCP servers run user-controlled code, so a file id returned by a tool that is not
+ * server-side MUST be ignored and returned as `null`, like an unknown id. Client-side tools return
+ * files by path or as inline blobs. `processToolResults` MUST bind only a file returned by this
+ * function.
  */
 async function fetchToolGeneratedFile(
   auth: Authenticator,
   fileId: string,
-  toolConfiguration: LightMCPToolConfigurationType,
-  localLogger: Logger
+  toolConfiguration: LightMCPToolConfigurationType
 ): Promise<FileResource | null> {
-  const file = await FileResource.fetchById(auth, fileId);
-  if (!file) {
+  if (!isLightServerSideMCPToolConfiguration(toolConfiguration)) {
     return null;
   }
 
-  if (isLightServerSideMCPToolConfiguration(toolConfiguration)) {
-    return file;
-  }
-
-  // TODO: remove the client-side file id path once no extension below 0.1.19 is in use OR no
-  // more occurrence of this log.
-  localLogger.info(
-    {
-      toolName: toolConfiguration.name,
-      serverName: toolConfiguration.mcpServerName,
-    },
-    "Client-side MCP tool returned a file id"
-  );
-
-  if (!isConversationFileUseCase(file.useCase)) {
-    return null;
-  }
-
-  const fileConversationId = file.useCaseMetadata?.conversationId;
-  const canReadFile = fileConversationId
-    ? !!(await ConversationResource.fetchById(auth, fileConversationId))
-    : file.canAccessUnattachedConversationFile(auth);
-
-  return canReadFile ? file : null;
+  return FileResource.fetchById(auth, fileId);
 }
 
 /**
@@ -446,8 +417,7 @@ export async function processToolResults(
             const file = await fetchToolGeneratedFile(
               auth,
               block.resource.fileId,
-              toolConfiguration,
-              localLogger
+              toolConfiguration
             );
             const conversation = isAgentLoopRunContext(runContext)
               ? runContext.conversation
@@ -458,9 +428,9 @@ export async function processToolResults(
             // Skip for project_context files — they are already indexed via their own data source.
             // Skip outside of a conversation — there is no conversation data source to upsert to.
             if (file && file.useCase !== "project_context" && conversation) {
-              // Files uploaded by client-side tools (e.g. the Chrome extension) may not have a
-              // conversationId in their metadata since the tool doesn't know it at upload time.
-              // Patch it here so the JIT data source creation works correctly.
+              // Files uploaded by server-side tools (e.g. Zendesk attachments) may not have a
+              // conversationId in their metadata. Patch it here so the JIT data source creation
+              // works correctly.
               if (
                 file.useCase === "conversation" &&
                 !file.useCaseMetadata?.conversationId
