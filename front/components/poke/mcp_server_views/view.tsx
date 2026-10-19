@@ -73,6 +73,12 @@ export function ViewMCPServerViewTable({
                 </PokeTableCell>
               </PokeTableRow>
               <PokeTableRow>
+                <PokeTableHead>Restricted to Skills</PokeTableHead>
+                <PokeTableCell>
+                  {mcpServerView.isRestrictedToSkills ? "Yes" : "No"}
+                </PokeTableCell>
+              </PokeTableRow>
+              <PokeTableRow>
                 <PokeTableHead>Space</PokeTableHead>
                 <PokeTableCellWithLink
                   href={`/poke/${owner.sId}/spaces/${mcpServerView.spaceId}`}
