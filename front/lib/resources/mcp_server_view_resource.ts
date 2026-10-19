@@ -404,7 +404,7 @@ export class MCPServerViewResource<
       name: systemView.name,
       description: systemView.description,
       oauthScope: systemView.oauthScope,
-      isRestrictedToSkills: false,
+      isRestrictedToSkills: systemView.isRestrictedToSkills,
     };
 
     if (space.kind === "global") {
