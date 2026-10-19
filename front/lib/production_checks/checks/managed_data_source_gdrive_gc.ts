@@ -65,7 +65,7 @@ export const managedDataSourceGCGdriveCheck: CheckFunction = async (
       `SELECT ds.id, ds."connectorId", ds."workspaceId" AS "workspaceModelId", w."sId" AS "workspaceId"
        FROM data_sources ds
        INNER JOIN workspaces w ON w.id = ds."workspaceId"
-       WHERE ds."connectorProvider" = 'google_drive'`,
+       WHERE ds."connectorProvider" = 'google_drive' AND ds."deletedAt" IS NULL`,
       { type: QueryTypes.SELECT }
     );
 
@@ -138,7 +138,11 @@ export const managedDataSourceGCGdriveCheck: CheckFunction = async (
       const coreDocumentsRes = await getCoreDocuments(ds.id);
       if (coreDocumentsRes.isErr()) {
         reportFailure(
-          { frontDataSourceId: ds.id, actionLinks: [] },
+          {
+            frontDataSourceId: ds.id,
+            error: coreDocumentsRes.error.message,
+            actionLinks: [],
+          },
           "Could not get core documents"
         );
         return;
