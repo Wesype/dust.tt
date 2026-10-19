@@ -3,6 +3,8 @@ import { authorizedToolsCoverRequired } from "@app/lib/api/frames/tool_authoriza
 import { FileResource } from "@app/lib/resources/file_resource";
 import { FramePublicationResource } from "@app/lib/resources/frame_publication_resource";
 import { FrameToolAuthorizationResource } from "@app/lib/resources/frame_tool_authorization_resource";
+import { UserResource } from "@app/lib/resources/user_resource";
+import { getFrameV2NameFromManifestPath } from "@app/types/api/frame_manifest";
 import type { GetFramePermissionsResponseBody } from "@app/types/api/frame_permissions";
 import { FramePublicationTargetSchema } from "@app/types/api/frame_publication";
 import { workspaceApp } from "@front-api/middlewares/ctx";
@@ -68,12 +70,25 @@ app.get(
       FrameToolAuthorizationResource.fetchForUserAndFrame(auth, frame),
     ]);
 
+    const packageRoot = frame.getFrameV2SourceDirectoryPath(auth);
+    const frameName =
+      (frame.mountFilePath
+        ? getFrameV2NameFromManifestPath(frame.mountFilePath)
+        : null) ??
+      packageRoot?.split("/").pop() ??
+      null;
+
+    const publisherUserId = livePublication?.publishedByUserId ?? null;
+    const [publisher] = publisherUserId
+      ? await UserResource.fetchByModelIds([publisherUserId])
+      : [];
+    const lastPublisherName = publisher?.fullName() || null;
+
     const requiredTools = livePublication?.requiredTools ?? [];
+    const authorizedTools = authorization?.authorizedTools ?? [];
     const user = auth.user();
     const isLastPublisher = Boolean(
-      user &&
-      livePublication?.publishedByUserId !== null &&
-      livePublication?.publishedByUserId === user.id
+      user && publisherUserId !== null && publisherUserId === user.id
     );
     const hasAuthorizedRequiredTools =
       requiredTools.length === 0 ||
@@ -89,7 +104,8 @@ app.get(
       canWriteFrameSource,
       // Temporary alias for mobile / open clients still decoding the old field name.
       isFrameAuthor: canWriteFrameSource,
-      packageRoot: frame.getFrameV2SourceDirectoryPath(auth),
+      packageRoot,
+      frameName,
       hasFunctions,
       livePublicationId,
       livePublishedAt: livePublication?.createdAt.getTime() ?? null,
@@ -97,7 +113,9 @@ app.get(
         ? (frame.pendingDraftPublicationId ?? null)
         : null,
       requiredTools,
+      authorizedTools,
       isLastPublisher,
+      lastPublisherName,
       hasAuthorizedRequiredTools,
     });
   }

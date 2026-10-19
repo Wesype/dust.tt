@@ -9,6 +9,8 @@ export type GetFramePermissionsResponseBody = {
   isFrameAuthor: boolean;
   /** Scoped path of the Frame package root (`conversation-…/MyFrame`), when known. */
   packageRoot: string | null;
+  /** Display name of the Frame (folder name), when known. */
+  frameName: string | null;
   /**
    * Whether the publication this request is served declares at least one function: the latest
    * one for a writer asking with `publication=latest` (the conversation panel), live otherwise.
@@ -25,8 +27,15 @@ export type GetFramePermissionsResponseBody = {
   draftPublicationId: string | null;
   /** Live publication's frame-level tools.call pairs; empty when none or no publication. */
   requiredTools: FrameToolCallPair[];
+  /**
+   * Tools the current user already authorized for this Frame.
+   * Used by the consent UI to mark newly required tools.
+   */
+  authorizedTools: FrameToolCallPair[];
   /** True when the current user published the live publication. */
   isLastPublisher: boolean;
+  /** Full name of the user who published the live publication, when known. */
+  lastPublisherName: string | null;
   /**
    * True when the viewer may use the Frame's tools without further consent:
    * no required tools, last publisher, or stored authorization covers requiredTools.
