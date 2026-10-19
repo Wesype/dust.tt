@@ -16,6 +16,7 @@ import {
   RETRYABLE_ERR_FN_DEFAULT,
   Storage,
 } from "@google-cloud/storage";
+import assert from "assert";
 import isNumber from "lodash/isNumber";
 
 const GCS_TRANSIENT_RETRY_MAX_ATTEMPTS = 3;
@@ -41,6 +42,8 @@ export const GCS_RESUMABLE_UPLOAD_CHUNK_SIZE_BYTES = 8 * 1024 * 1024;
 
 interface FileStorageOptions {
   useServiceAccount?: boolean;
+  requestTimeoutMs?: number;
+  autoRetry?: boolean;
 }
 
 type RawContentUpload = {
@@ -115,7 +118,7 @@ export async function withRetryOnTransientGCSError<T>(
  * A transient GCS error (e.g. "socket hang up") that occurs before GCS responds to a read
  * (download, metadata, read stream) MUST be retried by the SDK (up to `GCS_MAX_RETRIES` times),
  * including when the read happens during or after a write without a precondition on this class's
- * `Storage` client.
+ * `Storage` client, unless the instance was created with `autoRetry: false`.
  */
 export class FileStorage {
   private readonly bucket: Bucket;
@@ -123,11 +126,23 @@ export class FileStorage {
 
   constructor(
     bucketKey: string,
-    { useServiceAccount }: FileStorageOptions = { useServiceAccount: true }
+    {
+      useServiceAccount = true,
+      requestTimeoutMs,
+      autoRetry = true,
+    }: FileStorageOptions = {}
   ) {
+    assert(
+      requestTimeoutMs === undefined || requestTimeoutMs > 0,
+      "requestTimeoutMs must be positive."
+    );
     this.storage = new Storage({
       keyFilename: useServiceAccount ? config.getServiceAccount() : undefined,
+      // The SDK overwrites any per-call `timeout` option with this client-level one.
+      timeout: requestTimeoutMs,
       retryOptions: {
+        // Disabling retries takes `autoRetry: false`: the SDK treats `maxRetries: 0` as unset.
+        autoRetry,
         maxRetries: GCS_MAX_RETRIES,
         retryableErrorFn: isRetryableGCSError,
         // With the default strategy (RetryConditional), a write without a precondition (e.g.
@@ -564,14 +579,34 @@ export const GCS_COMPOSE_MAX_SOURCES = 32;
 
 const bucketInstances = new Map();
 
+/**
+ * @cc [owner:tdraier,label:performance] request-timeout-isolated-client
+ * When `requestTimeoutMs` is set, every simple (non-resumable) request made through the returned
+ * instance MUST fail once it exceeds `requestTimeoutMs` (counted until response headers, so
+ * including the body upload). When `autoRetry` is false, the SDK MUST NOT retry any request made
+ * through it. Instances requested with a different `requestTimeoutMs` or `autoRetry` for the same
+ * bucket MUST NOT share its client.
+ */
+function getBucketInstanceKey(
+  bucketConfig: string,
+  options?: FileStorageOptions
+): string {
+  const requestTimeoutMs = options?.requestTimeoutMs;
+  const autoRetry = options?.autoRetry ?? true;
+  return requestTimeoutMs === undefined && autoRetry
+    ? bucketConfig
+    : `${bucketConfig}:timeout=${requestTimeoutMs}:autoRetry=${autoRetry}`;
+}
+
 export const getBucketInstance: (
   bucketConfig: string,
   options?: FileStorageOptions
 ) => FileStorage = (bucketConfig, options) => {
-  if (!bucketInstances.has(bucketConfig)) {
-    bucketInstances.set(bucketConfig, new FileStorage(bucketConfig, options));
+  const instanceKey = getBucketInstanceKey(bucketConfig, options);
+  if (!bucketInstances.has(instanceKey)) {
+    bucketInstances.set(instanceKey, new FileStorage(bucketConfig, options));
   }
-  return bucketInstances.get(bucketConfig);
+  return bucketInstances.get(instanceKey);
 };
 
 export const getPrivateUploadBucket = (options?: FileStorageOptions) =>

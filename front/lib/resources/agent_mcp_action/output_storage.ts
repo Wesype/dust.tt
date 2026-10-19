@@ -16,7 +16,16 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 export const MCP_OUTPUT_ITEMS_PREFIX = "mcp_output_items";
 const GCS_CONCURRENCY = 4;
-const GCS_WRITE_REQUEST_TIMEOUT_MS = 15_000;
+const GCS_REQUEST_TIMEOUT_MS = 30_000;
+// The SDK retries requests that got no response, timeouts included, 3 more times without
+// heartbeating, so this bucket leaves retries to `withRetry`.
+const GCS_BOUNDED_BUCKET_OPTIONS = {
+  requestTimeoutMs: GCS_REQUEST_TIMEOUT_MS,
+  autoRetry: false,
+};
+// Without the SDK retries and their backoff, ours has to back off from rate limiting and
+// unavailability on its own.
+const GCS_RETRY_INITIAL_DELAY_MS = 1_000;
 
 export const GCS_CONTENT_CACHE_TTL_MS = 15 * 60 * 1000;
 
@@ -51,9 +60,9 @@ function getGcsPath(
  */
 /**
  * @cc [owner:tdraier,label:performance] bounded-gcs-write-attempt
- * Each object write attempt MUST be bounded by `GCS_WRITE_REQUEST_TIMEOUT_MS`, so that a request
- * stuck on a dead connection fails and is retried instead of stalling past the activity heartbeat
- * timeout.
+ * Each object write attempt, and each cleanup delete attempt after a failed write, MUST be bounded
+ * by `GCS_REQUEST_TIMEOUT_MS`, so that a request stuck on a dead connection fails instead of
+ * stalling past the activity heartbeat timeout.
  */
 async function batchWriteContentsToGcsAtPaths(
   action: AgentMCPActionResource,
@@ -65,19 +74,25 @@ async function batchWriteContentsToGcsAtPaths(
   await concurrentExecutor(
     itemsWithPaths,
     async ({ content, gcsPath }) => {
-      const bucket = getPrivateUploadBucket();
-      const file = bucket.file(gcsPath);
-      const json = JSON.stringify(content);
-
-      // Resumable uploads (the SDK default) ignore `timeout`.
-      const writeResult = await withRetry(() =>
-        file.save(Buffer.from(json, "utf-8"), {
-          contentType: "application/json",
-          resumable: false,
-          timeout: GCS_WRITE_REQUEST_TIMEOUT_MS,
-        })
+      const data = Buffer.from(JSON.stringify(content), "utf-8");
+      const file = getPrivateUploadBucket(GCS_BOUNDED_BUCKET_OPTIONS).file(
+        gcsPath
       );
-      heartbeatWithoutCancelCheck();
+
+      const writeResult = await withRetry(
+        async () => {
+          try {
+            // Resumable uploads (the SDK default) ignore `timeout`.
+            await file.save(data, {
+              contentType: "application/json",
+              resumable: false,
+            });
+          } finally {
+            heartbeatWithoutCancelCheck();
+          }
+        },
+        { initialDelayMs: GCS_RETRY_INITIAL_DELAY_MS }
+      );
 
       if (writeResult.isErr()) {
         if (!firstError) {
@@ -276,21 +291,34 @@ export async function deleteContentsFromGcs(
     return new Ok(undefined);
   }
 
-  try {
-    const bucket = getPrivateUploadBucket();
-    await concurrentExecutor(
-      gcsPaths,
-      async (gcsPath) => {
-        await bucket.delete(gcsPath, { ignoreNotFound: true });
-      },
-      { concurrency: GCS_CONCURRENCY }
-    );
-  } catch (err) {
+  let firstError: Error | null = null;
+  const bucket = getPrivateUploadBucket(GCS_BOUNDED_BUCKET_OPTIONS);
+  await concurrentExecutor(
+    gcsPaths,
+    async (gcsPath) => {
+      const deleteResult = await withRetry(
+        async () => {
+          try {
+            await bucket.delete(gcsPath, { ignoreNotFound: true });
+          } finally {
+            heartbeatWithoutCancelCheck();
+          }
+        },
+        { initialDelayMs: GCS_RETRY_INITIAL_DELAY_MS }
+      );
+      if (deleteResult.isErr() && !firstError) {
+        firstError = deleteResult.error;
+      }
+    },
+    { concurrency: GCS_CONCURRENCY }
+  );
+
+  if (firstError) {
     logger.error(
-      { err: normalizeError(err), pathCount: gcsPaths.length },
+      { err: firstError, pathCount: gcsPaths.length },
       "Failed to delete MCP output content from GCS"
     );
-    return new Err(normalizeError(err));
+    return new Err(firstError);
   }
 
   return new Ok(undefined);
