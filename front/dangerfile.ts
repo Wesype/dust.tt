@@ -701,6 +701,8 @@ async function checkDiffFiles() {
     "front/components/editor/document/DocumentCommentAnchor.ts",
     "front/components/editor/document/DocumentComments.ts",
     "front/components/editor/document/DocumentImage.ts",
+    "front/components/editor/document/DocumentListItem.ts",
+    "front/components/editor/document/DocumentOrderedList.ts",
     "front/components/editor/document/DocumentTable.ts",
     "front/components/editor/document/extensions.ts",
     "front/components/editor/document/marked_instance.ts",
