@@ -299,6 +299,26 @@ describe("loadDfm", () => {
     expect(loggableRefusal(reason)).toBe("The file is not valid DFM.");
   });
 
+  it.each([
+    ["bold", "**`Apply` is one transaction.**\n"],
+    ["italic", "*see `x` here*\n"],
+    ["a link", "[`docs`](https://example.com)\n"],
+    ["bold in a list item", "- **`Apply` is one transaction.** Then more.\n"],
+  ])("round-trips inline code inside %s", (_, source) => {
+    expect(roundTrip(source)).toBe(source);
+  });
+
+  it("keeps inline code inside commented bold text out of the comment", () => {
+    const source = `**:comment-start{id=c1}Run \`npm test\` now:comment-end{id=c1}**\n\n${OPEN_THREAD}`;
+
+    expect(markedTexts(load(source).content)).toEqual([
+      "Run [c1]",
+      "npm test",
+      " now[c1]",
+    ]);
+    expect(roundTrip(source)).toBe(source);
+  });
+
   it("opens a comment with inline code inside it", () => {
     const source = `:comment-start{id=c1}Run \`npm test\` now:comment-end{id=c1}\n\n${OPEN_THREAD}`;
 

@@ -1,6 +1,7 @@
 import { DocumentAnchors } from "@app/components/editor/document/DocumentAnchors";
 import { DocumentCommentAnchor } from "@app/components/editor/document/DocumentCommentAnchor";
 import {
+  COMMENT_MARK_NAME,
   DocumentCommentMark,
   DocumentComments,
 } from "@app/components/editor/document/DocumentComments";
@@ -19,6 +20,7 @@ import { cn } from "@dust-tt/sparkle";
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 import type { AnyExtension } from "@tiptap/core";
+import { Code } from "@tiptap/extension-code";
 import { Placeholder } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
 import type { StarterKitOptions } from "@tiptap/starter-kit";
@@ -64,12 +66,7 @@ const starterKitOptions: Partial<StarterKitOptions> = {
         "my-6 overflow-x-auto whitespace-pre rounded-xl border border-border bg-muted-background px-5 py-4 font-mono text-sm leading-relaxed [tab-size:2] [&>code]:font-mono",
     },
   },
-  code: {
-    HTMLAttributes: {
-      class:
-        "rounded border border-border bg-muted-background px-1 py-0.5 font-mono text-[0.85em]",
-    },
-  },
+  code: false,
   link: {
     openOnClick: false,
     HTMLAttributes: {
@@ -82,6 +79,13 @@ const starterKitOptions: Partial<StarterKitOptions> = {
     HTMLAttributes: { class: "my-8 border-0 border-t border-border" },
   },
 };
+
+/**
+ * @cc [owner:avervaet,label:product] document-code-marks
+ * Inline code MUST accept the bold, italic, strike and link marks Markdown can wrap it in, and
+ * MUST exclude the comment mark, since an anchor written inside a code span reads back as code.
+ */
+const DocumentCode = Code.extend({ excludes: COMMENT_MARK_NAME });
 
 // TipTap builds each editor's parser from the extension's options, which every editor built from
 // the same extensions shares: setting the instance right before it does gives each its own.
@@ -114,6 +118,12 @@ const buildSchemaExtensions = ({
   StarterKit.configure(
     live ? { ...starterKitOptions, undoRedo: false } : starterKitOptions
   ),
+  DocumentCode.configure({
+    HTMLAttributes: {
+      class:
+        "rounded border border-border bg-muted-background px-1 py-0.5 font-mono text-[0.85em]",
+    },
+  }),
   DocumentTable.configure({
     HTMLAttributes: {
       class: "my-6 w-full table-fixed border-collapse text-sm",
