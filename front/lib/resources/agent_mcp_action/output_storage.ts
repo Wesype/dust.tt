@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { REDIS_CACHE_CONCURRENCY } from "@app/lib/api/redis";
 import type { Authenticator } from "@app/lib/auth";
 import { getPrivateUploadBucket } from "@app/lib/file_storage";
+import { isGCSNotFoundError } from "@app/lib/file_storage/types";
 import type { AgentMCPActionResource } from "@app/lib/resources/agent_mcp_action_resource";
 import { makeSId } from "@app/lib/resources/string_ids";
 import { heartbeatWithoutCancelCheck } from "@app/lib/temporal";
@@ -156,17 +157,41 @@ export async function batchWriteContentsToGcs(
  * Fetches content from GCS. Throws on failure (cacheWithRedis propagates the error).
  */
 // itemId is unused in the fetch logic but passed to populate the cache key.
+/**
+ * @cc [owner:tdraier,label:performance] bounded-gcs-read-attempt
+ * Each object read attempt MUST fail if GCS has not started responding within
+ * `GCS_REQUEST_TIMEOUT_MS`, so that a request stuck on a dead connection does not hang the caller
+ * indefinitely. Once the response has started, reading its body is not time-bounded. A not-found
+ * object MUST NOT be retried.
+ */
+/**
+ * @cc [owner:tdraier,label:error-handling] throws-as-cache-loader
+ * Exception to `no-catching-own-errors`: as the `cacheWithRedis` loader, this MUST throw on any
+ * read or parse failure, and `fetchContentFromGcs` MUST be the only caller that catches it,
+ * converting the failure to an `Err`.
+ */
 async function fetchGcsContent(
   auth: Authenticator,
   gcsPath: string,
   _itemId: ModelId
 ): Promise<OutputContent> {
-  const bucket = getPrivateUploadBucket();
-  const file = bucket.file(gcsPath);
+  const file = getPrivateUploadBucket(GCS_BOUNDED_BUCKET_OPTIONS).file(gcsPath);
 
-  const [buffer] = await file.download();
+  const downloadResult = await withRetry(
+    async () => {
+      const [buffer] = await file.download();
+      return buffer;
+    },
+    {
+      initialDelayMs: GCS_RETRY_INITIAL_DELAY_MS,
+      shouldRetry: (err) => !isGCSNotFoundError(err),
+    }
+  );
+  if (downloadResult.isErr()) {
+    throw downloadResult.error;
+  }
 
-  return JSON.parse(buffer.toString("utf-8"));
+  return JSON.parse(downloadResult.value.toString("utf-8"));
 }
 
 // Bump the `:v1` suffix any time the cached value shape changes, so stale entries from previous
