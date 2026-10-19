@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use dfs_protocol::{
-    READ_FILES_MAX_OBJECTS, STAT_MAX_REFERENCES,
+    LOOKUP_MAX_TARGETS, READ_FILES_MAX_OBJECTS, STAT_MAX_REFERENCES,
     error::status,
     rpc::{
         ApplyRequest, AttrBatch, CreateSessionRequest, CreateTenantRequest, Empty, EntryPage,
@@ -34,8 +34,6 @@ mod errors;
 
 // Reserve space for each result's attributes, error, and protobuf framing, without metadata.
 const READ_FILES_RESULT_OVERHEAD_BYTES: usize = 512;
-
-const LOOKUP_MAX_TARGETS: usize = 256;
 
 #[cfg(test)]
 #[path = "../tests/api/read_files_budget.rs"]

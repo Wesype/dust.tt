@@ -12,18 +12,25 @@
 //! from there.
 
 use anyhow::{Context, Result};
-use dfs_api::storage::{
-    fdb,
-    resources::{keys::tenant_subspace, object::ObjectResource, tenant::TenantResource},
+use dfs_api::{
+    clock,
+    storage::{
+        fdb,
+        resources::{
+            directory::DirectoryResource, keys::tenant_subspace, object::ObjectResource,
+            tenant::TenantResource,
+        },
+    },
 };
 use dfs_mount::{DirEntry, Errno, Folder, Fs, Kind, ROOT_INO, Remote};
 use dfs_protocol::{
-    ObjectId, ObjectRef, READ_MAX_BYTES, STAT_MAX_REFERENCES,
+    LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, READ_MAX_BYTES, STAT_MAX_REFERENCES,
     rpc::{
-        AllowGrant, CreateSessionRequest, CreateTenantRequest, DenyGrant, Grant, ObjectKind,
-        dfs_client::DfsClient, grant,
+        AllowGrant, CreateSessionRequest, CreateTenantRequest, DenyGrant, Grant, GrantUpdate,
+        LookupTarget, ObjectKind, dfs_client::DfsClient, grant,
     },
 };
+use std::collections::HashMap;
 use tokio::net::TcpListener;
 use tonic::{Request, transport::Channel};
 
@@ -33,6 +40,8 @@ const SUBJECT: &str = "u:mount-test";
 const FILE_CONTENT: &[u8] = b"hello";
 /// More than one `Stat` request can carry.
 const MANY_REFERENCES: usize = STAT_MAX_REFERENCES + 4;
+/// More than one `Lookup` request can carry.
+const MANY_TARGETS: usize = LOOKUP_MAX_TARGETS + 3;
 
 /// The FDB network boots once per process and cannot restart once stopped, so every mount check
 /// runs under this one test, which holds the guard and drops it before the binary exits.
@@ -50,6 +59,7 @@ fn mount() -> Result<()> {
         let tenant = Tenant::create(&channel).await?;
         stat_returns_one_ordered_result_per_reference(&channel, &tenant).await?;
         stat_fails_with_an_unknown_session_key(&channel, &tenant).await?;
+        lookup_returns_one_ordered_result_per_target(&channel, &tenant).await?;
         read_returns_file_ranges(&channel, &tenant).await?;
         root_lists_readable_folders(&channel, &tenant).await?;
         root_looks_up_readable_folders(&channel, &tenant).await
@@ -100,18 +110,28 @@ impl Tenant {
             .await?
             .into_inner();
 
-        // File creation RPCs are not implemented yet.
+        // File creation RPCs are not implemented yet. Directory children also write the entries
+        // `Lookup` and `List` read.
         let tx = fdb::database()?.create_trx()?;
         let resource = TenantResource::fetch(&tx, &tenant.tenant_id)
             .await?
             .context("missing tenant")?;
-        let mut file = ObjectResource::new_root(&resource)?;
-        file.object_id = ObjectId::new_v7();
-        file.parent_id = Some(tenant.root_id);
-        file.name = "report.txt".to_owned();
-        file.kind = ObjectKind::File;
+        let root = ObjectResource::fetch(&tx, &resource, &tenant.root_id)
+            .await?
+            .context("missing root")?;
+        let mut root = DirectoryResource::try_from(root)?;
+        let mut file = root
+            .create_child(
+                &tx,
+                ObjectId::new_v7(),
+                "report.txt".to_owned(),
+                ObjectKind::File,
+                None,
+                HashMap::new(),
+            )
+            .await?;
         file.size = FILE_CONTENT.len() as u64;
-        file.create(&tx, &[]).await?;
+        file.record_content_change(&tx, clock::now_ms()?);
         tx.set(
             &tenant_subspace(&tenant.tenant_id).pack(&(
                 "block",
@@ -120,17 +140,25 @@ impl Tenant {
             )),
             FILE_CONTENT,
         );
-        let mut unreadable = ObjectResource::new_root(&resource)?;
-        unreadable.object_id = ObjectId::new_v7();
-        unreadable.parent_id = Some(tenant.root_id);
-        unreadable.name = "secret.txt".to_owned();
-        unreadable.kind = ObjectKind::File;
-        let deny_read = Grant {
-            kind: Some(grant::Kind::Deny(DenyGrant { mode: 0o4 })),
-        };
-        unreadable
-            .create(&tx, std::slice::from_ref(&deny_read))
+        let mut unreadable = root
+            .create_child(
+                &tx,
+                ObjectId::new_v7(),
+                "secret.txt".to_owned(),
+                ObjectKind::File,
+                None,
+                HashMap::new(),
+            )
             .await?;
+        unreadable.update_grants(
+            &tx,
+            &[GrantUpdate {
+                grant: Grant {
+                    kind: Some(grant::Kind::Deny(DenyGrant { mode: 0o4 })),
+                },
+                remove: false,
+            }],
+        )?;
         tx.commit().await?;
 
         Ok(Self {
@@ -186,6 +214,33 @@ async fn stat_returns_one_ordered_result_per_reference(
         }
     }
     assert!(remote.stat(&[]).await?.is_empty());
+    Ok(())
+}
+
+async fn lookup_returns_one_ordered_result_per_target(
+    channel: &Channel,
+    tenant: &Tenant,
+) -> Result<()> {
+    let remote = tenant.remote(channel).await?;
+    let targets: Vec<LookupTarget> = (0..MANY_TARGETS)
+        .map(|index| LookupTarget {
+            parent_id: tenant.root_id.into(),
+            name: ["report.txt", "secret.txt", "missing.txt"][index % 3].to_owned(),
+        })
+        .collect();
+
+    let results = remote.lookup(&targets).await?;
+
+    assert_eq!(results.len(), MANY_TARGETS);
+    for (index, result) in results.iter().enumerate() {
+        let id = result.as_ref().map(|attr| attr.id).map_err(|errno| *errno);
+        match index % 3 {
+            0 => assert_eq!(id, Ok(tenant.file_id.into()), "target {index}"),
+            // An object the session cannot read looks missing.
+            _ => assert_eq!(id, Err(Errno::ENOENT), "target {index}"),
+        }
+    }
+    assert!(remote.lookup(&[]).await?.is_empty());
     Ok(())
 }
 

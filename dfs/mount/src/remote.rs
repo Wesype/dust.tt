@@ -1,7 +1,10 @@
 use crate::errno::Errno;
 use dfs_protocol::{
-    ObjectId, ObjectRef, STAT_MAX_REFERENCES,
-    rpc::{Attr, Empty, ReadData, ReadRequest, Session, StatRequest, dfs_client::DfsClient},
+    LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, STAT_MAX_REFERENCES,
+    rpc::{
+        Attr, AttrBatch, Empty, LookupRequest, LookupTarget, ReadData, ReadRequest, Session,
+        StatRequest, dfs_client::DfsClient,
+    },
 };
 use tonic::{Request, metadata::AsciiMetadataValue, transport::Channel};
 
@@ -70,16 +73,33 @@ impl Remote {
                 }))
                 .await?
                 .into_inner();
-            if response.results.len() != chunk.len() {
-                return Err(Errno::EIO);
-            }
-            results.extend(response.results.into_iter().map(|result| {
-                match (result.object, result.error) {
-                    (Some(attr), None) => Ok(attr),
-                    (None, Some(error)) => Err(error.code().into()),
-                    _ => Err(Errno::EIO),
-                }
-            }));
+            results.extend(attr_results(response, chunk.len())?);
+        }
+        Ok(results)
+    }
+
+    /// Finds each target's name in its parent directory, with the attributes of what it names.
+    /**
+     * @cc [owner:fontanierh,label:api] lookup-batch
+     * On success, `lookup` MUST return exactly one result per target, in the same order, however
+     * many targets it gets.
+     */
+    pub async fn lookup(
+        &self,
+        targets: &[LookupTarget],
+    ) -> Result<Vec<Result<Attr, Errno>>, Errno> {
+        let mut results = Vec::with_capacity(targets.len());
+        for chunk in targets.chunks(LOOKUP_MAX_TARGETS) {
+            let response = self
+                .client
+                .clone()
+                .lookup(self.request(LookupRequest {
+                    targets: chunk.to_vec(),
+                    include_metadata: None,
+                }))
+                .await?
+                .into_inner();
+            results.extend(attr_results(response, chunk.len())?);
         }
         Ok(results)
     }
@@ -103,4 +123,21 @@ impl Remote {
             .await?;
         Ok(response.into_inner())
     }
+}
+
+/// The results of a `Stat` or `Lookup` batch, one per request item. Fails with `EIO` if the server
+/// returned another count or a result with both or neither of an attribute and an error.
+fn attr_results(batch: AttrBatch, expected: usize) -> Result<Vec<Result<Attr, Errno>>, Errno> {
+    if batch.results.len() != expected {
+        return Err(Errno::EIO);
+    }
+    Ok(batch
+        .results
+        .into_iter()
+        .map(|result| match (result.object, result.error) {
+            (Some(attr), None) => Ok(attr),
+            (None, Some(error)) => Err(error.code().into()),
+            _ => Err(Errno::EIO),
+        })
+        .collect())
 }
