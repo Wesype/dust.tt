@@ -2,8 +2,9 @@ use crate::errno::Errno;
 use dfs_protocol::{
     LIST_MAX_ENTRIES, LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, STAT_MAX_REFERENCES,
     rpc::{
-        Attr, AttrBatch, Empty, Entry, ListRequest, LookupRequest, LookupTarget, ReadData,
-        ReadRequest, Session, StatRequest, dfs_client::DfsClient,
+        ApplyRequest, Attr, AttrBatch, Empty, Entry, ListRequest, LookupRequest, LookupTarget,
+        Mutation, Operation, ReadData, ReadRequest, Session, StatRequest, dfs_client::DfsClient,
+        operation,
     },
 };
 use tonic::{Request, metadata::AsciiMetadataValue, transport::Channel};
@@ -152,6 +153,52 @@ impl Remote {
             }))
             .await?;
         Ok(response.into_inner())
+    }
+
+    /// Applies `operations` in order, in one server transaction. Each operation gets its own result: one
+    /// that fails does not stop the ones after it. When `apply` fails, or its caller gives up on it,
+    /// the operations may or may not have been applied.
+    /**
+     * @cc [owner:fontanierh,label:api] apply-once
+     * `apply` MUST send its operations in at most one `Apply` request and MUST NOT retry it, so an
+     * operation is never applied twice. No operations MUST return no results without a request.
+     */
+    /**
+     * @cc [owner:fontanierh,label:api] apply-batch
+     * On success, `apply` MUST return exactly one result per operation, in the same order.
+     */
+    pub async fn apply(
+        &self,
+        operations: Vec<operation::Operation>,
+    ) -> Result<Vec<Result<Mutation, Errno>>, Errno> {
+        if operations.is_empty() {
+            return Ok(Vec::new());
+        }
+        let count = operations.len();
+        let operations = operations
+            .into_iter()
+            .map(|operation| Operation {
+                operation: Some(operation),
+            })
+            .collect();
+        let response = self
+            .client
+            .clone()
+            .apply(self.request(ApplyRequest { operations }))
+            .await?
+            .into_inner();
+        if response.results.len() != count {
+            return Err(Errno::EIO);
+        }
+        Ok(response
+            .results
+            .into_iter()
+            .map(|result| match (result.mutation, result.error) {
+                (Some(mutation), None) => Ok(mutation),
+                (None, Some(error)) => Err(error.code().into()),
+                _ => Err(Errno::EIO),
+            })
+            .collect())
     }
 }
 

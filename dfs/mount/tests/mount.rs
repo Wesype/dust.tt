@@ -26,11 +26,12 @@ use dfs_mount::{DirEntry, Errno, Folder, Fs, Kind, ROOT_INO, Remote};
 use dfs_protocol::{
     LIST_MAX_ENTRIES, LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, READ_MAX_BYTES, STAT_MAX_REFERENCES,
     rpc::{
-        AllowGrant, CreateSessionRequest, CreateTenantRequest, DenyGrant, Grant, GrantUpdate,
-        LookupTarget, ObjectKind, dfs_client::DfsClient, grant,
+        AllowGrant, CreateOperation, CreateSessionRequest, CreateTenantRequest, DenyGrant, Grant,
+        GrantUpdate, LookupTarget, ObjectKind, RemoveOperation, WriteOperation,
+        dfs_client::DfsClient, grant, operation::Operation,
     },
 };
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use tokio::net::TcpListener;
 use tonic::{Request, transport::Channel};
 
@@ -68,7 +69,8 @@ fn mount() -> Result<()> {
         read_returns_file_ranges(&channel, &tenant).await?;
         root_lists_readable_folders(&channel, &tenant).await?;
         root_looks_up_readable_folders(&channel, &tenant).await?;
-        list_returns_every_page(&channel, &tenant).await
+        list_returns_every_page(&channel, &tenant).await?;
+        apply_returns_one_ordered_result_per_operation(&channel, &tenant).await
     })
 }
 
@@ -455,5 +457,69 @@ async fn list_returns_every_page(channel: &Channel, tenant: &Tenant) -> Result<(
         let result = remote.list(object.into()).await;
         assert_eq!(result.err(), Some(expected), "listing {object}");
     }
+    Ok(())
+}
+
+async fn apply_returns_one_ordered_result_per_operation(
+    channel: &Channel,
+    tenant: &Tenant,
+) -> Result<()> {
+    let remote = tenant.remote(channel).await?;
+    let file = ObjectId::new_v7();
+    let create = |object_id| {
+        Operation::Create(CreateOperation {
+            parent_id: tenant.root_id,
+            name: "applied.txt".to_owned(),
+            object_id,
+            kind: ObjectKind::File.into(),
+            mime_type: None,
+            xattrs: BTreeMap::new(),
+        })
+    };
+    let write = Operation::Write(WriteOperation {
+        object_id: file,
+        offset: 0,
+        data: FILE_CONTENT.to_vec(),
+        append: false,
+    });
+
+    let results = remote
+        .apply(vec![
+            create(file),
+            write.clone(),
+            // The name is taken; the failure does not stop the next operation.
+            create(ObjectId::new_v7()),
+            write.clone(),
+        ])
+        .await?;
+    assert_eq!(results.len(), 4);
+    let created = results[0].as_ref().map_err(|errno| *errno)?;
+    let attr = created
+        .object
+        .as_ref()
+        .context("missing created attributes")?;
+    assert_eq!(attr.id, file.into());
+    assert_eq!(attr.kind(), ObjectKind::File);
+    assert!(results[1].is_ok());
+    assert_eq!(results[2], Err(Errno(libc::EEXIST)));
+    assert!(results[3].is_ok());
+    let read = remote.read(file, 0, READ_MAX_BYTES).await?;
+    assert_eq!(read.data, FILE_CONTENT);
+
+    let results = remote
+        .apply(vec![
+            Operation::Remove(RemoveOperation {
+                object_id: file,
+                kind: ObjectKind::File.into(),
+                parent_id: tenant.root_id,
+            }),
+            write,
+        ])
+        .await?;
+    assert!(results[0].is_ok());
+    assert_eq!(results[1], Err(Errno::ENOENT));
+    assert_eq!(remote.read(file, 0, 1).await.err(), Some(Errno::ENOENT));
+
+    assert!(remote.apply(Vec::new()).await?.is_empty());
     Ok(())
 }
