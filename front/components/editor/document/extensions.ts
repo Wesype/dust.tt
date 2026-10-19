@@ -119,9 +119,11 @@ const buildSchemaExtensions = ({
     live ? { ...starterKitOptions, undoRedo: false } : starterKitOptions
   ),
   DocumentCode.configure({
+    // Mirrors the Markdown preview's inline code style, spelled out because the collab server
+    // bundles this file and cannot pull in the design system's rendering dependencies.
     HTMLAttributes: {
       class:
-        "rounded border border-border bg-muted-background px-1 py-0.5 font-mono text-[0.85em]",
+        "mx-0.5 my-0.5 cursor-text rounded-md border border-border bg-muted/70 px-0.5 py-0 text-[0.90em] text-info-700",
     },
   }),
   DocumentTable.configure({
