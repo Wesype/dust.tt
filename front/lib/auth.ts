@@ -62,7 +62,6 @@ import type {
 } from "@app/types/group_permissions";
 import { WHOLE_TYPE_RESOURCE_ID } from "@app/types/group_permissions";
 import type { GroupKind } from "@app/types/groups";
-import type { PlanType, SubscriptionType } from "@app/types/plan";
 import type { ProvidersHealth } from "@app/types/provider_credential";
 import type { WithAccessControl } from "@app/types/resource_permissions";
 import { isDevelopment } from "@app/types/shared/env";
@@ -1406,11 +1405,11 @@ export class Authenticator {
     });
   }
 
-  providersHealth(): ProvidersHealth | null {
+  providersHealth() {
     return this._providersHealth;
   }
 
-  clientIp(): string | undefined {
+  clientIp() {
     return this._clientIp;
   }
 
@@ -1418,19 +1417,19 @@ export class Authenticator {
     this._clientIp = ip;
   }
 
-  role(): RoleType {
+  role() {
     return this._role;
   }
 
-  isUser(): boolean {
+  isUser() {
     return isUser(this.workspace());
   }
 
-  isManager(): boolean {
+  isManager() {
     return isManager(this.workspace());
   }
 
-  isAdmin(): boolean {
+  isAdmin() {
     return isAdmin(this.workspace());
   }
 
@@ -1521,19 +1520,19 @@ export class Authenticator {
     return GroupPermissions.fromGrants(grants);
   }
 
-  isSystemKey(): boolean {
+  isSystemKey() {
     return !!this._key?.isSystem;
   }
 
-  isKey(): boolean {
+  isKey() {
     return !!this._key;
   }
 
-  isSandboxToken(): boolean {
+  isSandboxToken() {
     return this._authMethod === "sandbox_token";
   }
 
-  authMethod(): AuthMethodType {
+  authMethod() {
     return this._authMethod;
   }
 
@@ -1558,7 +1557,7 @@ export class Authenticator {
       : null;
   }
 
-  getNonNullableWorkspace(): WorkspaceType {
+  getNonNullableWorkspace() {
     const workspace = this.workspace();
 
     if (!workspace) {
@@ -1570,11 +1569,11 @@ export class Authenticator {
     return workspace;
   }
 
-  subscription(): SubscriptionType | null {
+  subscription() {
     return this._subscription === null ? null : this._subscription.toJSON();
   }
 
-  getNonNullableSubscription(): SubscriptionType {
+  getNonNullableSubscription() {
     const subscription = this.subscription();
 
     if (!subscription) {
@@ -1596,11 +1595,11 @@ export class Authenticator {
     return (await this.getFeatureFlags()).includes(flag);
   }
 
-  subscriptionResource(): SubscriptionResource | null {
+  subscriptionResource() {
     return this._subscription;
   }
 
-  getNonNullableSubscriptionResource(): SubscriptionResource {
+  getNonNullableSubscriptionResource() {
     const subscriptionResource = this.subscriptionResource();
 
     if (!subscriptionResource) {
@@ -1612,11 +1611,11 @@ export class Authenticator {
     return subscriptionResource;
   }
 
-  plan(): PlanType | null {
+  plan() {
     return this._subscription ? this._subscription.getPlan() : null;
   }
 
-  getNonNullablePlan(): PlanType {
+  getNonNullablePlan() {
     const plan = this.plan();
 
     if (!plan) {
@@ -1628,7 +1627,7 @@ export class Authenticator {
     return plan;
   }
 
-  isUpgraded(): boolean {
+  isUpgraded() {
     return isUpgraded(this.plan());
   }
 
@@ -1637,11 +1636,11 @@ export class Authenticator {
    * object won't have the user's workspaces set.
    * @returns
    */
-  user(): UserResource | null {
-    return this._user ?? null;
+  user() {
+    return this._user;
   }
 
-  getNonNullableUser(): UserResource {
+  getNonNullableUser() {
     const user = this.user();
 
     if (!user) {
@@ -1653,7 +1652,7 @@ export class Authenticator {
     return user;
   }
 
-  isDustSuperUser(): boolean {
+  isDustSuperUser() {
     return this._isDustSuperUser;
   }
 
@@ -1822,15 +1821,15 @@ export class Authenticator {
     return targets.every((target) => this.hasPermission(verb, target));
   }
 
-  key(): KeyAuthType | null {
+  key() {
     return this._key ?? null;
   }
 
-  attributionKey(): { id: ModelId; name: string } | null {
+  attributionKey() {
     return this._attributionKey ?? null;
   }
 
-  attributionKeyModelId(): ModelId | null {
+  attributionKeyModelId() {
     return this._attributionKey?.id ?? null;
   }
 
