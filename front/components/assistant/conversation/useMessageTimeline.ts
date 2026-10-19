@@ -1,8 +1,10 @@
 import type {
+  AgentMessageWithStreaming,
   VirtuosoMessage,
   VirtuosoMessageListContext,
 } from "@app/components/assistant/conversation/types";
 import {
+  isAgentMessageWithStreaming,
   isHiddenMessage,
   isUserMessage,
 } from "@app/components/assistant/conversation/types";
@@ -238,15 +240,30 @@ export function useMessageTimeline({
   const onTimelineWheel = useCallback(
     (event: WheelEvent<HTMLElement>) => {
       const scroller = virtuosoMessageListRef.current?.scrollerElement();
-      const bars = event.currentTarget;
-      // Bars that overflow their column scroll themselves.
-      if (!scroller || bars.scrollHeight > bars.clientHeight) {
+      if (!scroller) {
         return;
       }
 
       scroller.scrollBy({
         top: wheelDeltaPx(event.nativeEvent, scroller.clientHeight),
       });
+    },
+    [virtuosoMessageListRef]
+  );
+
+  const getTimelineMessageAnswer = useCallback(
+    (
+      message: UserMessageTypeWithContentFragments
+    ): AgentMessageWithStreaming | null => {
+      if (!virtuosoMessageListRef.current) {
+        return null;
+      }
+
+      const answer = virtuosoMessageListRef.current.data.find(
+        (m) =>
+          isAgentMessageWithStreaming(m) && m.parentMessageId === message.sId
+      );
+      return answer && isAgentMessageWithStreaming(answer) ? answer : null;
     },
     [virtuosoMessageListRef]
   );
@@ -295,6 +312,7 @@ export function useMessageTimeline({
     syncTimeline,
     onScrollerScroll,
     onTimelineWheel,
+    getTimelineMessageAnswer,
     scrollToTimelineMessage,
   };
 }

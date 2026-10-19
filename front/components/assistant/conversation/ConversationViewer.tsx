@@ -520,6 +520,7 @@ export const ConversationViewer = ({
     syncTimeline,
     onScrollerScroll,
     onTimelineWheel,
+    getTimelineMessageAnswer,
     scrollToTimelineMessage,
   } = useMessageTimeline({
     virtuosoMessageListRef,
@@ -1499,6 +1500,7 @@ export const ConversationViewer = ({
           <MessageTimeline
             messages={timelineMessages}
             activeMessageId={activeTimelineMessageId}
+            getMessageAnswer={getTimelineMessageAnswer}
             onMessageClick={scrollToTimelineMessage}
             onWheel={onTimelineWheel}
           />
