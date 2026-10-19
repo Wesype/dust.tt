@@ -1,3 +1,4 @@
+import { parseMarkdownBlocks } from "@app/components/editor/document/content";
 import {
   loadDfm,
   loggableRefusal,
@@ -104,7 +105,10 @@ export const useDocumentEditor = ({
 
   const savedExtensions = useMemo(
     () =>
-      buildDocumentEditorExtensions(t, { resolveImageSource: resolveSource }),
+      buildDocumentEditorExtensions(t, {
+        resolveImageSource: resolveSource,
+        parsePastedMarkdown: parseMarkdownBlocks,
+      }),
     [t, resolveSource]
   );
 

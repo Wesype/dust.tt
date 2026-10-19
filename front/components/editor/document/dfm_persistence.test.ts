@@ -244,6 +244,11 @@ describe("loadDfm", () => {
       "The Markdown uses formatting the editor cannot keep: an indented code fence.",
     ],
     [
+      "a numbered task list",
+      "1. [ ] todo\n",
+      "The Markdown uses formatting the editor cannot keep: a task list.",
+    ],
+    [
       "a task list nested in an ordered list",
       "1. one\n   - [ ] todo\n",
       "The Markdown uses formatting the editor cannot keep: a task list.",
@@ -928,5 +933,42 @@ describe("TipTap's token parsing step", () => {
     expect(publicParse).toHaveBeenCalled();
     expect(expected.loaded).toHaveProperty("value");
     expect(loadAndSave({ loadDfm, saveDfm }, source)).toEqual(expected);
+  });
+});
+
+describe("numbered lists", () => {
+  it.each([
+    ["starting at 1", "1. one\n2. two\n"],
+    ["starting at 3", "3. three\n4. four\n"],
+    ["starting at 0", "0. zero\n1. one\n"],
+    ["with a nested list", "1. one\n   - a\n   - b\n2. two\n"],
+    ["with two paragraphs", "1. a\n\n   para\n2. b\n"],
+  ])("opens one %s and saves it as written", (_, source) => {
+    expect(roundTrip(source)).toBe(source);
+  });
+
+  it("opens an item whose text wraps onto an indented line, saving it as a lazy one", () => {
+    const source =
+      "1. **Save the doc.** The collab server writes the new content to the doc, alone in its own\n   `Apply`.\n";
+    const { content } = load(source);
+
+    const saved = roundTrip(source);
+    expect(saved).toBe(
+      "1. **Save the doc.** The collab server writes the new content to the doc, alone in its own\n`Apply`.\n"
+    );
+    expect(load(saved).content).toEqual(content);
+    expect(roundTrip(saved)).toBe(saved);
+  });
+
+  it("writes `)` numbers with a period", () => {
+    expect(roundTrip("1) one\n2) two\n")).toBe("1. one\n2. two\n");
+  });
+
+  it.each([
+    ["letters and Roman numerals", "a. one\nb. two\n\ni. first\n"],
+    ["a phone number", "Call (216) 555-1234 now\n"],
+  ])("reads %s as text, as GFM does", (_, source) => {
+    expect(JSON.stringify(load(source).content)).not.toContain("orderedList");
+    expect(roundTrip(source)).toBe(source);
   });
 });

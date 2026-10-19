@@ -7,7 +7,10 @@ import {
   marksToAnchors,
   substituteAnchorDirectives,
 } from "@app/components/editor/document/DocumentCommentAnchor";
-import { COMMENT_MARK_NAME } from "@app/components/editor/document/DocumentComments";
+import {
+  COMMENT_MARK_NAME,
+  withoutOrphanCommentMarks,
+} from "@app/components/editor/document/DocumentComments";
 import { DOCUMENT_FRAME_NODE_NAME } from "@app/components/editor/document/DocumentFrame";
 import { DOCUMENT_IMAGE_NODE_NAME } from "@app/components/editor/document/DocumentImage";
 import {
@@ -453,6 +456,18 @@ export const parseDocumentContent = (
   }
 
   return marked;
+};
+
+/**
+ * The blocks of pasted `markdown` as a file with that body opens, without comment marks, or null
+ * when it would not open.
+ */
+export const parseMarkdownBlocks = (markdown: string): JSONContent[] | null => {
+  const parsed = parseDocumentContent(markdown);
+  return parsed.isOk()
+    ? (withoutOrphanCommentMarks(parsed.value.document, new Set()).content ??
+        [])
+    : null;
 };
 
 const serializeReadingBack = (

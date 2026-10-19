@@ -1,4 +1,5 @@
 import { agentEdits } from "@app/components/editor/document/AgentEdits";
+import { parseMarkdownBlocks } from "@app/components/editor/document/content";
 import { getDocumentComments } from "@app/components/editor/document/DocumentComments";
 import type { DocumentImageOptions } from "@app/components/editor/document/DocumentImage";
 import type { Translate } from "@app/components/editor/document/extensions";
@@ -93,7 +94,11 @@ export const buildCollabExtensions = ({
   /** The session's connection, which announces the agents' edits. */
   provider?: HocuspocusProvider;
 }): AnyExtension[] => [
-  ...buildDocumentEditorExtensions(t, { live: true, resolveImageSource }),
+  ...buildDocumentEditorExtensions(t, {
+    live: true,
+    resolveImageSource,
+    parsePastedMarkdown: parseMarkdownBlocks,
+  }),
   collabCommentThreads(comments),
   ...(provider ? [agentEdits(provider)] : []),
   Collaboration.configure({ document, field: BODY_FRAGMENT_NAME }),

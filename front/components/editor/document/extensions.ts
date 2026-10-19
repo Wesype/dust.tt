@@ -9,7 +9,10 @@ import { DocumentFilePreview } from "@app/components/editor/document/DocumentFil
 import { DocumentFrame } from "@app/components/editor/document/DocumentFrame";
 import type { DocumentImageOptions } from "@app/components/editor/document/DocumentImage";
 import { DocumentImage } from "@app/components/editor/document/DocumentImage";
+import { DocumentListItem } from "@app/components/editor/document/DocumentListItem";
 import { DocumentListJoin } from "@app/components/editor/document/DocumentListJoin";
+import type { DocumentOrderedListOptions } from "@app/components/editor/document/DocumentOrderedList";
+import { DocumentOrderedList } from "@app/components/editor/document/DocumentOrderedList";
 import {
   DocumentTable,
   DocumentTableCell,
@@ -47,13 +50,8 @@ const starterKitOptions: Partial<StarterKitOptions> = {
   paragraph: { HTMLAttributes: { class: "my-2.5" } },
   bold: { HTMLAttributes: { class: "font-semibold" } },
   bulletList: { HTMLAttributes: { class: "my-3 list-disc pl-6" } },
-  orderedList: { HTMLAttributes: { class: "my-3 list-decimal pl-6" } },
-  listItem: {
-    HTMLAttributes: {
-      class:
-        "pl-1 marker:text-muted-foreground marker:tabular-nums [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1",
-    },
-  },
+  orderedList: false,
+  listItem: false,
   blockquote: {
     HTMLAttributes: {
       class:
@@ -100,9 +98,11 @@ const DocumentMarkdown = Markdown.extend({
 const buildSchemaExtensions = ({
   live,
   resolveImageSource,
+  parsePastedMarkdown = null,
 }: {
   live: boolean;
   resolveImageSource?: DocumentImageOptions["resolveSource"];
+  parsePastedMarkdown?: DocumentOrderedListOptions["parsePastedMarkdown"];
 }): AnyExtension[] => [
   DocumentAnchors,
   DocumentComments,
@@ -124,6 +124,16 @@ const buildSchemaExtensions = ({
     HTMLAttributes: {
       class:
         "mx-0.5 my-0.5 cursor-text rounded-md border border-border bg-muted/70 px-0.5 py-0 text-[0.90em] text-info-700",
+    },
+  }),
+  DocumentOrderedList.configure({
+    HTMLAttributes: { class: "my-3 list-decimal pl-6" },
+    parsePastedMarkdown,
+  }),
+  DocumentListItem.configure({
+    HTMLAttributes: {
+      class:
+        "pl-1 marker:text-muted-foreground marker:tabular-nums [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1",
     },
   }),
   DocumentTable.configure({
@@ -151,12 +161,15 @@ export const buildDocumentEditorExtensions = (
   {
     live = false,
     resolveImageSource,
+    parsePastedMarkdown,
   }: {
     live?: boolean;
     resolveImageSource: DocumentImageOptions["resolveSource"];
+    /** Reads a numbered list pasted as text; without it, the list is pasted as plain text. */
+    parsePastedMarkdown?: DocumentOrderedListOptions["parsePastedMarkdown"];
   }
 ): AnyExtension[] => [
-  ...buildSchemaExtensions({ live, resolveImageSource }),
+  ...buildSchemaExtensions({ live, resolveImageSource, parsePastedMarkdown }),
   DocumentListJoin,
   Placeholder.configure({
     placeholder: ({ node, pos, editor }) =>
