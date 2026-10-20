@@ -30,6 +30,10 @@ const mocks = vi.hoisted(() => ({
   hasFrameFunctions: false,
   canWriteFrameSource: true,
   draftPublicationId: null as string | null,
+  draftMode: false,
+  draftsEnabled: false,
+  enterDraftMode: vi.fn(async () => true),
+  mutateFramePermissions: vi.fn(async () => undefined),
   isMobile: false,
   /** Incremented on every iframe mount (React key change). */
   iframeMounts: 0,
@@ -109,7 +113,10 @@ vi.mock("@app/hooks/useNotification", () => ({
 }));
 vi.mock("@app/lib/auth/AuthContext", () => ({
   useAuth: () => ({ vizUrl: "https://viz.dust.tt" }),
-  useFeatureFlags: () => ({ hasFeature: () => false }),
+  useFeatureFlags: () => ({
+    hasFeature: (feature: string) =>
+      feature === "frames_v2_drafts" && mocks.draftsEnabled,
+  }),
 }));
 vi.mock("@app/lib/context/clientType", () => ({
   useClientType: () => "web",
@@ -152,6 +159,9 @@ vi.mock("@app/components/Confirm", async () => {
 vi.mock("@app/hooks/useMakeFrameDraftLive", () => ({
   useMakeFrameDraftLive: () => async () => true,
 }));
+vi.mock("@app/hooks/useEnterFrameDraftMode", () => ({
+  useEnterFrameDraftMode: () => mocks.enterDraftMode,
+}));
 
 vi.mock("@app/lib/swr/frames", () => ({
   useBatchEditFrameText: () => mocks.batchEditFrameText,
@@ -169,8 +179,10 @@ vi.mock("@app/lib/swr/frames", () => ({
       isFramePermissionsLoading: false,
       isFramePermissionsError: null,
       draftPublicationId: mocks.draftPublicationId,
+      draftMode: mocks.draftMode,
+      livePublicationId: "publication-live",
       livePublishedAt: null,
-      mutateFramePermissions: async () => undefined,
+      mutateFramePermissions: mocks.mutateFramePermissions,
     };
   },
 }));
@@ -211,6 +223,8 @@ afterEach(() => {
   mocks.hasFrameFunctions = false;
   mocks.canWriteFrameSource = true;
   mocks.draftPublicationId = null;
+  mocks.draftMode = false;
+  mocks.draftsEnabled = false;
   mocks.isMobile = false;
   mocks.iframeMounts = 0;
 });
@@ -392,35 +406,58 @@ describe("FrameRenderer", () => {
         />
       );
 
-    it("shows the Draft chip and Make live for an editor when a draft is pending", () => {
-      mocks.draftPublicationId = "publication-draft";
+    it("frames the panel and offers Validate draft to an editor in draft mode", () => {
+      mocks.draftMode = true;
 
       renderV2();
 
-      expect(screen.getByText("Draft")).toBeInTheDocument();
+      // The Draft tab sits on the border that frames the panel content.
+      expect(screen.getByText("Draft").closest("div")).toHaveClass(
+        "border-golden-500"
+      );
       expect(
-        screen.getByRole("button", { name: "Make live" })
+        screen.getByRole("button", { name: "Validate draft" })
       ).toBeInTheDocument();
-    });
-
-    it("hides the draft controls when no draft is pending", () => {
-      renderV2();
-
-      expect(screen.queryByText("Draft")).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: "Make live" })
+        screen.queryByRole("button", { name: "More actions" })
       ).not.toBeInTheDocument();
     });
 
-    it("hides the draft controls from a viewer who cannot edit", () => {
+    it("offers the more menu to an editor when drafts are enabled", () => {
+      mocks.draftsEnabled = true;
+
+      renderV2();
+
+      expect(
+        screen.getByRole("button", { name: "More actions" })
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Draft")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Validate draft" })
+      ).not.toBeInTheDocument();
+    });
+
+    it("offers no draft mode without the drafts feature", () => {
+      renderV2();
+
+      expect(
+        screen.queryByRole("button", { name: "More actions" })
+      ).not.toBeInTheDocument();
+    });
+
+    it("offers no draft mode to a viewer who cannot edit", () => {
       mocks.canWriteFrameSource = false;
-      mocks.draftPublicationId = "publication-draft";
+      mocks.draftsEnabled = true;
+      mocks.draftMode = true;
 
       renderV2();
 
       expect(screen.queryByText("Draft")).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: "Make live" })
+        screen.queryByRole("button", { name: "Validate draft" })
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "More actions" })
       ).not.toBeInTheDocument();
     });
   });

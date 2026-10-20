@@ -104,7 +104,8 @@ export function useFramePermissions({
     isFramePermissionsLoading: !isDisabled && isLoading,
     isFramePermissionsError: error,
     draftPublicationId: data?.draftPublicationId ?? null,
-    livePublishedAt: data?.livePublishedAt ?? null,
+    draftMode: data?.draftMode ?? false,
+    livePublicationId: data?.livePublicationId ?? null,
     mutateFramePermissions: mutate,
   };
 }
