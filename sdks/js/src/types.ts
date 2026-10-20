@@ -3697,6 +3697,7 @@ const InternalAllowedIconSchema = FlexibleEnumSchema<
   | "GmailLogo"
   | "GongLogo"
   | "GoogleSpreadsheetLogo"
+  | "GrafanaLogo"
   | "GranolaLogo"
   | "GuruLogo"
   | "HexLogo"
