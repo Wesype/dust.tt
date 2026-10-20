@@ -148,12 +148,18 @@ async function billMessage(
   return billedCredits * 1_000_000;
 }
 
-async function runAnotherModelCall(message: PausedMessage): Promise<void> {
-  const { run } = await RunFactory.createWithUsage(message.auth, {
-    inputTokens: INPUT,
-    outputTokens: 4 * OUTPUT,
-    modelId: GPT_5_MINI_MODEL_CONFIG.modelId,
-  });
+// A model call whose usage is not reported is closed as `unavailable`, e.g. when it fails.
+async function runAnotherModelCall(
+  message: PausedMessage,
+  { reported }: { reported: boolean }
+): Promise<void> {
+  const { run } = reported
+    ? await RunFactory.createWithUsage(message.auth, {
+        inputTokens: INPUT,
+        outputTokens: 4 * OUTPUT,
+        modelId: GPT_5_MINI_MODEL_CONFIG.modelId,
+      })
+    : await RunFactory.createWithUnavailableUsage(message.auth);
   message.runs.push(run);
   await AgentMessageModel.update(
     { runIds: message.runs.map(({ dustRunId }) => dustRunId) },
@@ -215,7 +221,7 @@ describe("consumption attribution workflow", () => {
 
     // The user answers: the loop resumes, reports another model call and finalizes again before
     // the analytics activity of the first pass runs.
-    await runAnotherModelCall(message);
+    await runAnotherModelCall(message, { reported: true });
     const finalBillMicro = await billMessage(message.auth, message);
     expect(finalBillMicro).toBeGreaterThan(pausedBillMicro);
 
@@ -247,5 +253,27 @@ describe("consumption attribution workflow", () => {
     expect(
       upsertAgentMessageConsumptionAnalyticsDocuments
     ).not.toHaveBeenCalled();
+  });
+
+  it("indexes the bill a failed message kept when it failed before the attribution activity ran", async () => {
+    const message = await setupPausedMessage();
+    const pausedBillMicro = await billMessage(message.auth, message);
+
+    // The user answers and the loop resumes, but its model call fails: the message ends `failed`
+    // and billing leaves its bill unchanged, all before the attribution activity of the pause runs.
+    await runAnotherModelCall(message, { reported: false });
+    await AgentMessageModel.update(
+      { completedAt: new Date(), status: "failed" },
+      {
+        where: {
+          id: message.agentMessageModelId,
+          workspaceId: message.workspace.id,
+        },
+      }
+    );
+
+    await runAttributionPass(message);
+
+    expect(indexedCreditMicro()).toBe(pausedBillMicro);
   });
 });
