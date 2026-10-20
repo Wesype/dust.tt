@@ -425,6 +425,10 @@ export abstract class LLM<
             ? "flex_unavailable"
             : currentEvent.content.type;
           const errorSource = currentEvent.content.errorSource;
+          // A refusal without a category reports "none" so it stays filterable.
+          const refusalCategory = currentEvent.content.refusal
+            ? (currentEvent.content.refusal.category ?? "none")
+            : null;
 
           this.emitStreamAttemptTelemetry({
             outcome: "error",
@@ -440,6 +444,9 @@ export abstract class LLM<
               "isError:true",
               `errorType:${errorType}`,
               `errorSource:${errorSource}`,
+              ...(refusalCategory
+                ? [`refusalCategory:${refusalCategory}`]
+                : []),
             ],
           });
 
@@ -455,6 +462,7 @@ export abstract class LLM<
               traceId: this.traceId,
               errorType,
               errorSource,
+              ...(refusalCategory ? { refusalCategory } : {}),
               ...timingLogFields,
             },
             "LLM Error"
@@ -821,6 +829,9 @@ export abstract class LLM<
           hasError = true;
           const errorType = event.content.type;
           const errorSource = event.content.errorSource;
+          const refusalCategory = event.content.refusal
+            ? (event.content.refusal.category ?? "none")
+            : null;
           statsDMetrics.increment("llm_error.count", 1, [
             ...metricTags,
             `error_type:${errorType}`,
@@ -831,6 +842,9 @@ export abstract class LLM<
               "isError:true",
               `errorType:${errorType}`,
               `errorSource:${errorSource}`,
+              ...(refusalCategory
+                ? [`refusalCategory:${refusalCategory}`]
+                : []),
             ],
           });
           logger.error(
@@ -845,6 +859,7 @@ export abstract class LLM<
               traceId,
               errorType,
               errorSource,
+              ...(refusalCategory ? { refusalCategory } : {}),
               ...llmAttemptLogFields({
                 requestedReasoningEffort: this.reasoningEffort,
                 surface: "batch",
