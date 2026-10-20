@@ -28,7 +28,7 @@ const NotificationAttributesSchema = z.object({
 
 interface GcsReplicationPath {
   workspaceId: string;
-  kind: "pod" | "conversation";
+  kind: "pod" | "conversation" | "user";
   resourceId: string;
   path: string[];
 }
@@ -105,7 +105,7 @@ export function parseGcsReplicationNotification(
 
 /**
  * @cc [owner:flvndvd,label:security] gcs-notification-path
- * Only conversation and pod `files/` objects are eligible. Names MUST NOT be URL-decoded or
+ * Only user, conversation and pod `files/` objects are eligible. Names MUST NOT be URL-decoded or
  * normalized. Empty, dot and parent components MUST fail rather than alias another DFS path.
  * Directory marker objects (names ending in `/`) and objects outside these prefixes are ignored.
  */
@@ -117,7 +117,9 @@ export function parseGcsReplicationPath(
 
   if (
     root !== "w" ||
-    (namespace !== "pods" && namespace !== "conversations") ||
+    (namespace !== "pods" &&
+      namespace !== "conversations" &&
+      namespace !== "users") ||
     folder !== "files" ||
     objectName.endsWith("/")
   ) {
@@ -133,9 +135,15 @@ export function parseGcsReplicationPath(
     return new Err(new Error("Invalid GCS replication path."));
   }
 
+  const kinds = {
+    pods: "pod",
+    conversations: "conversation",
+    users: "user",
+  } as const;
+
   return new Ok({
     workspaceId,
-    kind: namespace === "pods" ? "pod" : "conversation",
+    kind: kinds[namespace],
     resourceId,
     path,
   });

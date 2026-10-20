@@ -1,6 +1,6 @@
 # GCS replication into DFS
 
-Replicate the live files in pod and conversation GCS folders into DFS. `FileResource` already copies attached uploads into these folders. The importer handles those copies and sandbox writes through the same Pub/Sub subscription; Front does not need a second content write to DFS.
+Replicate the live files in user, pod and conversation GCS folders into DFS. `FileResource` already copies attached uploads into pod and conversation folders. The importer handles those copies and sandbox writes through the same Pub/Sub subscription; Front does not need a second content write to DFS.
 
 GCS remains the source of truth until a file switches to DFS. Replication is asynchronous and can skip intermediate versions. Front resolves permissions and updates DFS grants directly. GCS custom metadata does not carry grants.
 
@@ -8,10 +8,13 @@ GCS remains the source of truth until a file switches to DFS. Replication is asy
 
 | GCS source | DFS destination |
 | --- | --- |
-| `w/{workspaceId}/pods/{podId}/files/{path}` | `users/{userSId}/pods/{podName}/{path}` under the tenant root. |
+| `w/{workspaceId}/users/{userId}/files/{path}` | `users/{userId}/{path}` under the tenant root. |
+| `w/{workspaceId}/pods/{podId}/files/{path}` | `users/{userId}/pods/{podName}/{path}` under the tenant root. |
 | `w/{workspaceId}/conversations/{conversationId}/files/{path}` | The conversation's DFS directory. |
 
 Import every file in these folders, including original uploads, processed copies and Frame files. Acknowledge events for other paths without importing them. Canonical uploads under `files/w/...` remain in GCS; their mount copies are imported.
+
+User memory is stored at `w/{workspaceId}/users/{userId}/files/MEMORY.md` by the [GCS filesystem backend](../../front/lib/api/file_system/backends/gcs_file_system_backend.ts). Import it through the same subscription. Resolve the user in the source workspace and reuse `getOrCreateUserFolder`. Files inherit the user folder's grants. The conversation copy of memory sits outside `files/` and is not covered by these prefixes.
 
 Sandbox function bundles use a separate `sandbox-functions/` prefix and are outside this rollout. See [`resolveProjectMountPath()`](../../front/lib/resources/file_resource.ts#L1874).
 
@@ -136,11 +139,12 @@ front.gcs_sync = {
   "bucket": "private-uploads",
   "objectName": "w/W/pods/P/files/report.csv",
   "generation": "12345",
-  "metageneration": "1"
+  "metageneration": "1",
+  "contentVersion": "42"
 }
 ```
 
-The marker records a complete import. After checking the live source, matching all four fields allows a skip. A matching source and generation with a different metageneration allows reuse of complete bytes. A missing marker requires a full rewrite. Clear it before content or attribute changes, including retries of the same generation.
+The marker records a complete import. After checking the live source, matching the source, both GCS versions and the current DFS `contentVersion` allows a skip. A matching source, generation and DFS `contentVersion` with a different metageneration allows reuse of complete bytes. A missing marker requires a full rewrite. Clear it before content or attribute changes, including retries of the same generation.
 
 Keep generation and metageneration values lossless and compare generations for equality. Generation numbers are not guaranteed to increase; taking their numeric maximum cannot reject stale events. Metageneration increases only within one generation. [Generation semantics](https://docs.cloud.google.com/storage/docs/metadata#generation-number).
 
@@ -148,7 +152,7 @@ DFS writes modify the destination file directly. Readers that do not take the lo
 
 ## Destination mapping
 
-The GCS path supplies the workspace, pod or conversation ID, and relative path. DFS creation requires a parent `ObjectId` and basename. Front's [folder helpers](../../front/lib/api/dfs/folders.ts) create and store user, pod and conversation folder IDs using the [DFS URI layout](URI.md). The importer should reuse those helpers.
+The GCS path supplies the workspace, user, pod or conversation ID, and relative path. DFS creation requires a parent `ObjectId` and basename. Front's [folder helpers](../../front/lib/api/dfs/folders.ts) create and store user, pod and conversation folder IDs using the [DFS URI layout](URI.md). The importer should reuse those helpers.
 
 Pod directories in DFS use the pod's actual name (`SpaceResource.name`) unchanged. Resolve the pod ID from the GCS path within its workspace, then use its stored DFS folder ID. On first creation, create `pods/{podName}` under the owner's user folder with that exact name. URI percent-encoding preserves the name; it does not change the stored basename. DFS basename limits still apply.
 
@@ -160,9 +164,9 @@ Store one mapping from the source object to its DFS file ID and reuse it for lat
 
 ## Permissions
 
-Front resolves the conversation owner and pod permissions from the authenticated workspace. New conversation files receive `ALLOW u:<ownerUserSId> rw`; the importer must not infer this subject from the object name or writer. Pod files inherit their directory's grants. Later imports preserve file-local grants maintained by Front. GCS custom metadata has no effect on access.
+Front resolves the conversation owner and pod permissions from the authenticated workspace. New conversation files receive `ALLOW u:<ownerUserId> rw`; the importer must not infer this subject from the object name or writer. Pod files inherit their directory's grants. Later imports preserve file-local grants maintained by Front. GCS custom metadata has no effect on access.
 
-The importer uses a tenant-key `CreateSession` with `subjects: ["superuser"]` for filesystem writes. This subject has read/write access to real objects in that tenant, including through DENYs. `UpdateGrants` still requires the tenant key. Do not attach grants for `superuser`; they are invalid. [Session API](API.md#createsession), [protocol](../protocol/proto/dfs.proto).
+Use `createDfsSuperuserSession` only to create user and pod context folders, as required by its [contract](../../front/lib/api/dfs/sessions.ts). File writes use `createDfsSession` with the owner's subjects. `UpdateGrants` requires the tenant key. [Session API](API.md#createsession), [protocol](../protocol/proto/dfs.proto).
 
 File creation does not accept grants. Apply them separately with `UpdateGrants` using `remove: false` to attach and `remove: true` to detach. Required access restrictions must be in place before a file is accessible. A failed owner lookup or grant update must not produce a completed import. [Grant API](API.md#updategrants).
 

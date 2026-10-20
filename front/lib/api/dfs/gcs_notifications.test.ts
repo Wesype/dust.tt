@@ -1,10 +1,32 @@
-import { parseGcsReplicationNotification } from "@app/lib/api/dfs/gcs_notifications";
+import {
+  parseGcsReplicationNotification,
+  parseGcsReplicationPath,
+} from "@app/lib/api/dfs/gcs_notifications";
 import { GcsNotificationFactory } from "@app/tests/utils/GcsNotificationFactory";
 import { describe, expect, it } from "vitest";
 
 const source = GcsNotificationFactory.source;
 
 describe("parseGcsReplicationNotification", () => {
+  it("accepts user memory and resolves its owner and relative path", () => {
+    const name = "w/workspace/users/user/files/MEMORY.md";
+    const notificationRes = parseGcsReplicationNotification(
+      GcsNotificationFactory.message({ metadata: { name } }),
+      source
+    );
+    const pathRes = parseGcsReplicationPath(name);
+
+    expect(notificationRes.isOk() && notificationRes.value?.objectName).toBe(
+      name
+    );
+    expect(pathRes.isOk() && pathRes.value).toEqual({
+      workspaceId: "workspace",
+      kind: "user",
+      resourceId: "user",
+      path: ["MEMORY.md"],
+    });
+  });
+
   it("preserves literal object names", () => {
     const message = GcsNotificationFactory.message({
       metadata: {
@@ -42,6 +64,8 @@ describe("parseGcsReplicationNotification", () => {
     "w/workspace/pods/pod/sandbox-functions/bundle.tar",
     "w/workspace/pods/pod/state/db",
     "w/workspace/pods/pod/files/dir/",
+    "w/workspace/users/user/files/dir/",
+    "w/workspace/users/user/state/data",
   ])("ignores objects outside the file scope: %s", (name) => {
     const result = parseGcsReplicationNotification(
       GcsNotificationFactory.message({ metadata: { name } }),
@@ -57,6 +81,8 @@ describe("parseGcsReplicationNotification", () => {
     "w/workspace/pods/pod/files/a//b",
     "w//pods/pod/files/report.txt",
     "w/workspace/pods/pod/files/report\0.txt",
+    "w/workspace/users/user/files/../MEMORY.md",
+    "w/workspace/users//files/MEMORY.md",
   ])("rejects paths that cannot map to a distinct DFS file: %s", (name) => {
     expect(
       parseGcsReplicationNotification(
