@@ -362,6 +362,7 @@ export const AgentErrorCategories = [
   "unknown_error",
   "invalid_response_format_configuration",
   "credits_exhausted",
+  "hook_blocked",
 ] as const;
 
 export type AgentErrorCategory = (typeof AgentErrorCategories)[number];

@@ -182,6 +182,10 @@ const CODE_MESSAGES: Record<string, AgentErrorMessages> = {
     title: DEFAULT_TITLE,
     description: RESOURCE_CAP_DESCRIPTION,
   },
+  inference_hook_denied: {
+    title: msg`Blocked by your workspace policy`,
+    description: msg`A security check set up by your workspace blocked this request. Rephrase your message or contact your workspace administrator.`,
+  },
   unstuck_by_admin: {
     title: DEFAULT_TITLE,
     description: msg`This answer was marked as failed because it stopped responding.`,

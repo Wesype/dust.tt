@@ -119,8 +119,6 @@ export async function runBlockingInferenceHooks({
   return verdict;
 }
 
-// TODO(inference-hooks): Register the hook-blocked error category and add translated
-// conversation error copy in https://github.com/dust-tt/tasks/issues/11314.
 export function makeInferenceHookDeniedError(
   lifecycleEvent: InferenceHookLifecycleEvent,
   verdict: InferenceHookDenyVerdict

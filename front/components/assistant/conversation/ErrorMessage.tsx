@@ -57,13 +57,19 @@ export function ErrorMessage({
     isAgentErrorCategory(error.metadata?.category) &&
     error.metadata?.category === "context_window_exceeded";
 
-  const errorIsRetryable =
+  const isTransientError =
     isAgentErrorCategory(error.metadata?.category) &&
     (error.metadata?.category === "retryable_model_error" ||
       error.metadata?.category === "provider_internal_error" ||
       error.metadata?.category === "stream_error" ||
       error.metadata?.category === "empty_content" ||
       error.metadata?.category === "credits_exhausted");
+  /**
+   * @cc [owner:frankaloia,label:product] hook-blocked-error-has-no-retry
+   * An error with category `hook_blocked` MUST NOT render a Retry action: a workspace hook denied
+   * the request, and retrying would run the same check again.
+   */
+  const isRetryable = error.metadata?.category !== "hook_blocked";
   const retryTier = getPinnedModelRetryTier({
     failedModel,
     modelResolutionMethod,
@@ -94,7 +100,7 @@ export function ErrorMessage({
           : formattedError.title
       }
       variant={
-        errorIsRetryable || retryTierName !== null ? "golden" : "warning"
+        isTransientError || retryTierName !== null ? "golden" : "warning"
       }
       className="flex flex-col gap-3"
       icon={InfoCircle}
@@ -131,21 +137,23 @@ export function ErrorMessage({
           </CollapsibleContent>
         </Collapsible>
       )}
-      <div className="flex flex-col gap-2 pt-3 sm:flex-row">
-        <Button
-          variant="outline"
-          size="xs"
-          icon={RefreshCw02}
-          label={
-            retryTierName
-              ? t`Retry with ${retryTierName} model tier`
-              : (retryLabel ?? t`Retry`)
-          }
-          onClick={() => void retry()}
-          isLoading={isRetrying}
-          disabled={isRetrying}
-        />
-      </div>
+      {isRetryable && (
+        <div className="flex flex-col gap-2 pt-3 sm:flex-row">
+          <Button
+            variant="outline"
+            size="xs"
+            icon={RefreshCw02}
+            label={
+              retryTierName
+                ? t`Retry with ${retryTierName} model tier`
+                : (retryLabel ?? t`Retry`)
+            }
+            onClick={() => void retry()}
+            isLoading={isRetrying}
+            disabled={isRetrying}
+          />
+        </div>
+      )}
     </ContentMessage>
   );
 }

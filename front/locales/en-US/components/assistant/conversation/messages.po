@@ -1405,6 +1405,14 @@ msgid "This tool isn't available to the agent."
 msgstr "This tool isn't available to the agent."
 
 #: front/components/assistant/conversation/agentErrorMessages.ts
+msgid "Blocked by your workspace policy"
+msgstr "Blocked by your workspace policy"
+
+#: front/components/assistant/conversation/agentErrorMessages.ts
+msgid "A security check set up by your workspace blocked this request. Rephrase your message or contact your workspace administrator."
+msgstr "A security check set up by your workspace blocked this request. Rephrase your message or contact your workspace administrator."
+
+#: front/components/assistant/conversation/agentErrorMessages.ts
 msgid "This answer was marked as failed because it stopped responding."
 msgstr "This answer was marked as failed because it stopped responding."
 

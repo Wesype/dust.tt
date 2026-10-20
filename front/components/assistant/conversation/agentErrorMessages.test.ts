@@ -116,6 +116,28 @@ describe("formatAgentError", () => {
     });
   });
 
+  it("explains a workspace hook denial, keeping the hook's reason in details", () => {
+    expect(
+      formatAgentError(
+        {
+          code: "inference_hook_denied",
+          message: "Prompt injection detected.",
+          metadata: {
+            category: "hook_blocked",
+            lifecycleEvent: "after_model_call",
+          },
+        },
+        NON_ADMIN
+      )
+    ).toEqual({
+      title: "Blocked by your workspace policy",
+      description:
+        "A security check set up by your workspace blocked this request. Rephrase your message or contact your workspace administrator.",
+      details:
+        "Code: inference_hook_denied\nMessage: Prompt injection detected.",
+    });
+  });
+
   it("uses the generic messages for an unknown code", () => {
     expect(
       formatAgentError(
