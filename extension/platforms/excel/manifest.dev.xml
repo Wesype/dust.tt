@@ -10,6 +10,8 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Dust"/>
   <Description DefaultValue="Dust in Excel."/>
+  <IconUrl DefaultValue="https://dust.tt/static/favicon.png"/>
+  <HighResolutionIconUrl DefaultValue="https://dust.tt/static/favicon@2x.png"/>
   <Hosts>
     <Host Name="Workbook"/>
   </Hosts>
