@@ -9,9 +9,9 @@ export class MistralMistralLarge4GlobalMistralStream extends WithMistralLarge4Co
 ) {
   // List price, no regional uplift (see `CURRENT_MODEL_PRICING`).
   static readonly tokenPricing = {
-    standardInput: 0.68,
-    standardOutput: 2.09,
-    cacheHit: 0.07,
+    standardInput: 1.36,
+    standardOutput: 4.18,
+    cacheHit: 0.14,
   };
 
   static readonly lab = MISTRAL_LAB;

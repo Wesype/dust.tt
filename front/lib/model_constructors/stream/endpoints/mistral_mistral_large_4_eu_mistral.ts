@@ -8,11 +8,10 @@ export class MistralMistralLarge4EuropeMistralStream extends WithMistralLarge4Co
   MistralStream
 ) {
   // 1.1x list price: https://docs.mistral.ai/inference/regional-inference (2026-09-22).
-  // List price is the public-preview promotional rate (see `CURRENT_MODEL_PRICING`).
   static readonly tokenPricing = {
-    standardInput: 0.748,
-    standardOutput: 2.299,
-    cacheHit: 0.077,
+    standardInput: 1.496,
+    standardOutput: 4.598,
+    cacheHit: 0.154,
   };
 
   // Inference runs in the EU; the endpoint remains usable from both US and EU.
