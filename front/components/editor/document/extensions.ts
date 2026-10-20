@@ -76,12 +76,26 @@ const DocumentCode = Code.extend({ excludes: COMMENT_MARK_NAME });
  * An empty heading MUST be written as its `#` marker alone, which reads back as an empty heading
  * of the same level.
  */
+/**
+ * @cc [owner:rfrenoy,label:product] document-heading-edge-whitespace
+ * Whitespace at the edges of a heading's rendered Markdown, right after its `#` marker or ending
+ * its line, MUST be written as numeric character references, such as `&#32;`, which Markdown reads
+ * back as that whitespace instead of trimming it.
+ */
 const DocumentHeading = Heading.extend({
-  renderMarkdown(node, h, context) {
-    if (node.content?.length) {
-      return this.parent?.(node, h, context) ?? "";
+  renderMarkdown(node, h) {
+    const marker = "#".repeat(
+      isNumber(node.attrs?.level) ? node.attrs.level : 1
+    );
+    if (!node.content?.length) {
+      return marker;
     }
-    return "#".repeat(isNumber(node.attrs?.level) ? node.attrs.level : 1);
+    const text = h
+      .renderChildren(node.content)
+      .replace(/^\s+|\s+$/g, (whitespace) =>
+        [...whitespace].map((char) => `&#${char.codePointAt(0)};`).join("")
+      );
+    return `${marker} ${text}`;
   },
 });
 

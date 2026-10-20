@@ -1,5 +1,8 @@
 // @vitest-environment node
-import { documentSchema } from "@app/components/editor/document/content";
+import {
+  documentSchema,
+  toMarkdownForm,
+} from "@app/components/editor/document/content";
 import {
   loadDfm,
   loggableRefusal,
@@ -1254,13 +1257,13 @@ describe("getUnsavableBodyReason", () => {
   it("names where a refused body would read back differently, without its text", () => {
     const content = {
       type: "doc",
-      content: [paragraphOf("    secret plan")],
+      content: [paragraphOf("# secret plan")],
     };
 
     expect(saveDfm(envelope, content).isErr()).toBe(true);
     const reason = getUnsavableBodyReason(envelope, content);
     expect(reason).toBe(
-      "The document would not read back the same as Markdown, from paragraph, which reads back as codeBlock."
+      "The document would not read back the same as Markdown, from paragraph, which reads back as heading."
     );
     expect(reason).not.toContain("secret");
   });
@@ -1415,5 +1418,237 @@ describe("numbered sub-lists after an empty paragraph", () => {
     expect(
       documentSchema.nodeFromJSON(load(expected).content).toJSON()
     ).toEqual(documentSchema.nodeFromJSON(document(start)).toJSON());
+  });
+});
+
+describe("toMarkdownForm", () => {
+  const text = (
+    value: string,
+    ...marks: NonNullable<JSONContent["marks"]>
+  ): JSONContent =>
+    marks.length > 0
+      ? { type: "text", text: value, marks }
+      : { type: "text", text: value };
+  const paragraph = (...content: JSONContent[]): JSONContent => ({
+    type: "paragraph",
+    content,
+  });
+  const heading = (...content: JSONContent[]): JSONContent => ({
+    type: "heading",
+    attrs: { level: 2 },
+    content,
+  });
+  const hardBreak: JSONContent = { type: "hardBreak" };
+  const bold = { type: "bold" };
+  const comment = (id: string) => ({ type: "comment", attrs: { id } });
+  const cell = (align: string | null, ...content: JSONContent[]) => ({
+    type: "tableCell",
+    attrs: { align },
+    content: [paragraph(...content)],
+  });
+  const table = (...rows: JSONContent[][]): JSONContent => ({
+    type: "table",
+    content: rows.map((cells) => ({ type: "tableRow", content: cells })),
+  });
+  const list = (
+    attrs: Record<string, boolean>,
+    ...content: JSONContent[]
+  ): JSONContent => ({
+    type: "bulletList",
+    content: [{ type: "listItem", attrs, content }],
+  });
+  const normalized = (content: JSONContent[]) =>
+    documentSchema.nodeFromJSON({ type: "doc", content }).toJSON();
+  const formOf = (content: JSONContent[]) =>
+    documentSchema
+      .nodeFromJSON(toMarkdownForm({ type: "doc", content }))
+      .toJSON();
+
+  const LOSSES: [string, JSONContent[], JSONContent[]][] = [
+    [
+      "empty paragraphs ending the document",
+      [paragraphOf("a"), paragraph(), paragraph(text(" "))],
+      [paragraphOf("a")],
+    ],
+    [
+      "whitespace starting or ending a line, whatever its marks, but not in a code block",
+      [
+        paragraph(text(" a "), text(" ", bold), hardBreak, text("\tb\u00a0")),
+        heading(text(" "), text(" Meeting", bold)),
+        heading(text(" ")),
+        list({}, paragraph(text(" c\t"))),
+        table([cell(null, text("\u00a0d "))]),
+        { type: "codeBlock", content: [text(" e ")] },
+      ],
+      [
+        paragraph(text("a"), hardBreak, text("b")),
+        heading(text("Meeting", bold)),
+        heading(),
+        list({}, paragraphOf("c")),
+        table([cell(null, text("d"))]),
+        { type: "codeBlock", content: [text(" e ")] },
+      ],
+    ],
+    [
+      "hard breaks ending a paragraph or a heading",
+      [
+        paragraph(text("a"), hardBreak, hardBreak),
+        paragraph(text(" ", bold), hardBreak, text("\u00a0")),
+        heading(text("b"), hardBreak),
+        table([cell(null, text("c"), hardBreak)]),
+      ],
+      [
+        paragraphOf("a"),
+        paragraph(),
+        heading(text("b")),
+        table([cell(null, text("c"))]),
+      ],
+    ],
+    [
+      "a cell's alignment where it differs from its column's",
+      [
+        table(
+          [cell(null, text("a"))],
+          [cell("right", text("b"))],
+          [cell("center", text("c"))]
+        ),
+      ],
+      [
+        table(
+          [cell("right", text("a"))],
+          [cell("right", text("b"))],
+          [cell("right", text("c"))]
+        ),
+      ],
+    ],
+    [
+      "the task of an item whose first paragraph is empty",
+      [list({ task: true, checked: true }, paragraph(hardBreak))],
+      [list({ task: false, checked: false }, paragraph())],
+    ],
+  ];
+
+  it.each(LOSSES)("loses %s", (_, content, expected) => {
+    expect(formOf(content)).toEqual(normalized(expected));
+  });
+
+  const COMMENTED_EDGES = [
+    heading(text("Meet"), text("ing ", comment("c1"))),
+    heading(text("Title"), text(" ", comment("c2")), text(" ")),
+  ];
+
+  it("keeps edge whitespace carrying a comment that marks no other text", () => {
+    expect(formOf(COMMENTED_EDGES)).toEqual(
+      normalized([
+        heading(text("Meet"), text("ing", comment("c1"))),
+        heading(text("Title"), text(" ", comment("c2"))),
+      ])
+    );
+  });
+
+  const INPUTS = [...LOSSES.map(([, content]) => content), COMMENTED_EDGES];
+
+  it("is its own Markdown form", () => {
+    for (const content of INPUTS) {
+      const form = toMarkdownForm({ type: "doc", content });
+      expect(toMarkdownForm(form)).toEqual(form);
+    }
+  });
+
+  /** The text a reader sees: blocks and hard breaks as spaces, whitespace collapsed. */
+  const visibleText = (document: JSONContent) => {
+    const textOf = (node: JSONContent): string =>
+      node.type === "text"
+        ? (node.text ?? "")
+        : ` ${(node.content ?? []).map(textOf).join("")} `;
+    return textOf(document).replace(/\s+/g, " ").trim();
+  };
+
+  it("keeps the text a reader sees", () => {
+    for (const content of INPUTS) {
+      const document = { type: "doc", content };
+      expect(visibleText(toMarkdownForm(document))).toBe(visibleText(document));
+    }
+  });
+
+  const envelope = { frontMatter: null, anchorOrder: [] };
+
+  it.each([
+    [
+      "a heading starting and ending with a space",
+      [heading(text(" Meeting ")), paragraphOf("Notes.")],
+      "## Meeting\n\nNotes.\n",
+    ],
+    [
+      "a hard break ending a list item",
+      [list({}, paragraph(text("a"), hardBreak)), paragraphOf("Notes.")],
+      "- a\n\nNotes.\n",
+    ],
+    [
+      "a list's last item ending with a space",
+      [list({}, paragraph(text("Buy milk "))), paragraphOf("Notes.")],
+      "- Buy milk\n\nNotes.\n",
+    ],
+    [
+      "a list item and a paragraph starting with whitespace",
+      [list({}, paragraph(text(" Buy milk"))), paragraph(text("\tIndented"))],
+      "- Buy milk\n\nIndented\n",
+    ],
+    [
+      "a space before a hard break",
+      [
+        paragraph(text("Hello "), hardBreak, text("world")),
+        paragraphOf("Notes."),
+      ],
+      "Hello  \nworld\n\nNotes.\n",
+    ],
+    [
+      "paragraphs holding only a hard break or whitespace",
+      [
+        paragraphOf("a"),
+        paragraph(hardBreak),
+        paragraphOf("Notes."),
+        paragraph(text(" ")),
+      ],
+      "a\n\n\n\nNotes.\n",
+    ],
+  ])(
+    "saves the rest of a document holding %s, which reopens as its form and saves again unchanged",
+    (_, content, saved) => {
+      const document = { type: "doc", content };
+
+      expect(saveDfm(envelope, document)).toEqual(new Ok(saved));
+      expect(documentSchema.nodeFromJSON(load(saved).content).toJSON()).toEqual(
+        formOf(content)
+      );
+      expect(roundTrip(saved)).toBe(saved);
+    }
+  );
+
+  it.each([
+    [
+      "touching a heading's edge",
+      [heading(text("Meet"), text("ing ", comment("c1")))],
+      "## Meet:comment-start{id=c1}ing:comment-end{id=c1}",
+    ],
+    [
+      "covering only whitespace at headings' edges",
+      [
+        heading(text("Title"), text(" ", comment("c1"))),
+        heading(text("\u00a0", comment("c1")), text("Next")),
+      ],
+      "## Title:comment-start{id=c1}&#32;\n\n## &#160;:comment-end{id=c1}Next",
+    ],
+  ])("saves a comment %s and reopens it as its form", (_, content, body) => {
+    const document = withDocumentJSONComments({ type: "doc", content }, [
+      COMMENT,
+    ]);
+    const source = `${body}\n\n${OPEN_THREAD}`;
+
+    expect(saveDfm(envelope, document)).toEqual(new Ok(source));
+    expect(documentSchema.nodeFromJSON(load(source).content).toJSON()).toEqual(
+      documentSchema.nodeFromJSON(toMarkdownForm(document)).toJSON()
+    );
+    expect(roundTrip(source)).toBe(source);
   });
 });

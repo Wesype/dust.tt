@@ -328,9 +328,9 @@ describe("getYDocUnsavableBodyReason", () => {
     ],
   });
 
-  const indented: JSONContent = {
+  const headingLike: JSONContent = {
     type: "paragraph",
-    content: [{ type: "text", text: "    secret plan" }],
+    content: [{ type: "text", text: "# secret plan" }],
   };
 
   const liveDocument = (content: JSONContent[]) => {
@@ -349,7 +349,7 @@ describe("getYDocUnsavableBodyReason", () => {
   };
 
   it("names what a live body cannot write, without its text", () => {
-    const live = liveDocument([indented]);
+    const live = liveDocument([headingLike]);
     const saved = yDocToDfm(live);
     if (saved.isOk()) {
       throw new Error("The body saved.");
@@ -358,7 +358,7 @@ describe("getYDocUnsavableBodyReason", () => {
     expect(saved.error).toBe(UNSAVABLE_BODY_MESSAGE);
     const reason = getYDocUnsavableBodyReason(live, saved.error);
     expect(reason).toBe(
-      "The document would not read back the same as Markdown, from paragraph, which reads back as codeBlock."
+      "The document would not read back the same as Markdown, from paragraph, which reads back as heading."
     );
     expect(reason).not.toContain("secret");
   });
@@ -371,7 +371,7 @@ describe("getYDocUnsavableBodyReason", () => {
   });
 
   it("is null for a failure that is not about the body", () => {
-    const live = liveDocument([indented]);
+    const live = liveDocument([headingLike]);
 
     expect(getYDocUnsavableBodyReason(live, "The storage is down.")).toBeNull();
   });

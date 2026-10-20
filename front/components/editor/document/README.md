@@ -40,6 +40,25 @@ an empty paragraph, so an empty list item saves as `- &nbsp;`. An empty heading 
 marker alone. A list directly after a list of the same type saves with the other marker, `*` or
 `1)`, so Markdown reads it as its own list.
 
+## What saving drops
+
+Saving writes the document as Markdown, reads that Markdown back, and refuses the save when the
+two differ, so a save never changes the content without anyone noticing. A few things cannot be
+written in Markdown and do not show where Markdown is displayed, so saving first drops them
+(`toMarkdownForm` in `content.ts`) and checks the Markdown against what is left:
+
+- spaces at the start or end of a line: at the edges of a paragraph, heading, list item or table
+  cell, or next to a line break, but never in a code block;
+- a line break ending a paragraph or heading, so a paragraph holding only spaces and line breaks
+  saves empty;
+- empty paragraphs ending the document;
+- a table cell's alignment where it differs from its column's;
+- the task of a list item whose first paragraph is empty.
+
+Spaces that are all a comment covers stay, so the comment keeps its place. At a heading's edge,
+where Markdown would strip them, they are written as `&#32;`, a code Markdown reads back as a
+space. Anything else that would not read back is refused, and belongs to the Markdown writers.
+
 ## Tables
 
 A GFM table opens as a table whose first row is its header, shown as column headers, at the top
