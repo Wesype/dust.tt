@@ -1159,8 +1159,8 @@ describe("comment threads in a live session", () => {
       );
     }, 15_000);
 
-    it("keeps announcing an edit that only deletes text", async () => {
-      const { writer, hocuspocus, seen, base } = await watch();
+    it("announces an edit that only deletes text, with nothing inserted", async () => {
+      const { writer, hocuspocus, seen, edits, base } = await watch();
 
       const written = await writeSessionSource(hocuspocus, {
         file: writer,
@@ -1170,10 +1170,10 @@ describe("comment threads in a live session", () => {
       });
 
       expect(written).toEqual(new Ok("written"));
-      await vi.waitFor(() => expect(seen).toContain("update"));
-      expect(seen.filter((event) => event !== "update")).toEqual([
-        "Writer editing",
-      ]);
+      await vi.waitFor(() =>
+        expect(seen).toEqual(["Writer editing", "update", "Writer edit"])
+      );
+      expect(edits[0].inserted).toEqual([]);
     }, 15_000);
 
     it("announces nothing for a write without an agent, or one that changes nothing", async () => {

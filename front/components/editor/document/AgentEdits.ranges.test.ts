@@ -1,11 +1,5 @@
-import {
-  agentEditGlow,
-  agentEditsPlugin,
-  GLOW_MS,
-  insertedTextRanges,
-} from "@app/components/editor/document/AgentEdits";
+import { insertedTextRanges } from "@app/components/editor/document/AgentEdits";
 import { documentSchema } from "@app/components/editor/document/content";
-import { CollabAgentFactory } from "@app/tests/utils/CollabAgentFactory";
 import type { InsertedIdRange } from "@app/types/collab";
 import { EditorState } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
@@ -14,7 +8,7 @@ import {
   ySyncPlugin,
   ySyncPluginKey,
 } from "@tiptap/y-tiptap";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 
 const SESSION = "session";
@@ -56,7 +50,6 @@ const views: EditorView[] = [];
 
 afterEach(() => {
   views.splice(0).forEach((view) => view.destroy());
-  vi.useRealTimers();
 });
 
 /**
@@ -71,10 +64,7 @@ async function session(blocks: Block[]) {
   const view = new EditorView(document.createElement("div"), {
     state: EditorState.create({
       schema: documentSchema,
-      plugins: [
-        ySyncPlugin(browser.getXmlFragment("body")),
-        agentEditsPlugin(),
-      ],
+      plugins: [ySyncPlugin(browser.getXmlFragment("body"))],
     }),
   });
   views.push(view);
@@ -111,18 +101,18 @@ async function session(blocks: Block[]) {
     };
   };
 
-  /** What the browser glows for `inserted`: the text of each range. */
-  const glowed = (inserted: InsertedIdRange[]) =>
+  /** What the browser finds for `inserted`: the text of each range. */
+  const found = (inserted: InsertedIdRange[]) =>
     insertedTextRanges(binding, inserted).map(({ from, to }) =>
       view.state.doc.textBetween(from, to)
     );
 
-  return { server, browser, view, fromAgent, glowed };
+  return { server, browser, view, fromAgent, found };
 }
 
 describe("insertedTextRanges", () => {
-  it("glows exactly the text the agent inserted", async () => {
-    const { server, fromAgent, glowed } = await session([
+  it("finds exactly the text the agent inserted", async () => {
+    const { server, fromAgent, found } = await session([
       ["paragraph", "One."],
       ["paragraph", "Two."],
     ]);
@@ -133,11 +123,11 @@ describe("insertedTextRanges", () => {
     });
     edit.deliver();
 
-    expect(glowed(edit.inserted)).toEqual(["Uno"]);
+    expect(found(edit.inserted)).toEqual(["Uno"]);
   });
 
-  it("never glows text someone typed inside the agent's change", async () => {
-    const { server, browser, view, fromAgent, glowed } = await session([
+  it("never finds text someone typed inside the agent's change", async () => {
+    const { server, browser, view, fromAgent, found } = await session([
       ["paragraph", "cat"],
     ]);
     // Typed here before the server learns of it, inside the text the agent replaces.
@@ -150,11 +140,11 @@ describe("insertedTextRanges", () => {
     edit.deliver();
 
     expect(view.state.doc.textContent).toContain("HUMAN");
-    expect(glowed(edit.inserted)).toEqual(["dog"]);
+    expect(found(edit.inserted)).toEqual(["dog"]);
   });
 
-  it("glows only the new text when the agent appends to its own earlier text", async () => {
-    const { server, fromAgent, glowed } = await session([["paragraph", "A."]]);
+  it("finds only the new text when the agent appends to its own earlier text", async () => {
+    const { server, fromAgent, found } = await session([["paragraph", "A."]]);
 
     const first = fromAgent(() => textAt(server, 0).insert(2, " Agent one."));
     first.deliver();
@@ -162,21 +152,19 @@ describe("insertedTextRanges", () => {
     const second = fromAgent(() => textAt(server, 0).insert(13, " Agent two."));
     second.deliver();
 
-    expect(glowed(second.inserted)).toEqual([" Agent two."]);
+    expect(found(second.inserted)).toEqual([" Agent two."]);
   });
 
-  it("glows nothing before the agent's change reached the document", async () => {
-    const { server, fromAgent, glowed } = await session([
-      ["paragraph", "One."],
-    ]);
+  it("finds nothing before the agent's change reached the document", async () => {
+    const { server, fromAgent, found } = await session([["paragraph", "One."]]);
 
     const edit = fromAgent(() => textAt(server, 0).insert(4, " Indeed"));
 
-    expect(glowed(edit.inserted)).toEqual([]);
+    expect(found(edit.inserted)).toEqual([]);
   });
 
-  it("glows nothing in a paragraph this browser already deleted", async () => {
-    const { server, browser, fromAgent, glowed } = await session([
+  it("finds nothing in a paragraph this browser already deleted", async () => {
+    const { server, browser, fromAgent, found } = await session([
       ["paragraph", "One."],
       ["paragraph", "Two."],
     ]);
@@ -185,11 +173,11 @@ describe("insertedTextRanges", () => {
     const edit = fromAgent(() => textAt(server, 0).insert(4, " Indeed"));
     edit.deliver();
 
-    expect(glowed(edit.inserted)).toEqual([]);
+    expect(found(edit.inserted)).toEqual([]);
   });
 
   it("finds the agent's text in a list item and after a hard break", async () => {
-    const { server, fromAgent, glowed } = await session([
+    const { server, fromAgent, found } = await session([
       ["paragraph", "Intro"],
       ["bulletList", ["listItem", ["paragraph", "one"]]],
       ["paragraph", "before", ["hardBreak"], "after"],
@@ -201,41 +189,15 @@ describe("insertedTextRanges", () => {
     });
     edit.deliver();
 
-    expect(glowed(edit.inserted)).toEqual([" item", " break"]);
+    expect(found(edit.inserted)).toEqual([" item", " break"]);
   });
 
-  it("glows nothing for formatting alone", async () => {
-    const { server, fromAgent, glowed } = await session([
-      ["paragraph", "One."],
-    ]);
+  it("finds nothing for formatting alone", async () => {
+    const { server, fromAgent, found } = await session([["paragraph", "One."]]);
 
     const edit = fromAgent(() => textAt(server, 0).format(0, 3, { bold: {} }));
     edit.deliver();
 
-    expect(glowed(edit.inserted)).toEqual([]);
-  });
-
-  it("glows the agent's text in the editor when announced, then removes it after the fade", async () => {
-    const { server, view, fromAgent } = await session([["paragraph", "One."]]);
-    const edit = fromAgent(() => textAt(server, 0).insert(4, " Indeed"));
-    edit.deliver();
-    vi.useFakeTimers();
-
-    const glow = agentEditGlow(view.state, {
-      type: "agent_edit",
-      agent: CollabAgentFactory.build(),
-      inserted: edit.inserted,
-    });
-    if (glow) {
-      view.dispatch(glow);
-    }
-    const glowing = () =>
-      [...view.dom.querySelectorAll(".animate-agent-edit-settle")].map(
-        (node) => node.textContent
-      );
-
-    expect(glowing()).toEqual([" Indeed"]);
-    vi.advanceTimersByTime(GLOW_MS);
-    expect(glowing()).toEqual([]);
+    expect(found(edit.inserted)).toEqual([]);
   });
 });

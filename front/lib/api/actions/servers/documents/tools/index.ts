@@ -32,9 +32,12 @@ import { pluralize } from "@app/types/shared/utils/string_utils";
 /** The agent as the editors of a live document show it reading or editing. */
 const collabAgentOf = ({
   agentConfiguration,
+  userMessage,
 }: AgentLoopRunContext): CollabAgent => ({
   agentId: agentConfiguration.sId,
   name: agentConfiguration.name,
+  userId: userMessage.user?.sId ?? null,
+  userName: userMessage.context.fullName || userMessage.context.username,
 });
 
 /** Runs a tool against the conversation's file system, scoped to the document it targets. */

@@ -209,8 +209,8 @@ export function showAgentActivity(
  * them. With `agent`, a change of the source MUST be announced to every connection as that agent
  * editing right before it is applied; it MUST be announced as reading again if the change is then
  * refused or leaves the document's body unchanged. Once a change of the body is applied, its update
- * MUST be sent, then the text it inserted announced as that agent's edit (`agent_edit`, the ids of
- * the items the change's own transaction inserted); failing to read them MUST only skip it.
+ * MUST be sent, then announced as that agent's edit (`agent_edit`, the ids of the items the change's
+ * own transaction inserted, none when it only deleted); failing to read them MUST announce none.
  */
 export async function writeSessionSource(
   hocuspocus: Hocuspocus<CollabAccess>,
@@ -305,7 +305,7 @@ export async function writeSessionSource(
     if (comments.isErr()) {
       return comments;
     }
-    if (announced && inserted.length > 0) {
+    if (announced && bodyChanged) {
       // The update first, so editors already hold the text the message names.
       document.flush();
       document.broadcastStateless(agentEditMessage(agent, inserted));

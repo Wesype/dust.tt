@@ -1,3 +1,4 @@
+import { AGENT_EDIT_SHOWN_MS } from "@app/components/editor/document/AgentCarets";
 import type { AgentEvent } from "@app/lib/client/collab/agents";
 import { onAgentActivity } from "@app/lib/client/collab/agents";
 import type { HocuspocusProvider } from "@hocuspocus/provider";
@@ -6,8 +7,8 @@ import { useEffect, useState } from "react";
 // Long enough for the model to write most changes after reading, short enough not to linger once an
 // agent answers without editing: the session has no "done" signal.
 const READING_SHOWN_MS = 20_000;
-// Long enough for the edit's playback to finish.
-const EDITING_SHOWN_MS = 4_000;
+// As long as the agent's caret shows after its longest edit.
+const EDITING_SHOWN_MS = AGENT_EDIT_SHOWN_MS;
 
 /**
  * @cc [owner:PopDaph,label:product] collab-agent-activity-shown

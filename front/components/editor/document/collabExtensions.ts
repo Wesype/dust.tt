@@ -1,4 +1,4 @@
-import { agentEdits } from "@app/components/editor/document/AgentEdits";
+import { agentCarets } from "@app/components/editor/document/AgentCarets";
 import { getDocumentComments } from "@app/components/editor/document/DocumentComments";
 import type { DocumentImageOptions } from "@app/components/editor/document/DocumentImage";
 import type { Translate } from "@app/components/editor/document/editorExtensions";
@@ -98,7 +98,7 @@ export const buildCollabExtensions = ({
     resolveImageSource,
   }),
   collabCommentThreads(comments),
-  ...(provider ? [agentEdits(provider)] : []),
+  ...(provider ? [agentCarets(provider, user.id)] : []),
   Collaboration.configure({ document, field: BODY_FRAGMENT_NAME }),
   ...(awareness
     ? [CollaborationCaret.configure({ provider: { awareness }, user })]

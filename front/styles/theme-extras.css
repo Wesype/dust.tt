@@ -50,9 +50,6 @@
   --animate-shake: shake 0.5s ease-in-out both;
   --animate-reload: reload 1000ms ease-out;
   --animate-fadeout: fadeout 500ms ease-out;
-  /* The text of an agent's edit in a live document (AgentEdits.ts). */
-  --animate-agent-edit-settle: agent-edit-settle 3000ms var(--ease-in-out-quad)
-    both;
   --animate-marquee: marquee 25s linear infinite;
   --animate-fade-in-up: fade-in-up 0.5s ease-in-out;
   --animate-input-bar-compact-in: input-bar-compact-in 480ms
@@ -105,20 +102,46 @@
     opacity: 0;
   }
 }
-/* `--agent-edit-highlight` is set once on the text, in the agent's color: it rises as the text
-   appears, holds a moment so the eye finds it, then fades. Only the color animates. */
-@keyframes agent-edit-settle {
-  0% {
-    background-color: transparent;
-    /* `--ease-out-cubic`: variables are not read inside keyframes. */
-    animation-timing-function: cubic-bezier(0.215, 0.61, 0.355, 1);
+@property --typed-band {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+.collab-typed {
+  --typed-band: 260px;
+  --typed-light: color-mix(in oklch, var(--typed-color) 45%, white);
+  background-image: linear-gradient(
+    90deg,
+    currentColor calc(100% - var(--typed-band)),
+    var(--typed-color) calc(100% - var(--typed-band) * 0.45),
+    var(--typed-light) 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.collab-typed[data-settled] {
+  animation: collab-typed-settle 900ms ease-in both;
+}
+.collab-caret-leaving {
+  animation: collab-caret-leave 150ms ease-out forwards;
+}
+
+@keyframes collab-caret-leave {
+  to {
+    opacity: 0;
   }
-  10%,
-  35% {
-    background-color: var(--agent-edit-highlight);
+}
+
+@keyframes collab-typed-settle {
+  to {
+    --typed-band: 0px;
   }
-  100% {
-    background-color: transparent;
+}
+@media (prefers-reduced-motion: reduce) {
+  .collab-typed {
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
   }
 }
 @keyframes reload {

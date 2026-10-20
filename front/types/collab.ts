@@ -98,10 +98,12 @@ export const commentServerMessageSchema = z.discriminatedUnion("type", [
 
 export type CommentServerMessage = z.infer<typeof commentServerMessageSchema>;
 
-/** The agent reading or changing a live document, as its editors show it. */
+/** The agent at work in a live document and the user it works for, as editors show them. */
 export const collabAgentSchema = z.object({
   agentId: z.string().min(1),
   name: z.string().min(1),
+  userId: z.string().min(1).nullable().default(null),
+  userName: z.string().default(""),
 });
 
 export type CollabAgent = z.infer<typeof collabAgentSchema>;
