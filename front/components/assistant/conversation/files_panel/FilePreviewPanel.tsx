@@ -42,6 +42,10 @@ import {
   Button,
   cn,
   Download01,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
   Maximize01,
   Minimize01,
   Spinner,
@@ -284,15 +288,44 @@ export function FilePreviewPanelView({
               </>
             )}
             <div ref={setDocumentControls} className="flex empty:hidden" />
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={Download01}
-              tooltip={t({ message: "Download", context: "action" })}
-              href={urls.downloadUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            />
+            {path && preview.category === "markdown" ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={Download01}
+                    tooltip={t({ message: "Download", context: "action" })}
+                  />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    label={t`Markdown`}
+                    href={getFilePathDownloadUrl(owner, path, {
+                      format: "markdown",
+                    })}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                  <DropdownMenuItem
+                    label={t`Markdown with comments`}
+                    href={urls.downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Download01}
+                tooltip={t({ message: "Download", context: "action" })}
+                href={urls.downloadUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              />
+            )}
             {!isMobile &&
               clientType !== "extension" &&
               (markdown.richEditor || markdown.isSourceMode) && (

@@ -199,6 +199,134 @@ describe("GET /api/w/:wId/files/path/:canonicalPath", () => {
   });
 });
 
+describe("GET /api/w/:wId/files/path/:canonicalPath?download=1 for a Markdown document", () => {
+  const COMMENTED = [
+    "---",
+    "title: Notes",
+    "---",
+    "",
+    "Snow :comment-start{id=c1}loosens at dawn:comment-end{id=c1}.",
+    "",
+    ":::annotations",
+    "::comment{id=c1 status=open}",
+    "",
+    '::message{author=user:usr_1 name="Yuka" at=2026-09-25T14:16:32.380Z}',
+    "",
+    "Really?",
+    ":::",
+    "",
+  ].join("\n");
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(readCollabSource).mockResolvedValue(new Ok({ open: false }));
+    fileStorageMock.enableVersioning();
+    fileStorageMock.setFileExists(
+      (path) => fileStorageMock.getObject(path) !== undefined
+    );
+    fileStorageMock.setFileMetadata(() => ({
+      contentType: "text/markdown",
+      size: "42",
+    }));
+  });
+
+  async function setupDocument(
+    content: string,
+    query: string,
+    fileName = "notes.md"
+  ) {
+    const { workspace, conversation } = await setup();
+    fileStorageMock.setObject(
+      `w/${workspace.sId}/conversations/${conversation.sId}/files/${fileName}`,
+      content
+    );
+    const segments = `conversation-${conversation.sId}/${fileName}`
+      .split("/")
+      .map(encodeURIComponent)
+      .join("/");
+    return honoApp.request(
+      `/api/w/${workspace.sId}/files/path/${segments}?${query}`
+    );
+  }
+
+  it("downloads the stored document with its comments", async () => {
+    const response = await setupDocument(COMMENTED, "download=1");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Disposition")).toMatch(
+      /^attachment; filename="notes.md"/
+    );
+    expect(await response.text()).toBe(COMMENTED);
+  });
+
+  it("downloads the stored document without its front matter or comments", async () => {
+    const response = await setupDocument(
+      COMMENTED,
+      "download=1&format=markdown"
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Disposition")).toMatch(
+      /^attachment; filename="notes.md"/
+    );
+    expect(await response.text()).toBe("Snow loosens at dawn.\n");
+  });
+
+  it("downloads the live session's source while one holds the document", async () => {
+    const live = COMMENTED.replace("Snow", "Rain");
+    vi.mocked(readCollabSource).mockResolvedValue(
+      new Ok({ open: true, source: live })
+    );
+
+    const withComments = await setupDocument(COMMENTED, "download=1");
+    expect(withComments.status).toBe(200);
+    expect(await withComments.text()).toBe(live);
+
+    const withoutComments = await setupDocument(
+      COMMENTED,
+      "download=1&format=markdown"
+    );
+    expect(withoutComments.status).toBe(200);
+    expect(await withoutComments.text()).toBe("Rain loosens at dawn.\n");
+  });
+
+  it.each(["download=1", "download=1&format=markdown"])(
+    "refuses a document the codec cannot read, with %s",
+    async (query) => {
+      const invalid = "An anchor :comment-start{id=c1}without a thread.\n";
+
+      const response = await setupDocument(invalid, query);
+
+      expect(response.status).toBe(400);
+      expect((await response.json()).error.type).toBe(
+        "file_type_not_supported"
+      );
+    }
+  );
+
+  it.each([
+    { fileName: "notes.md", query: "format=markdown" },
+    { fileName: "notes.md", query: "download=0&format=markdown" },
+    { fileName: "notes.md", query: "download=1&format=dfm" },
+  ])("refuses $query for $fileName", async ({ fileName, query }) => {
+    const response = await setupDocument(COMMENTED, query, fileName);
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.type).toBe("invalid_request_error");
+  });
+
+  it("refuses format=markdown for a file that is not Markdown", async () => {
+    const response = await setupDocument(
+      COMMENTED,
+      "download=1&format=markdown",
+      "notes.txt"
+    );
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).error.type).toBe("file_type_not_supported");
+  });
+});
+
 describe("GET /api/w/:wId/files/path/:canonicalPath?thumbnail=1", () => {
   beforeEach(() => {
     vi.clearAllMocks();

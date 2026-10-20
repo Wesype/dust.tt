@@ -108,6 +108,14 @@ msgid "Download"
 msgstr ""
 
 #: front/components/assistant/conversation/files_panel/FilePreviewPanel.tsx
+msgid "Markdown"
+msgstr ""
+
+#: front/components/assistant/conversation/files_panel/FilePreviewPanel.tsx
+msgid "Markdown with comments"
+msgstr ""
+
+#: front/components/assistant/conversation/files_panel/FilePreviewPanel.tsx
 msgid "Exit full screen mode"
 msgstr ""
 
