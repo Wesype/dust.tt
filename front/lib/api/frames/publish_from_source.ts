@@ -7,6 +7,7 @@ import {
   buildFramePublication,
 } from "@app/lib/api/frames/build_and_publish";
 import { reconcileFramePublicationDatabasesOnStagedSource } from "@app/lib/api/frames/database_reconciliation";
+import { emitFrameDraftModeAuditLog } from "@app/lib/api/frames/draft_mode";
 import { withFrameSourceLock } from "@app/lib/api/frames/operation_lock";
 import type { FramePublicationSourceFile } from "@app/lib/api/frames/publication_storage";
 import {
@@ -39,10 +40,7 @@ import {
   isSafeFrameRelativePath,
   parseFrameManifest,
 } from "@app/types/api/frame_manifest";
-import type {
-  FramePublicationStatus,
-  FramePublishMode,
-} from "@app/types/api/frame_publication";
+import type { FramePublicationStatus } from "@app/types/api/frame_publication";
 import type { ConversationWithoutContentType } from "@app/types/assistant/conversation";
 import type { DustFileSystemError } from "@app/types/file_system";
 import {
@@ -236,10 +234,11 @@ export type PublishFrameFromSourceParams = {
    */
   replacesPath?: string;
   /**
-   * `draft` publishes a Frames v2 change for editors only; a Frame with nothing live goes live
-   * anyway.
+   * Set by sandbox clients that still ask for a draft per publish: turns draft mode on first when
+   * the Frame has a live publication, so the publish is a draft (a Frame with nothing live goes
+   * live anyway).
    */
-  mode: FramePublishMode;
+  draftRequested?: boolean;
 };
 
 export async function publishFrameFromSource(
@@ -249,7 +248,7 @@ export async function publishFrameFromSource(
     publishedByAgentConfigurationId,
     sourcePath,
     replacesPath,
-    mode,
+    draftRequested = false,
   }: PublishFrameFromSourceParams
 ): Promise<Result<PublishFrameFromSourceResult, PublishFrameFromSourceError>> {
   if (replacesPath) {
@@ -276,7 +275,7 @@ export async function publishFrameFromSource(
       frame,
       manifestPath: normalizedPath,
       publishedByAgentConfigurationId,
-      mode,
+      draftRequested,
     });
     if (publication.isErr()) {
       return new Err(publication.error);
@@ -292,7 +291,7 @@ export async function publishFrameFromSource(
     });
   }
 
-  if (mode === "draft") {
+  if (draftRequested) {
     return frameError(
       "invalid_source",
       "Drafts are only supported for Frames v2."
@@ -918,6 +917,15 @@ async function readFrameV2SourceTree(
  * Publish from an already-captured source tree. Callers that hold the source lock and have the
  * package bytes in memory (e.g. after applying live edits) skip a second mount download.
  */
+/**
+ * @cc [owner:davidebbo,label:product;security] publish-follows-draft-mode
+ * While `frame`, read under the source lock, is in draft mode (`isInFrameDraftMode`), a Frames v2
+ * publish from source MUST NOT change its live publication, whoever publishes (agent or panel
+ * Save): it stores a draft, or changes nothing when the source matches the live publication.
+ * Outside draft mode it publishes live. Callers choose only through `draftRequested`, which turns
+ * draft mode on first. A draft-mode toggle takes the same lock, so it cannot interleave with a
+ * publish.
+ */
 async function publishFrameV2FromCapturedSourceWithSourceLockHeld(
   auth: Authenticator,
   {
@@ -925,13 +933,13 @@ async function publishFrameV2FromCapturedSourceWithSourceLockHeld(
     manifest,
     sourceFiles,
     publishedByAgentConfigurationId,
-    mode,
+    draftRequested = false,
   }: {
     frame: FileResource;
     manifest: FrameManifest;
     sourceFiles: FramePublicationSourceFile[];
     publishedByAgentConfigurationId?: string;
-    mode: FramePublishMode;
+    draftRequested?: boolean;
   }
 ): Promise<
   Result<
@@ -952,12 +960,23 @@ async function publishFrameV2FromCapturedSourceWithSourceLockHeld(
     return sharingCheck;
   }
 
+  if (
+    draftRequested &&
+    !frame.isInFrameDraftMode &&
+    frame.useCaseMetadata?.activePublicationId
+  ) {
+    await frame.enterFrameDraftMode({
+      userSId: auth.getNonNullableUser().sId,
+    });
+    emitFrameDraftModeAuditLog(auth, frame, "on");
+  }
+
   return buildAndPublishFramePublication(auth, {
     frame,
     manifest,
     sourceFiles,
     publishedByAgentConfigurationId,
-    mode,
+    mode: frame.isInFrameDraftMode ? "draft" : "live",
   });
 }
 
@@ -967,13 +986,13 @@ async function publishFrameV2FromSourceWithSourceLockHeld(
     frame,
     manifestPath,
     publishedByAgentConfigurationId,
-    mode,
+    draftRequested,
   }: {
     conversation: ConversationWithoutContentType;
     frame: FileResource;
     manifestPath: string;
     publishedByAgentConfigurationId?: string;
-    mode: FramePublishMode;
+    draftRequested?: boolean;
   }
 ): Promise<
   Result<
@@ -994,7 +1013,7 @@ async function publishFrameV2FromSourceWithSourceLockHeld(
     manifest: source.value.manifest,
     sourceFiles: source.value.sourceFiles,
     publishedByAgentConfigurationId,
-    mode,
+    draftRequested,
   });
 }
 
@@ -1005,13 +1024,13 @@ export async function publishFrameV2FromSource(
     frame,
     manifestPath,
     publishedByAgentConfigurationId,
-    mode,
+    draftRequested,
   }: {
     conversation: ConversationWithoutContentType;
     frame: FileResource;
     manifestPath: string;
     publishedByAgentConfigurationId?: string;
-    mode: FramePublishMode;
+    draftRequested?: boolean;
   }
 ): Promise<
   Result<
@@ -1040,7 +1059,7 @@ export async function publishFrameV2FromSource(
       frame: freshFrame,
       manifestPath,
       publishedByAgentConfigurationId,
-      mode,
+      draftRequested,
     });
   });
   if (publication.isErr()) {
@@ -1063,11 +1082,6 @@ export type FrameV2TextEdit = {
 // must stay small (avoid-quadratic-loops).
 export const MAX_FRAME_TEXT_EDITS = 50;
 
-/**
- * @cc [owner:davidebbo,label:product;security] panel-save-keeps-pending-draft
- * A user text edit MUST publish as a draft whenever the Frame has a pending draft. The source
- * folder holds the draft's changes, so a live publish would ship them unreviewed.
- */
 /**
  * Apply one or more location-based text edits to a Frames v2 package, then publish once.
  *
@@ -1305,9 +1319,6 @@ export async function editFrameV2TextsAtSource(
           frame: freshFrame,
           manifest: manifestResult.value,
           sourceFiles: patchedSourceFiles,
-          // A Save while a draft is pending must not push the draft's unreviewed changes live: the
-          // source folder already holds them.
-          mode: freshFrame.pendingDraftPublicationId ? "draft" : "live",
         });
       logEditStep("publish", stepStartedAt);
       if (publishResult.isErr()) {

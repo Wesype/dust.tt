@@ -204,7 +204,6 @@ describe("publishFrameFromSource", () => {
     );
 
     const result = await publishFrameFromSource(auth, {
-      mode: "live",
       conversation,
       publishedByAgentConfigurationId: "test-agent",
       sourcePath: manifestPath,
@@ -250,7 +249,6 @@ describe("publishFrameFromSource", () => {
     });
 
     const result = await publishFrameFromSource(auth, {
-      mode: "live",
       conversation,
       publishedByAgentConfigurationId: "test-agent",
       sourcePath,
@@ -300,7 +298,6 @@ describe("publishFrameFromSource", () => {
     });
 
     const result = await publishFrameFromSource(viewerAuth, {
-      mode: "live",
       conversation,
       publishedByAgentConfigurationId: "test-agent",
       sourcePath,
@@ -420,7 +417,6 @@ describe("publishFrameFromSource replacing a legacy Frame", () => {
     assert(legacyShare, "Legacy Frame is not shared");
 
     const result = await publishFrameFromSource(auth, {
-      mode: "live",
       conversation,
       publishedByAgentConfigurationId: "test-agent",
       sourcePath: manifestPath,
@@ -449,7 +445,6 @@ describe("publishFrameFromSource replacing a legacy Frame", () => {
       await setupLegacyFrameReplacement({ scope: "conversation" });
 
     const result = await publishFrameFromSource(auth, {
-      mode: "live",
       conversation,
       publishedByAgentConfigurationId: "test-agent",
       sourcePath: manifestPath,
@@ -474,7 +469,6 @@ describe("publishFrameFromSource replacing a legacy Frame", () => {
     });
 
     const result = await publishFrameFromSource(auth, {
-      mode: "live",
       conversation,
       publishedByAgentConfigurationId: "test-agent",
       sourcePath: manifestPath,
@@ -502,7 +496,6 @@ describe("publishFrameFromSource replacing a legacy Frame", () => {
     });
 
     const result = await publishFrameFromSource(auth, {
-      mode: "live",
       conversation,
       publishedByAgentConfigurationId: "test-agent",
       sourcePath: manifestPath,
@@ -526,7 +519,6 @@ describe("publishFrameFromSource replacing a legacy Frame", () => {
     );
 
     const result = await publishFrameFromSource(auth, {
-      mode: "live",
       conversation,
       publishedByAgentConfigurationId: "test-agent",
       sourcePath: manifestPath,
@@ -639,7 +631,6 @@ describe("publishFrameFromSource replacing a legacy Frame", () => {
     );
 
     const result = await publishFrameFromSource(auth, {
-      mode: "live",
       conversation,
       publishedByAgentConfigurationId: "test-agent",
       sourcePath: manifestPath,
@@ -698,7 +689,6 @@ describe("publishFrameV2FromSource", () => {
     } = await setup();
 
     const result = await publishFrameV2FromSource(auth, {
-      mode: "live",
       conversation,
       frame,
       manifestPath,
@@ -772,7 +762,6 @@ describe("publishFrameV2FromSource", () => {
       }
 
       const result = await publishFrameV2FromSource(auth, {
-        mode: "live",
         conversation,
         frame,
         manifestPath,
@@ -794,7 +783,6 @@ describe("publishFrameV2FromSource", () => {
     });
 
     const result = await publishFrameV2FromSource(auth, {
-      mode: "live",
       conversation,
       frame,
       manifestPath,
@@ -807,7 +795,6 @@ describe("publishFrameV2FromSource", () => {
     const { auth, conversation, frame } = await setup();
 
     const result = await publishFrameV2FromSource(auth, {
-      mode: "live",
       conversation,
       frame,
       manifestPath: `conversation-${conversation.sId}/Other/manifest.json`,
@@ -836,7 +823,6 @@ describe("publishFrameV2FromSource", () => {
     });
 
     const result = await publishFrameV2FromSource(auth, {
-      mode: "live",
       conversation,
       frame: staleFrame,
       manifestPath,
@@ -860,7 +846,6 @@ describe("publishFrameV2FromSource", () => {
 
     try {
       const publicationPromise = publishFrameV2FromSource(auth, {
-        mode: "live",
         conversation,
         frame,
         manifestPath,
@@ -921,7 +906,6 @@ describe("publishFrameV2FromSource", () => {
     assert(accessibleFrame);
 
     const result = await publishFrameV2FromSource(viewerAuth, {
-      mode: "live",
       conversation,
       frame: accessibleFrame,
       manifestPath,
@@ -947,7 +931,6 @@ describe("publishFrameV2FromSource", () => {
     );
 
     const result = await publishFrameV2FromSource(auth, {
-      mode: "live",
       conversation,
       frame,
       manifestPath,
