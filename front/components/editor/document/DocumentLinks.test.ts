@@ -80,26 +80,36 @@ describe("DocumentLinks", () => {
   });
 
   it.each([
-    ["claims a Cmd+click", { metaKey: true }, true],
-    ["leaves a plain click", {}, false],
-  ])(
-    "%s on a link before ProseMirror selects the clicked node",
-    (_, modifier, claimed) => {
-      const link = renderLink("https://dust.tt/pricing");
-      const view = editor?.view;
-      if (!view) {
-        throw new Error("The editor did not mount.");
-      }
-      // jsdom has no layout, so ProseMirror's mousedown (posAtCoords) cannot run: call the prop.
-      const mouseup = new MouseEvent("mouseup", { ...modifier, button: 0 });
-      Object.defineProperty(mouseup, "target", { value: link });
+    ["Cmd", { metaKey: true }],
+    ["Ctrl", { ctrlKey: true }],
+  ])("cancels the mousedown of a %s+click on a link", (_, modifier) => {
+    const link = renderLink("https://dust.tt/pricing");
 
-      expect(
-        view.someProp("handleClick", (handle) => handle(view, 1, mouseup)) ??
-          false
-      ).toBe(claimed);
+    // The browser moves the caret on an uncancelled mousedown; `fireEvent` returns false when
+    // a handler cancels the event.
+    expect(fireEvent.mouseDown(link, { ...modifier, button: 0 })).toBe(false);
+  });
+
+  it("leaves a plain mousedown on a link to the editor", () => {
+    const link = renderLink("https://dust.tt/pricing");
+    const view = editor?.view;
+    if (!view) {
+      throw new Error("The editor did not mount.");
     }
-  );
+    // jsdom has no layout, so ProseMirror's own mousedown (posAtCoords) cannot run: call ours.
+    const mousedown = new MouseEvent("mousedown", {
+      button: 0,
+      cancelable: true,
+    });
+    Object.defineProperty(mousedown, "target", { value: link });
+
+    expect(
+      view.someProp("handleDOMEvents", (handlers) =>
+        handlers.mousedown?.(view, mousedown)
+      ) ?? false
+    ).toBe(false);
+    expect(mousedown.defaultPrevented).toBe(false);
+  });
 
   it("leaves a link in a read-only document to the browser", () => {
     const open = vi.spyOn(window, "open").mockReturnValue(null);

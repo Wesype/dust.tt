@@ -27,6 +27,16 @@ const linkToOpen = (
   return isSafeHref(link.href) ? link : null;
 };
 
+// The browser moves the caret on mousedown, and ProseMirror starts tracking the click there.
+// Returning true skips ProseMirror's mousedown, so it never selects the clicked node on mouseup.
+const keepSelection = (view: EditorView, event: MouseEvent) => {
+  if (!linkToOpen(view, event)) {
+    return false;
+  }
+  event.preventDefault();
+  return true;
+};
+
 const openLink = (view: EditorView, event: MouseEvent) => {
   const link = linkToOpen(view, event);
   if (!link) {
@@ -48,9 +58,7 @@ export const DocumentLinks = Extension.create({
   addProseMirrorPlugins: () => [
     new Plugin({
       props: {
-        // On mouseup, before ProseMirror selects the clicked node for the same modifier.
-        handleClick: (view, _pos, event) => linkToOpen(view, event) !== null,
-        handleDOMEvents: { click: openLink },
+        handleDOMEvents: { mousedown: keepSelection, click: openLink },
       },
     }),
   ],
