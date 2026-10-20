@@ -104,6 +104,23 @@ export type TokenUsageContent = {
   // Processing tier the provider reports having served this response on, which
   // is what it bills for. Absent for providers that do not report one.
   serviceTier?: ServiceTier;
+  // The model that answered, when the provider switched to another model (for
+  // example after an Anthropic refusal). Absent when the requested model
+  // answered. Usage is still billed under the requested model for now.
+  servedModel?: string;
+  // Token usage of each model the provider tried, in order. Only set when the
+  // provider switched models.
+  usageIterations?: TokenUsageIteration[];
+};
+export type TokenUsageIteration = {
+  // Provider name for the attempt. For Anthropic, "fallback_message" is the
+  // model that answered and "message" an earlier attempt.
+  type: string;
+  model: string | null;
+  cacheCreated: number;
+  cacheHit: number;
+  standardInput: number;
+  totalOutput: number;
 };
 export interface TokenUsageEvent {
   type: "token_usage";

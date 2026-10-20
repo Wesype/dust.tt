@@ -8,6 +8,7 @@ import {
 import type { BetaMessageBatchResult } from "@anthropic-ai/sdk/resources/beta/messages/batches";
 import type {
   BetaCacheCreation,
+  BetaIterationsUsage,
   BetaMessage,
   BetaMessageDeltaUsage,
   BetaRawContentBlockDeltaEvent,
@@ -45,6 +46,7 @@ import type {
   ToolCallDeltaEvent,
   ToolCallEvent,
   ToolCallStartedEvent,
+  TokenUsageContent,
 } from "@app/lib/model_constructors/types/output/events";
 import { buildErrorEvent } from "@app/lib/model_constructors/utils/build_error_event";
 import {
@@ -386,8 +388,43 @@ export function messageDeltaUsageToTokenUsageEvent(
       standardInput: uncachedInput,
       totalOutput: usage.output_tokens,
       ...(thinkingTokens !== undefined ? { reasoning: thinkingTokens } : {}),
+      ...fallbackUsageFields(usage.iterations),
     },
     metadata,
+  };
+}
+
+/**
+ * @cc [owner:fontanierh,label:product] served-model-from-fallback-iteration
+ * Only set `servedModel` and `usageIterations` when Anthropic actually fell back to another
+ * model, i.e. when `usage.iterations` has a `fallback_message` entry. `servedModel` is the
+ * model of the last such entry: that is the model that answered.
+ * Do not guess it from `message_start.message.model` (it still names the original model)
+ * or from `fallback` blocks. Responses without a fallback, including server tool loops that
+ * also report `iterations`, must keep exactly the same token usage as before.
+ */
+function fallbackUsageFields(
+  iterations: BetaIterationsUsage | null | undefined
+): Pick<TokenUsageContent, "servedModel" | "usageIterations"> {
+  // Anthropic adds a `fallback_message` entry whenever another model answered,
+  // however the switch happened. The stream itself never says which model
+  // answered after a switch mid-answer.
+  const servingIteration = iterations
+    ?.filter((iteration) => iteration.type === "fallback_message")
+    .at(-1);
+  if (!iterations || !servingIteration) {
+    return {};
+  }
+  return {
+    servedModel: servingIteration.model,
+    usageIterations: iterations.map((iteration) => ({
+      type: iteration.type,
+      model: "model" in iteration ? iteration.model : null,
+      cacheCreated: iteration.cache_creation_input_tokens,
+      cacheHit: iteration.cache_read_input_tokens,
+      standardInput: iteration.input_tokens,
+      totalOutput: iteration.output_tokens,
+    })),
   };
 }
 
