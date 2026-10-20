@@ -177,6 +177,12 @@ export const WHITELISTABLE_FEATURES_CONFIG = {
     stage: "self_serve",
     owner: "fontanierh",
   },
+  anthropic_server_side_fallback: {
+    description:
+      "Let Anthropic answer with a fallback model when the requested model refuses (direct Anthropic API only)",
+    stage: "dust_only",
+    owner: "fontanierh",
+  },
   openai_concise_reasoning_summaries: {
     description:
       "Use concise reasoning summaries for supported OpenAI models in the new LLM router",

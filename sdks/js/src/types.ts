@@ -866,6 +866,7 @@ const WhitelistableFeaturesSchema = FlexibleEnumSchema<
   | "agent_message_consumption_writes"
   | "agent_stream_long_polling"
   | "custom_model_feature"
+  | "anthropic_server_side_fallback"
   | "anthropic_vertex_fallback"
   | "archive_inactive_agents"
   | "audit_logs"

@@ -272,3 +272,48 @@ describe("AnthropicStream per-message reasoning effort", () => {
     ]);
   });
 });
+
+describe("AnthropicStream server-side fallback", () => {
+  it("sends fallbacks and its beta only when the config asks for it", async () => {
+    const endpoint = new AnthropicClaudeOpusFiveDotFiveGlobalAnthropicStream({
+      ANTHROPIC_API_KEY: "test-key",
+    });
+
+    const off = await endpoint.buildRequestPayload(
+      EMPTY_PAYLOAD,
+      OPUS_FIVE_DOT_FIVE_CONFIG
+    );
+    const on = await endpoint.buildRequestPayload(EMPTY_PAYLOAD, {
+      ...OPUS_FIVE_DOT_FIVE_CONFIG,
+      serverSideFallback: true,
+    });
+
+    expect(off).not.toHaveProperty("fallbacks");
+    expect(off.betas).toEqual([THINKING_BINDING_CONTROLS_BETA_HEADER]);
+    expect(on).toEqual({
+      ...off,
+      fallbacks: "default",
+      betas: [
+        THINKING_BINDING_CONTROLS_BETA_HEADER,
+        "server-side-fallback-2026-07-01",
+      ],
+    });
+  });
+
+  it("never sends fallbacks on the agent platform", async () => {
+    const endpoint =
+      new AnthropicClaudeOpusFiveDotFiveEuropeAgentPlatformStream({
+        AGENT_PLATFORM_PROJECT_ID: "test-project",
+      });
+
+    const payload = await endpoint.buildRequestPayload(EMPTY_PAYLOAD, {
+      ...AnthropicClaudeOpusFiveDotFiveEuropeAgentPlatformStream.configSchema.parse(
+        {}
+      ),
+      serverSideFallback: true,
+    });
+
+    expect(payload).not.toHaveProperty("fallbacks");
+    expect(payload).not.toHaveProperty("betas");
+  });
+});
