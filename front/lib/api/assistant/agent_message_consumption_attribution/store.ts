@@ -589,6 +589,9 @@ async function computeAndStoreAgentMessageConsumptionAttributionComputation(
     return new Ok({});
   }
   const usages = messageUsages.filter((usage) => !isFreeRunUsage(usage));
+  if (billedCredits === null && usages.every(isUnavailableRunUsage)) {
+    return new Ok({});
+  }
   const unconsumedToolResultRunUsageModelIds =
     runUsageModelIdsWithUnconsumedToolResults({ runs, status, usages });
 
@@ -744,14 +747,21 @@ async function computeAndStoreAgentMessageConsumptionAttributionComputation(
 /**
  * @cc [owner:sfriquet,label:product;backend] reconcile-current-version-or-fail
  * For a message with a tracked status and runs, other than one skipped by
- * `free-usage-not-attributed`, the items of `AGENT_MESSAGE_CONSUMPTION_ATTRIBUTION_VERSION` MUST
- * reconcile against the message's bill, otherwise the result MUST be an `Err` carrying the
- * allocation skip reason. An older attribution version MUST NOT be reconciled in their place.
+ * `free-usage-not-attributed` or `unbilled-unavailable-calls-skipped`, the items of
+ * `AGENT_MESSAGE_CONSUMPTION_ATTRIBUTION_VERSION` MUST reconcile against the message's bill,
+ * otherwise the result MUST be an `Err` carrying the allocation skip reason. An older attribution
+ * version MUST NOT be reconciled in their place.
  */
 /**
  * @cc [owner:sfriquet,label:product;backend] free-usage-not-attributed
  * A `free` run usage MUST NOT get any consumption item. When every run usage of the message is
  * `free`, the result MUST be `Ok` with no consumption update, and no item MUST be written.
+ */
+/**
+ * @cc [owner:sfriquet,label:product;backend] unbilled-unavailable-calls-skipped
+ * When the message's `costCredits` is null and every one of its non-`free` run usages is
+ * `unavailable`, the result MUST be `Ok` with no consumption update, and no item MUST be written. A
+ * null `costCredits` alongside a reported, non-`free` run usage MUST fail with `no_billed_credits`.
  */
 /**
  * @cc [owner:sfriquet,label:product;backend] failed-reconciliation-keeps-evidence
