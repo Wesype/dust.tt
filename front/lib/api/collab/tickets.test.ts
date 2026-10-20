@@ -92,7 +92,7 @@ describe("live tickets", () => {
     expect(ticket.isErr() && ticket.error.code).toBe("not_markdown");
   });
 
-  it("are not minted for a file the user can only read", async () => {
+  it("are minted for a file the user can only read", async () => {
     const { authenticator: auth } = await createResourceTest({});
     await FeatureFlagFactory.basic(auth, "co_edition");
     const path = await writeUserFile(auth, "notes.md", "# Notes\n");
@@ -102,7 +102,7 @@ describe("live tickets", () => {
 
     const ticket = await mintCollabTicket(auth, path);
 
-    expect(ticket.isErr() && ticket.error.code).toBe("read_only");
+    expect(ticket.isOk()).toBe(true);
   });
 
   it("grant nothing for an unknown ticket", async () => {

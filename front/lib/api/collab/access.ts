@@ -132,11 +132,10 @@ async function checkCollabRights(
 
 /**
  * @cc [owner:PopDaph,label:security] collab-access
- * A live session MUST be opened only for a member of the workspace, in a workspace with
+ * A live session MUST be written only by a member of the workspace, in a workspace with
  * `co_edition` that `validateWorkspaceAccess` lets through, for a file `openCollabAccess` opens for
  * them with write access. `auth` MUST be built for this check: an Authenticator keeps the
- * membership, plan and workspace it was built with. Minting a ticket and connecting MUST both go
- * through it.
+ * membership, plan and workspace it was built with.
  */
 export async function checkCollabAccess(
   auth: Authenticator,
@@ -148,7 +147,6 @@ export async function checkCollabAccess(
   }
   const file = await openCollabAccess(auth, canonicalPath);
   if (file.isOk() && !file.value.canWrite) {
-    // Readers get the file without live editing for now.
     return new Err(READ_ONLY);
   }
   return file;
@@ -156,9 +154,10 @@ export async function checkCollabAccess(
 
 /**
  * @cc [owner:tdraier,label:security] collab-read-access
- * Reading a live document's source MUST apply the same membership, `co_edition` and workspace
- * checks as `checkCollabAccess`, for a file `openCollabAccess` opens for the user, without requiring write
- * access: a reader may read what the session holds, never change it.
+ * Opening a live session or reading a live document's source MUST apply the same membership,
+ * `co_edition` and workspace checks as `checkCollabAccess`, for a file `openCollabAccess` opens for
+ * the user, without requiring write access: a reader may read what the session holds, never change
+ * it. Minting a ticket and connecting MUST both go through it.
  */
 export async function checkCollabReadAccess(
   auth: Authenticator,
@@ -173,18 +172,18 @@ export async function checkCollabReadAccess(
 
 /**
  * @cc [owner:PopDaph,label:security;performance] collab-recheck-access
- * Re-checking an open session MUST apply the same membership, `co_edition`, workspace and write
- * access checks as `checkCollabAccess`, with an Authenticator built for it. It MUST NOT read the file
- * from storage: existence, type and size do not decide access, and a re-check runs for every open
- * session.
+ * Re-checking an open session MUST apply the same membership, `co_edition` and workspace checks as
+ * `checkCollabReadAccess`, with an Authenticator built for it, and MUST return the file system's
+ * write check for the path as `canWrite`. It MUST NOT read the file from storage: existence, type
+ * and size do not decide access, and a re-check runs for every open session.
  */
 export async function recheckCollabAccess(
   auth: Authenticator,
   canonicalPath: string
-): Promise<Result<void, CollabAccessError>> {
+): Promise<Result<{ canWrite: boolean }, CollabAccessError>> {
   const rights = await checkCollabRights(auth);
   if (rights.isErr()) {
-    return rights;
+    return new Err(rights.error);
   }
   // TODO(co-edition step 8): a file deleted or moved during a session keeps it open, failing to
   // save; the per-file lock and the stable file id end those sessions.
@@ -192,8 +191,7 @@ export async function recheckCollabAccess(
   if (dustFs.isErr()) {
     return new Err({ code: "unavailable", message: dustFs.error.message });
   }
-  if (dustFs.value.checkWriteAccess(canonicalPath).isErr()) {
-    return new Err(READ_ONLY);
-  }
-  return new Ok(undefined);
+  return new Ok({
+    canWrite: dustFs.value.checkWriteAccess(canonicalPath).isOk(),
+  });
 }

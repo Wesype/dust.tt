@@ -1,4 +1,4 @@
-import { checkCollabAccess } from "@app/lib/api/collab/access";
+import { checkCollabReadAccess } from "@app/lib/api/collab/access";
 import { mintCollabTicket } from "@app/lib/api/collab/tickets";
 import { DustFileSystemError } from "@app/lib/api/file_system";
 import { DustFileSystem } from "@app/lib/api/file_system/dust_file_system";
@@ -41,6 +41,26 @@ describe("authenticateConnection", () => {
 
     const second = await authenticateConnection(name, ticket);
     expect(second.isErr() && second.error).toBe("Invalid or expired ticket.");
+  });
+
+  it("opens the file for a user who can only read it", async () => {
+    const { authenticator: auth, workspace } = await createResourceTest({});
+    await FeatureFlagFactory.basic(auth, "co_edition");
+    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const readOnly = vi
+      .spyOn(DustFileSystem.prototype, "checkWriteAccess")
+      .mockReturnValue(
+        new Err(new DustFileSystemError("internal", "Read-only mount."))
+      );
+    const ticket = await ticketFor(auth, path);
+
+    const result = await authenticateConnection(
+      { workspaceId: workspace.sId, canonicalPath: path },
+      ticket
+    );
+
+    expect(result.isOk() && result.value.canWrite).toBe(false);
+    readOnly.mockRestore();
   });
 
   it("refuses a ticket minted for another file", async () => {
@@ -155,7 +175,10 @@ describe("authenticateConnection", () => {
 
 describe("recheckAllConnections", () => {
   /** A WebSocket connection to the user's own file, open as after a successful connect. */
-  async function openConnection(hocuspocus = createCollabHocuspocus()) {
+  async function openConnection(
+    hocuspocus = createCollabHocuspocus(),
+    { canWrite = true } = {}
+  ) {
     const {
       authenticator: auth,
       workspace,
@@ -163,7 +186,14 @@ describe("recheckAllConnections", () => {
     } = await createResourceTest({});
     await FeatureFlagFactory.basic(auth, "co_edition");
     const path = await writeUserFile(auth, "notes.md", "# Notes\n");
-    const file = await checkCollabAccess(auth, path);
+    const readOnly = canWrite
+      ? null
+      : vi
+          .spyOn(DustFileSystem.prototype, "checkWriteAccess")
+          .mockReturnValue(
+            new Err(new DustFileSystemError("internal", "Read-only mount."))
+          );
+    const file = await checkCollabReadAccess(auth, path);
     if (file.isErr()) {
       throw new Error(file.error.message);
     }
@@ -172,7 +202,7 @@ describe("recheckAllConnections", () => {
       toSessionName(workspace.sId, path),
       request,
       "socket",
-      { readOnly: false, isAuthenticated: true },
+      { readOnly: !file.value.canWrite, isAuthenticated: true },
       file.value
     );
     const socket = { send: vi.fn(), close: vi.fn(), readyState: 1 };
@@ -183,7 +213,7 @@ describe("recheckAllConnections", () => {
       "socket",
       file.value
     );
-    return { hocuspocus, document, connection, workspace, user };
+    return { hocuspocus, document, connection, workspace, user, readOnly };
   }
 
   it("keeps a connection whose user still has access", async () => {
@@ -264,5 +294,27 @@ describe("recheckAllConnections", () => {
 
     expect(document.getConnectionsCount()).toBe(0);
     readOnly.mockRestore();
+  });
+
+  it("keeps a read-only connection whose user still can only read the file", async () => {
+    const { hocuspocus, document, readOnly } = await openConnection(undefined, {
+      canWrite: false,
+    });
+
+    await recheckAllConnections(hocuspocus);
+
+    expect(document.getConnectionsCount()).toBe(1);
+    readOnly?.mockRestore();
+  });
+
+  it("closes a read-only connection once its user can write the file", async () => {
+    const { hocuspocus, document, readOnly } = await openConnection(undefined, {
+      canWrite: false,
+    });
+    readOnly?.mockRestore();
+
+    await recheckAllConnections(hocuspocus);
+
+    expect(document.getConnectionsCount()).toBe(0);
   });
 });

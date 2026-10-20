@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import type { CollabAccess } from "@app/lib/api/collab/access";
-import { checkCollabAccess } from "@app/lib/api/collab/access";
+import { checkCollabReadAccess } from "@app/lib/api/collab/access";
 import {
   applyCommentRequest,
   dispatchSessionCommentMentions,
@@ -60,7 +60,7 @@ vi.mock("@app/lib/api/collab/access", async (importActual) => {
   return {
     ...actual,
     // Real until a test stubs it: minting a ticket and connecting both check access.
-    checkCollabAccess: vi.fn(actual.checkCollabAccess),
+    checkCollabReadAccess: vi.fn(actual.checkCollabReadAccess),
   };
 });
 
@@ -625,7 +625,7 @@ describe("comment threads in a live session", () => {
     providers.forEach((provider) => provider.destroy());
     close();
     vi.restoreAllMocks();
-    vi.mocked(checkCollabAccess).mockReset();
+    vi.mocked(checkCollabReadAccess).mockReset();
   });
 
   // The socket handlers run outside the test's database transaction: authentication and the
@@ -636,7 +636,7 @@ describe("comment threads in a live session", () => {
     vi.spyOn(Authenticator, "fromUserIdAndWorkspaceId").mockResolvedValue(
       writer.auth
     );
-    vi.mocked(checkCollabAccess).mockResolvedValue(new Ok(writer));
+    vi.mocked(checkCollabReadAccess).mockResolvedValue(new Ok(writer));
     vi.mocked(loadCollabSession).mockImplementation(async () => {
       const live = dfmToYDoc(SOURCE);
       if (live.isErr()) {

@@ -94,7 +94,7 @@ describe("POST /api/w/:wId/files/collab-tickets", () => {
     expect((await response.json()).error.type).toBe("file_too_large");
   });
 
-  it("refuses a file the user can only read", async () => {
+  it("returns a ticket for a file the user can only read", async () => {
     const { workspace, auth } = await createPrivateApiMockRequest();
     await FeatureFlagFactory.basic(auth, "co_edition");
     const filePath = await writeUserFile(auth, "notes.md", "# Notes\n");
@@ -104,8 +104,7 @@ describe("POST /api/w/:wId/files/collab-tickets", () => {
 
     const response = await post(workspace.sId, filePath);
 
-    expect(response.status).toBe(403);
-    expect((await response.json()).error.type).toBe("file_read_only");
+    expect(response.status).toBe(200);
   });
 
   it("refuses a missing file", async () => {

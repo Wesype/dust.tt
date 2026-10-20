@@ -22,6 +22,11 @@ interface CollabEditorProps extends DocumentProps {
  * Only the editor bound to the first connection MUST get `focusOnOpen`: an editor bound to a later
  * connection, after a reconnect, MUST NOT move the caret.
  */
+/**
+ * @cc [owner:tdraier,label:product] collab-read-only-scope
+ * A document bound to a connection the server authorized read-only MUST be read-only, whatever
+ * `readOnly` the host passes: the server ignores that connection's edits.
+ */
 export default function CollabEditor(props: CollabEditorProps) {
   const { t } = useLingui();
   const { connection, status, syncingSinceMs, saveState } = useCollabConnection(
@@ -62,6 +67,9 @@ export default function CollabEditor(props: CollabEditorProps) {
     <DocumentView
       key={connection.id}
       {...props}
+      readOnly={
+        props.readOnly || connection.provider.authorizedScope === "readonly"
+      }
       collabView={{
         status,
         showSaving,

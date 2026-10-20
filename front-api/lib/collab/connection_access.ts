@@ -3,7 +3,7 @@ import type {
   CollabAccessError,
 } from "@app/lib/api/collab/access";
 import {
-  checkCollabAccess,
+  checkCollabReadAccess,
   recheckCollabAccess,
 } from "@app/lib/api/collab/access";
 import { redeemCollabTicket } from "@app/lib/api/collab/tickets";
@@ -18,7 +18,7 @@ import type { Connection, Hocuspocus } from "@hocuspocus/server";
 /**
  * @cc [owner:PopDaph,label:security] collab-connection-auth
  * A connection MUST open only with a ticket redeemed for the workspace and the file its document
- * name carries, and only if `checkCollabAccess` still lets the ticket's user open that file.
+ * name carries, and only if `checkCollabReadAccess` still lets the ticket's user open that file.
  */
 export async function authenticateConnection(
   parsed: { workspaceId: string; canonicalPath: string },
@@ -36,15 +36,16 @@ export async function authenticateConnection(
     ticket.userId,
     parsed.workspaceId
   );
-  const file = await checkCollabAccess(auth, parsed.canonicalPath);
+  const file = await checkCollabReadAccess(auth, parsed.canonicalPath);
   if (file.isErr()) {
     return new Err(file.error.message);
   }
   return new Ok(file.value);
 }
 
-// Hocuspocus's `Forbidden`, from `@hocuspocus/common`.
+// Hocuspocus's `Forbidden` and `ResetConnection`, from `@hocuspocus/common`.
 const FORBIDDEN = { code: 4403, reason: "Forbidden" };
+const RESET_CONNECTION = { code: 4205, reason: "Reset Connection" };
 
 export const ACCESS_RECHECK_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -53,7 +54,8 @@ export const ACCESS_RECHECK_INTERVAL_MS = 5 * 60 * 1000;
  * The collab server MUST start a sweep every `ACCESS_RECHECK_INTERVAL_MS`, unless the previous one
  * is still running. Every WebSocket document connection of this process open when the sweep starts
  * MUST be checked again with `recheckCollabAccess`, with an Authenticator freshly built for its user
- * in this sweep, and MUST be closed when the check fails or throws.
+ * in this sweep, and MUST be closed when the check fails or throws, or when its `canWrite` differs
+ * from the one the connection opened with, so it reconnects read-only or writable.
  * A failure checking one user and document MUST NOT stop the others: it is logged and their
  * connections closed, an exception to `no-catching-own-errors` limited to it. The returned promise
  * MUST resolve once every connection has been checked. Its per-user and per-document reads are an
@@ -110,7 +112,7 @@ export async function recheckAllConnections(
         }
         closed += connections.length;
       };
-      let access: Result<void, CollabAccessError>;
+      let access: Result<{ canWrite: boolean }, CollabAccessError>;
       try {
         const fresh = await authenticatorFor(userId, workspaceId);
         access = await recheckCollabAccess(fresh, canonicalPath);
@@ -125,6 +127,21 @@ export async function recheckAllConnections(
         return;
       }
       if (access.isOk()) {
+        const { canWrite } = access.value;
+        const changed = connections.filter((connection) => {
+          const context: CollabAccess = connection.context;
+          return context.canWrite !== canWrite;
+        });
+        if (changed.length > 0) {
+          logger.info(
+            { workspaceId, userId, canWrite },
+            "Collab connection reset: write access changed"
+          );
+          for (const connection of changed) {
+            connection.close(RESET_CONNECTION);
+          }
+          closed += changed.length;
+        }
         return;
       }
       logger.info(
