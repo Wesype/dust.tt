@@ -3,13 +3,52 @@ import {
   KEEPS_EMPTY_ATTR,
 } from "@app/components/editor/document/DocumentParagraph";
 import { isNumber, isString } from "@app/types/shared/utils/general";
-import type { JSONContent, MarkdownToken, RenderContext } from "@tiptap/core";
-import { mergeAttributes, renderNestedMarkdownContent } from "@tiptap/core";
+import type {
+  Command,
+  JSONContent,
+  MarkdownToken,
+  RenderContext,
+  SingleCommands,
+} from "@tiptap/core";
+import {
+  InputRule,
+  mergeAttributes,
+  renderNestedMarkdownContent,
+} from "@tiptap/core";
 import type { ListItemOptions } from "@tiptap/extension-list";
 import { ListItem } from "@tiptap/extension-list";
-import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import type { Node as ProseMirrorNode, ResolvedPos } from "@tiptap/pm/model";
+import type { Transaction } from "@tiptap/pm/state";
 
 export const LIST_ITEM_NODE_NAME = "listItem";
+
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    documentListItem: {
+      /**
+       * Makes the list items of the selection tasks, or plain items when they all are tasks,
+       * wrapping the selection in a bulleted list first when it is in none.
+       */
+      toggleTaskList: () => ReturnType;
+      /**
+       * Makes the list items of the selection numbered tasks, or plain items when they all are
+       * tasks of a numbered list, numbering their list or wrapping the selection in a numbered
+       * list first when it is in none.
+       */
+      toggleNumberedTaskList: () => ReturnType;
+    };
+  }
+}
+
+const isTaskCheckbox = (element: Element | null) =>
+  element?.matches("input[type=checkbox]") ?? false;
+
+// A task item copied from the editor carries its data attributes; one copied from GitHub holds a
+// checkbox as its first child.
+const htmlCheckbox = (element: HTMLElement) =>
+  [element.firstElementChild, element.firstElementChild?.firstElementChild]
+    .filter((child): child is Element => child !== null && child !== undefined)
+    .find(isTaskCheckbox) ?? null;
 
 const isCheckbox = (token: MarkdownToken) => token.type === "checkbox";
 
@@ -127,6 +166,29 @@ const itemText = (item: ProseMirrorNode) => {
     : "";
 };
 
+/** The list item nearest to each textblock of the selection. */
+const selectedListItems = (tr: Transaction, type: ProseMirrorNode["type"]) => {
+  const items = new Map<number, ProseMirrorNode>();
+  const addItemAround = ($pos: ResolvedPos) => {
+    for (let depth = $pos.depth; depth > 0; depth--) {
+      if ($pos.node(depth).type === type) {
+        items.set($pos.before(depth), $pos.node(depth));
+        return;
+      }
+    }
+  };
+  const { from, to, $from } = tr.selection;
+  addItemAround($from);
+  tr.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.isTextblock) {
+      addItemAround(tr.doc.resolve(pos + 1));
+      return false;
+    }
+    return true;
+  });
+  return [...items].map(([pos, node]) => ({ node, pos }));
+};
+
 /**
  * StarterKit's list item, which is a task when `task` is set, done when `checked` also is. A
  * task item is written `- [ ] ` or `1. [x] `, its content aligned with the list marker, and an
@@ -154,11 +216,16 @@ export const DocumentListItem = ListItem.extend<
       task: {
         default: false,
         keepOnSplit: true,
+        parseHTML: (element) =>
+          element.dataset.task === "true" || htmlCheckbox(element) !== null,
         renderHTML: ({ task }) => (task ? { "data-task": "true" } : {}),
       },
       checked: {
         default: false,
         keepOnSplit: false,
+        parseHTML: (element) =>
+          element.dataset.checked === "true" ||
+          htmlCheckbox(element)?.hasAttribute("checked") === true,
         renderHTML: ({ task, checked }) =>
           task && checked ? { "data-checked": "true" } : {},
       },
@@ -191,6 +258,81 @@ export const DocumentListItem = ListItem.extend<
       alignNestedToPrefix: context.parentType === "orderedList",
     });
     return `${prefix}${taskMarker(node)}${rendered.slice(prefix.length)}`;
+  },
+
+  addInputRules() {
+    return [
+      new InputRule({
+        find: /^\[([ xX]?)\]\s$/,
+        handler: ({ state, range, match }) => {
+          const $from = state.doc.resolve(range.from);
+          const item = $from.node(-1);
+          if (
+            $from.depth < 2 ||
+            item.type !== this.type ||
+            $from.index(-1) !== 0 ||
+            item.attrs.task
+          ) {
+            return null;
+          }
+          state.tr
+            .delete(range.from, range.to)
+            .setNodeMarkup($from.before(-1), undefined, {
+              ...item.attrs,
+              task: true,
+              checked: match[1] === "x" || match[1] === "X",
+            });
+        },
+      }),
+    ];
+  },
+
+  addCommands() {
+    const setTasks = (
+      items: { node: ProseMirrorNode; pos: number }[],
+      task: boolean,
+      tr: Transaction
+    ) =>
+      items.forEach(({ node, pos }) =>
+        tr.setNodeMarkup(pos, undefined, {
+          ...node.attrs,
+          task,
+          checked: task && node.attrs.task && node.attrs.checked,
+        })
+      );
+    const toggleTasks =
+      (
+        isInList: (tr: Transaction, pos: number) => boolean,
+        toggleList: (commands: SingleCommands) => boolean
+      ): Command =>
+      ({ commands, tr, dispatch }) => {
+        const items = selectedListItems(tr, this.type);
+        if (items.length > 0 && items.every(({ pos }) => isInList(tr, pos))) {
+          if (dispatch) {
+            setTasks(items, !items.every(({ node }) => node.attrs.task), tr);
+          }
+          return true;
+        }
+        if (!toggleList(commands)) {
+          return false;
+        }
+        if (dispatch) {
+          setTasks(selectedListItems(tr, this.type), true, tr);
+        }
+        return true;
+      };
+    return {
+      toggleTaskList: () =>
+        toggleTasks(
+          () => true,
+          (commands) => commands.toggleBulletList()
+        ),
+      toggleNumberedTaskList: () =>
+        toggleTasks(
+          (tr, pos) => tr.doc.resolve(pos).parent.type.name === "orderedList",
+          (commands) => commands.toggleOrderedList()
+        ),
+    };
   },
 
   /**

@@ -409,6 +409,22 @@ msgid "Keep things in order"
 msgstr "Mettre les éléments dans l’ordre"
 
 #: front/components/editor/document/blocks.ts
+msgid "Task list"
+msgstr "Liste de tâches"
+
+#: front/components/editor/document/blocks.ts
+msgid "Track tasks with checkboxes"
+msgstr "Suivre des tâches avec des cases à cocher"
+
+#: front/components/editor/document/blocks.ts
+msgid "Numbered task list"
+msgstr "Liste de tâches numérotée"
+
+#: front/components/editor/document/blocks.ts
+msgid "Track tasks in order"
+msgstr "Suivre des tâches dans l’ordre"
+
+#: front/components/editor/document/blocks.ts
 msgctxt "document paragraph style"
 msgid "Quote"
 msgstr "Citation"

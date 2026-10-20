@@ -1,12 +1,14 @@
 import type { DocumentEmbeddableFile } from "@app/components/editor/document/types";
 import {
   ActionFrame,
+  CheckDone01,
   Code01,
   DoubleQuotes,
   Hash01,
   Heading01,
   Image01,
   List,
+  ListSelect,
   Minus,
   Table,
   Type01,
@@ -96,6 +98,22 @@ export const BLOCKS: DocumentBlock[] = [
     keywords: "ordered",
     selectionToolbarMenu: "list",
     apply: (chain: ChainedCommands) => chain.toggleOrderedList().run(),
+  },
+  {
+    name: msg`Task list`,
+    description: msg`Track tasks with checkboxes`,
+    icon: ListSelect,
+    keywords: "todo checkbox checklist",
+    selectionToolbarMenu: "list",
+    apply: (chain: ChainedCommands) => chain.toggleTaskList().run(),
+  },
+  {
+    name: msg`Numbered task list`,
+    description: msg`Track tasks in order`,
+    icon: CheckDone01,
+    keywords: "todo checkbox checklist ordered steps",
+    selectionToolbarMenu: "list",
+    apply: (chain: ChainedCommands) => chain.toggleNumberedTaskList().run(),
   },
   {
     name: msg({ message: "Quote", context: "document paragraph style" }),
