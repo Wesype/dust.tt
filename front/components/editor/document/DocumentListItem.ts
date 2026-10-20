@@ -1,15 +1,62 @@
-import { isEmptyParagraphMarker } from "@app/components/editor/document/DocumentParagraph";
+import {
+  isEmptyParagraphMarker,
+  KEEPS_EMPTY_ATTR,
+} from "@app/components/editor/document/DocumentParagraph";
 import { isNumber } from "@app/types/shared/utils/general";
 import type { JSONContent, MarkdownToken, RenderContext } from "@tiptap/core";
 import { renderNestedMarkdownContent } from "@tiptap/core";
 import { ListItem } from "@tiptap/extension-list";
 
+const ALTERNATE_MARKER_ATTR = "alternateMarker";
+
+const isList = (node: JSONContent | undefined) =>
+  node?.type === "bulletList" || node?.type === "orderedList";
+
 const listMarker = (context: RenderContext) => {
+  const alternate = context.meta?.parentAttrs?.[ALTERNATE_MARKER_ATTR] === true;
   if (context.parentType !== "orderedList") {
-    return "- ";
+    return alternate ? "* " : "- ";
   }
   const start = context.meta?.parentAttrs?.start;
-  return `${(isNumber(start) ? start : 1) + context.index}. `;
+  return `${(isNumber(start) ? start : 1) + context.index}${alternate ? ")" : "."} `;
+};
+
+const isEmptyParagraph = (node: JSONContent | undefined) =>
+  node?.type === "paragraph" && !node.content?.length;
+
+const withAttr = (node: JSONContent, name: string): JSONContent => ({
+  ...node,
+  attrs: { ...node.attrs, [name]: true },
+});
+
+/**
+ * @cc [owner:rfrenoy,label:product] document-adjacent-lists
+ * Lists of the same type MUST be written so each reads back as its own list: a list directly after
+ * one of its type with the other marker of its kind, `*` for `-` and `)` for `.`, alternating along
+ * a run of such lists, and a single empty paragraph between two of them as `&nbsp;`. Every other
+ * list MUST be written with `-` or `.`.
+ */
+export const withSeparatedLists = (node: JSONContent): JSONContent => {
+  const children = node.content;
+  if (!children) {
+    return node;
+  }
+  let alternate = false;
+  const content = children.map((child, index) => {
+    const previous = children[index - 1];
+    const next = children[index + 1];
+    alternate = isList(child) && previous?.type === child.type && !alternate;
+    const written = withSeparatedLists(child);
+    if (alternate) {
+      return withAttr(written, ALTERNATE_MARKER_ATTR);
+    }
+    return isEmptyParagraph(child) &&
+      isList(previous) &&
+      previous?.type === next?.type
+      ? withAttr(written, KEEPS_EMPTY_ATTR)
+      : written;
+  });
+  return { ...node, content };
 };
 
 const opensWithEmptyParagraphMarker = (token: MarkdownToken) => {

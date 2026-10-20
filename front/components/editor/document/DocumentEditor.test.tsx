@@ -1178,8 +1178,8 @@ describe("Document for a file the editor cannot open", () => {
   });
 
   it("keeps the general note when the refusal names no element", async () => {
-    // Mixed bullet markers: supported elements that would not read back the same.
-    renderRefused("A\n\n* a\n+ b\n");
+    // A link destination with a space: supported elements that would not read back the same.
+    renderRefused("See [docs](<https://example.com/a b>)\n");
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "This document uses formatting the editor doesn't support yet, so it can't be edited here."

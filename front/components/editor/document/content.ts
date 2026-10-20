@@ -13,6 +13,7 @@ import {
 } from "@app/components/editor/document/DocumentComments";
 import { DOCUMENT_FRAME_NODE_NAME } from "@app/components/editor/document/DocumentFrame";
 import { DOCUMENT_IMAGE_NODE_NAME } from "@app/components/editor/document/DocumentImage";
+import { withSeparatedLists } from "@app/components/editor/document/DocumentListItem";
 import {
   hasExtraCells,
   TABLE_CELL_NODE_NAME,
@@ -228,7 +229,7 @@ const serializeWithAnchors = (
     formatting
   );
   return substituteAnchorDirectives(
-    documentMarkdown.serialize(anchored),
+    documentMarkdown.serialize(withSeparatedLists(anchored)),
     directives
   );
 };

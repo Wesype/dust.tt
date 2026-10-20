@@ -34,9 +34,11 @@ backtick saves with tildes instead, since a backtick fence cannot hold one. Inli
 or linked text, but never in a comment. A refused file is shown as read-only source
 with the reason. Line endings are not preserved: a CRLF file opens and is written back with LF.
 
-An empty paragraph in a list item or a quote saves as `&nbsp;`, TipTap's marker for an empty
-paragraph that blank lines would drop, and reads back as an empty paragraph, so an empty list item
-saves as `- &nbsp;`. An empty heading saves as its `#` marker alone.
+An empty paragraph in a list item or a quote, or alone between two lists of the same type, saves
+as `&nbsp;`, TipTap's marker for an empty paragraph that blank lines would drop, and reads back as
+an empty paragraph, so an empty list item saves as `- &nbsp;`. An empty heading saves as its `#`
+marker alone. A list directly after a list of the same type saves with the other marker, `*` or
+`1)`, so Markdown reads it as its own list.
 
 ## Tables
 

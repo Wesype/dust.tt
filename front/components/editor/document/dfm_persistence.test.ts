@@ -259,7 +259,10 @@ describe("loadDfm", () => {
   // the log allowlist fails here instead of silently logging it as invalid DFM.
   it.each([
     ["an unsupported element", "Intro.\n\n- [ ] todo\n"],
-    ["Markdown that changes when saved", "A\n\n* a\n+ b\n"],
+    [
+      "Markdown that changes when saved",
+      "See [docs](<https://example.com/a b>)\n",
+    ],
     [
       "an anchor the editor cannot show",
       `See [docs](https://example.com/:comment-start{id=c1}a:comment-end{id=c1})\n\n${OPEN_THREAD}`,
@@ -1165,13 +1168,13 @@ describe("getUnsavableBodyReason", () => {
   it("names where a refused body would read back differently, without its text", () => {
     const content = {
       type: "doc",
-      content: [bullets("secret plan"), bullets("other secret")],
+      content: [paragraphOf("    secret plan")],
     };
 
     expect(saveDfm(envelope, content).isErr()).toBe(true);
     const reason = getUnsavableBodyReason(envelope, content);
     expect(reason).toBe(
-      "The document would not read back the same as Markdown, from bulletList > end, which reads back as bulletList > listItem."
+      "The document would not read back the same as Markdown, from paragraph, which reads back as codeBlock."
     );
     expect(reason).not.toContain("secret");
   });
@@ -1204,5 +1207,127 @@ describe("getUnsavableBodyReason", () => {
     "The document could not be written as Markdown.",
   ])("logs the serializer's reason %s as is", (reason) => {
     expect(loggableRefusal(reason)).toBe(reason);
+  });
+});
+
+describe("lists following each other", () => {
+  const list = (type: string, ...texts: string[]): JSONContent => ({
+    type,
+    content: texts.map((text) => ({
+      type: "listItem",
+      content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+    })),
+  });
+  const empty: JSONContent = { type: "paragraph" };
+
+  it.each([
+    ["two bulleted lists", "- a\n\n* b\n"],
+    ["three bulleted lists", "- a\n\n* b\n\n- c\n"],
+    ["two numbered lists", "1. a\n2. b\n\n1) c\n"],
+    ["a numbered list from 3, then one from 1", "3. a\n\n1) b\n"],
+    ["two nested lists", "- x\n  - a\n  * b\n"],
+    ["two lists in a quote", "> - a\n>\n> * b\n"],
+    ["two bulleted lists with an empty line between", "- a\n\n&nbsp;\n\n- b\n"],
+    [
+      "two numbered lists with an empty line between",
+      "1. a\n\n&nbsp;\n\n1. b\n",
+    ],
+  ])("opens %s as separate lists and saves them as written", (_, source) => {
+    expect(roundTrip(source)).toBe(source);
+  });
+
+  it.each([
+    [
+      "two bulleted lists",
+      [list("bulletList", "a"), list("bulletList", "b")],
+      "- a\n\n* b\n",
+    ],
+    [
+      "three numbered lists",
+      [
+        list("orderedList", "a"),
+        list("orderedList", "b"),
+        list("orderedList", "c"),
+      ],
+      "1. a\n\n1) b\n\n1. c\n",
+    ],
+    [
+      "a bulleted list, then a numbered one",
+      [list("bulletList", "a"), list("orderedList", "b")],
+      "- a\n\n1. b\n",
+    ],
+    [
+      "two numbered lists with an empty line between",
+      [list("orderedList", "a"), empty, list("orderedList", "b")],
+      "1. a\n\n&nbsp;\n\n1. b\n",
+    ],
+    [
+      "a list, an empty line and text",
+      [list("bulletList", "a"), empty, paragraphOf("b")],
+      "- a\n\n\n\nb\n",
+    ],
+  ])("saves %s", (_, content, expected) => {
+    const document = { type: "doc", content };
+    const saved = saveDfm({ frontMatter: null, anchorOrder: [] }, document);
+    expect(saved).toEqual(new Ok(expected));
+    expect(
+      documentSchema.nodeFromJSON(load(expected).content).toJSON()
+    ).toEqual(documentSchema.nodeFromJSON(document).toJSON());
+  });
+
+  it("opens lists written without a blank line between them, saving them with one", () => {
+    expect(roundTrip("- a\n* b\n1. c\n1) d\n")).toBe(
+      "- a\n\n* b\n\n1. c\n\n1) d\n"
+    );
+  });
+
+  it("writes a lone list with `-` or `.`, whatever marker it was read with", () => {
+    expect(roundTrip("* a\n\nText\n\n1) b\n")).toBe("- a\n\nText\n\n1. b\n");
+  });
+});
+
+function paragraphOf(text: string): JSONContent {
+  return { type: "paragraph", content: [{ type: "text", text }] };
+}
+
+describe("numbered sub-lists after an empty paragraph", () => {
+  const item = (...content: JSONContent[]): JSONContent => ({
+    type: "listItem",
+    content,
+  });
+  const numbered = (start: number, text: string): JSONContent => ({
+    type: "orderedList",
+    ...(start !== 1 ? { attrs: { start } } : {}),
+    content: [item(paragraphOf(text))],
+  });
+  const document = (start: number): JSONContent => ({
+    type: "doc",
+    content: [
+      {
+        type: "bulletList",
+        content: [
+          item(
+            paragraphOf("x"),
+            numbered(1, "a"),
+            { type: "paragraph" },
+            numbered(start, "b")
+          ),
+        ],
+      },
+    ],
+  });
+
+  it.each([
+    ["from 3, after a blank line", 3, "- x\n  1. a\n\n  &nbsp;\n  \n  3. b\n"],
+    ["from 1, on the next line", 1, "- x\n  1. a\n\n  &nbsp;\n  1. b\n"],
+  ])("saves one starting %s", (_, start, expected) => {
+    const saved = saveDfm(
+      { frontMatter: null, anchorOrder: [] },
+      document(start)
+    );
+    expect(saved).toEqual(new Ok(expected));
+    expect(
+      documentSchema.nodeFromJSON(load(expected).content).toJSON()
+    ).toEqual(documentSchema.nodeFromJSON(document(start)).toJSON());
   });
 });
