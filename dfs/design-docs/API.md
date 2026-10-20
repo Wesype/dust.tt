@@ -215,6 +215,8 @@ The server enforces grant permissions on every call. Mount/client checks of the 
 | `Lookup` | `r` on the parent and returned child. |
 | `List` | `r` on the directory; only children with `r` are returned. |
 | `Search` | `r` on each hit and supplied scope directory. |
+| `Lock` | `r+w` on the target, for acquisition and refresh. |
+| `Unlock` | Matching lock ID; no object permission required. |
 | create | `r+w` on the parent. |
 | update, write | `r+w` on the target. |
 | move | `r+w` on the source and target directories; `r` on the moved object. |
@@ -618,6 +620,52 @@ the 4 MiB encoded reply budget receive individual `CAPACITY` errors without bein
 reply budget reserves conservative overhead for every result, including errors. Attributes and
 contents share one FDB snapshot. All returned attributes carry the same `object.store_version`.
 
+## Exclusive locks
+
+Exclusive file/directory locks protect Apply mutations; reads and grant management remain available.
+The app resolves collaboration channels by object ID. Normal session authentication applies.
+
+```text
+Lock(LockRequest) -> LockState
+Unlock(ObjectLock) -> Empty
+
+LockRequest {
+  object_id: ObjectId
+  lock_id?: UUIDv7               // Omit to acquire; supply to refresh.
+}
+
+LockState {
+  lock_id: UUIDv7                // Server-generated ownership token.
+  expires_at: Timestamp          // Server time + 1 minute.
+}
+
+ObjectLock {
+  object_id: ObjectId
+  lock_id: UUIDv7
+}
+```
+
+Lock IDs are secret, scoped to tenant/object, and independent of session identity. They use 16 bytes
+on the wire and 32 lowercase hex characters in TypeScript. Invalid IDs give `INVALID_INPUT`.
+
+Acquire/refresh require `r+w`: missing objects give `NOT_FOUND`, missing permissions `FORBIDDEN`.
+Acquiring an active lock gives `WOULD_BLOCK`. Refresh preserves the matching unexpired ID; otherwise
+`LOCK_LOST`. Unlock clears only the matching ID, succeeds if absent/mismatched, and needs no object
+permission. Moves preserve locks; removal clears them. Locks do not change attributes or versions.
+
+Refresh about every 20 seconds. Expiry releases the lock without waiting for cleanup.
+
+`Apply.locks` supplies at most one `ObjectLock` per object; duplicates give `INVALID_INPUT`.
+After authorization, each operation checks locks in its write transaction: an active lock without
+an `ObjectLock` gives `WOULD_BLOCK`; a supplied `ObjectLock` without a matching active lock gives
+`LOCK_LOST`. No lock and no supplied `ObjectLock` allows mutation. Checks cover batching targets:
+Create's parent/new object; Update/Write's object; Move's object/both parents; Remove's object/parent.
+Directory locks are not recursive. An operation returning `WOULD_BLOCK` or `LOCK_LOST` makes no
+changes; other operations continue.
+Retry only blocked operations, never successful operations or unknown write outcomes.
+
+Lock RPCs and Apply with nonempty `locks` currently return `UNSUPPORTED`.
+
 ## Filesystem mutations
 
 ### Apply
@@ -630,6 +678,7 @@ Requires a **session key**.
 ```text
 ApplyRequest {
   operations: Operation[]        // Nonempty; subject to the 4 MiB RPC request limit.
+  locks: ObjectLock[]            // Held locks; currently UNSUPPORTED if nonempty.
 }
 
 Operation = create(CreateOperation)
@@ -919,7 +968,9 @@ Application failures, including authentication rejections, carry a gRPC status w
 Clients handle any failure using the gRPC status when details are absent. Individual batch failures
 always carry `ErrorDetails`. Stable protocol codes are `INTERNAL`,
 `INVALID_INPUT`, `NOT_FOUND`, `FORBIDDEN`, `UNAUTHENTICATED`, `ALREADY_EXISTS`, `NOT_DIRECTORY`,
-`IS_DIRECTORY`, `NOT_EMPTY`, `CAPACITY`, `UNAVAILABLE`, `UNSUPPORTED`, and `NAME_TOO_LONG`.
+`IS_DIRECTORY`, `NOT_EMPTY`, `CAPACITY`, `UNAVAILABLE`, `UNSUPPORTED`, `NAME_TOO_LONG`, `WOULD_BLOCK`,
+and `LOCK_LOST`. Lock contention uses gRPC `ABORTED` and maps to `EWOULDBLOCK` in the mount;
+`LOCK_LOST` uses `FAILED_PRECONDITION` and maps to `EIO`.
 
 ## Future work
 

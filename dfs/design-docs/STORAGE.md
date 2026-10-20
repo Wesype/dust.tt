@@ -85,6 +85,28 @@ of at most 100 entries. Each batch rechecks session state with conflict tracking
 protecting refreshed sessions and allowing concurrent sweepers to retry safely. Stale and orphaned
 index entries are also removed. Authentication rejects expired sessions independently of cleanup.
 
+## Exclusive locks
+
+FDB is authoritative for [exclusive locks](API.md#exclusive-locks).
+
+| Key | Value | Rationale |
+| --- | --- | --- |
+| `dfs-v1-{env}/tenant/<tenantId>/object/<objectId>/lock` | Tuple `(lock_id_bytes, expires_at_ms)`; UUIDv7 as 16 bytes. | Object ownership token and expiry. |
+| `dfs-v1-{env}/lock-expiry/<expiresAtMs>/<tenantId>/<objectId>` | Empty. | Expiry scan, using session expiry's timestamp encoding. |
+
+Acquire, refresh, and unlock use `with_idempotent_transaction`. Each attempt checks expiry against
+current server time; receipt replay returns the committed expiry. Lock state and its expiry entry
+change atomically. Moves preserve both; removal clears both.
+
+One helper checks Apply's batching targets after authorization and before writes. All lock reads
+use ordinary FDB reads (`snapshot = false`) in the write transaction, so concurrent lock changes
+force a retry. Lock state is never cached; session authentication uses the existing cache.
+
+Cleanup joins `sweep_expired_storage`, sharing jitter and a fixed cutoff one minute before the pass.
+It drains at most 100 entries per transaction, independently of other cleanup failures. Before
+clearing a lock, it rechecks that its expiry matches the indexed timestamp and is past the cutoff.
+Stale/orphaned index entries are cleared alone. Expiry takes effect independently of cleanup.
+
 ## Transaction receipts
 
 All resource writes use `fdb::with_idempotent_transaction`, protecting the whole transaction and its
