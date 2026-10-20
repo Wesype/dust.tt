@@ -4,35 +4,18 @@ import type { LLMErrorInfo } from "@app/lib/api/llm/types/errors";
 import type { SystemPromptSections } from "@app/lib/api/llm/types/options";
 import type { Authenticator } from "@app/lib/auth";
 import type { AgentMessageContentParser } from "@app/lib/llms/agent_message_content_parser";
-import type {
-  AgentFunctionCallContentType,
-  AgentProviderPassthroughContentType,
-  AgentReasoningContentType,
-  AgentTextContentType,
-} from "@app/types/assistant/agent_message_content";
 import type { AgentLoopRuntimeData } from "@app/types/assistant/agent_run";
 import type {
   AgentMessageType,
   ConversationWithoutContentType,
   UserMessageType,
 } from "@app/types/assistant/conversation";
-import type { ModelConversationTypeMultiActions } from "@app/types/assistant/generation";
+import type {
+  ModelConversationTypeMultiActions,
+  NormalizedModelOutput,
+} from "@app/types/assistant/generation";
 import type { ModelConfigurationType } from "@app/types/assistant/models/types";
 import type { Ok, Result } from "@app/types/shared/result";
-
-export type Output = {
-  actions: Array<{
-    functionCallId: string;
-    name: string | null;
-  }>;
-  generation: string | null;
-  contents: Array<
-    | AgentTextContentType
-    | AgentFunctionCallContentType
-    | AgentReasoningContentType
-    | AgentProviderPassthroughContentType
-  >;
-};
 
 export type GetOutputRequestParams = {
   modelConversationRes: Ok<{
@@ -81,7 +64,7 @@ export type GetOutputRequestParams = {
 
 export type GetOutputResponse = Result<
   {
-    output: Output;
+    output: NormalizedModelOutput;
     dustRunId: string;
     nativeChainOfThought: string;
     timeToFirstEvent?: number;

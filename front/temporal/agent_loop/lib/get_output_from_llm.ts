@@ -17,8 +17,8 @@ import { makeModelInterruptionError } from "@app/temporal/agent_loop/lib/run_mod
 import type {
   GetOutputRequestParams,
   GetOutputResponse,
-  Output,
 } from "@app/temporal/agent_loop/lib/types";
+import type { NormalizedModelOutput } from "@app/types/assistant/generation";
 import type { ModelIdType } from "@app/types/assistant/models/types";
 import { Err, Ok } from "@app/types/shared/result";
 import { safeParseJSON } from "@app/types/shared/utils/json_utils";
@@ -376,8 +376,8 @@ export async function getOutputFromLLMStream(
     }
   );
 
-  const contents: Output["contents"] = [];
-  const actions: Output["actions"] = [];
+  const contents: NormalizedModelOutput["contents"] = [];
+  const actions: NormalizedModelOutput["actions"] = [];
   let generation = "";
   let nativeChainOfThought = "";
   let stopReason: string | undefined = undefined;

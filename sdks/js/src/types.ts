@@ -896,6 +896,7 @@ const WhitelistableFeaturesSchema = FlexibleEnumSchema<
   | "gpt_5_6_terra_long_context"
   | "http_client_tool"
   | "index_private_slack_channel"
+  | "inference_hooks"
   | "labs_mcp_actions_dashboard"
   | "legacy_dust_apps"
   | "legacy_trigger_limits"

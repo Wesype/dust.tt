@@ -58,6 +58,11 @@ import type { Authenticator } from "@app/lib/auth";
 import { getFeatureFlags } from "@app/lib/auth";
 import type { DurationRecorder } from "@app/lib/duration_recorder";
 import {
+  makeInferenceHookDeniedError,
+  runBlockingInferenceHooks,
+} from "@app/lib/inference_hook";
+import type { BlockingInferenceHook } from "@app/lib/inference_hook";
+import {
   AgentMessageContentParser,
   getDelimitersConfiguration,
 } from "@app/lib/llms/agent_message_content_parser";
@@ -79,6 +84,7 @@ import { constructProjectContext } from "@app/lib/resources/skill/code_defined/g
 import { userMemorySkill } from "@app/lib/resources/skill/code_defined/system/user_memory";
 import { SkillResource } from "@app/lib/resources/skill/skill_resource";
 import { generateRandomModelSId } from "@app/lib/resources/string_ids_server";
+import { getShutdownSignal } from "@app/lib/shutdown_signal";
 import logger from "@app/logger/logger";
 import tracer from "@app/logger/tracer";
 import {
@@ -89,7 +95,10 @@ import { METRICS } from "@app/temporal/agent_loop/activities/instrumentation";
 import { RUN_MODEL_MAX_RETRIES } from "@app/temporal/agent_loop/config";
 import type { AgentLoopContextProvider } from "@app/temporal/agent_loop/lib/agent_loop_context_provider/types";
 import { getOutputFromLLMStream } from "@app/temporal/agent_loop/lib/get_output_from_llm";
-import { makeRunModelLLMError } from "@app/temporal/agent_loop/lib/run_model_errors";
+import {
+  makeModelInterruptionError,
+  makeRunModelLLMError,
+} from "@app/temporal/agent_loop/lib/run_model_errors";
 import type {
   AgentActionsEvent,
   AgentConfigurationType,
@@ -350,6 +359,11 @@ export function buildSpecificationsWithReplayPlaceholders(
 
 // This method is used by the multi-actions execution loop to pick the next action to execute and
 // generate its inputs.
+/**
+ * @cc [owner:frankaloia,label:product] after-model-denial-does-not-persist-output
+ * On a blocking `after_model_call` denial, the current attempt MUST NOT persist the model output as
+ * AgentStepContent or create actions, and MUST persist the policy error on the current step.
+ */
 export async function runModel(
   auth: Authenticator,
   {
@@ -360,6 +374,7 @@ export async function runModel(
     durationRecorder,
     activityTimeoutDeadlineMs,
     forceDisableToolUse = false,
+    blockingInferenceHooks = [],
   }: {
     contextProvider: AgentLoopContextProvider;
     runIds: string[];
@@ -369,6 +384,8 @@ export async function runModel(
     activityTimeoutDeadlineMs: number;
     // Set when the previous step came back empty: force the final generation.
     forceDisableToolUse?: boolean;
+    // TODO(inference-hooks tasks#11317): We will read this from a table and not pass via a function parameter.
+    blockingInferenceHooks?: readonly BlockingInferenceHook[];
   }
 ): Promise<{
   actions: AgentActionsEvent["actions"];
@@ -433,6 +450,27 @@ export async function runModel(
       conversation,
       step,
     });
+  }
+
+  async function isAgentMessageCancelled(): Promise<boolean> {
+    const messageRes = await ConversationResource.getMessageByIdInConversation(
+      auth,
+      conversation,
+      agentMessage.sId,
+      agentMessage.version
+    );
+
+    if (messageRes.isErr() || !messageRes.value.agentMessage) {
+      localLogger.info("Agent message not found, stopping");
+      return true;
+    }
+
+    if (messageRes.value.agentMessage.status === "cancelled") {
+      localLogger.info("Agent message cancelled, stopping");
+      return true;
+    }
+
+    return false;
   }
 
   // Helper function to flush all pending tokens from the content parser
@@ -888,6 +926,38 @@ export async function runModel(
     });
   }
 
+  const hookInputBase = {
+    agentConfiguration,
+    conversationWindow: modelConversationRes.value.modelConversation,
+    workspaceId: conversation.owner.sId,
+    conversationId: conversation.sId,
+    agentMessageId: agentMessage.sId,
+    agentMessageVersion: agentMessage.version,
+    step,
+  };
+  // The Stop request cancels the activity before the message is marked cancelled in the database.
+  const hookCancellationSignal = AbortSignal.any([
+    Context.current().cancellationSignal,
+    getShutdownSignal(),
+  ]);
+  const beforeModelCall = await runBlockingInferenceHooks({
+    featureFlags,
+    hooks: blockingInferenceHooks,
+    input: { ...hookInputBase, lifecycleEvent: "before_model_call" },
+    signal: hookCancellationSignal,
+  });
+  if (getShutdownSignal().aborted) {
+    throw makeModelInterruptionError();
+  }
+  if (beforeModelCall.action === "deny") {
+    await publishAgentError(
+      makeInferenceHookDeniedError("before_model_call", beforeModelCall)
+    );
+  }
+  if (beforeModelCall.action !== "allow") {
+    return null;
+  }
+
   durationRecorder.record(METRICS.TIME_TO_PROVIDER_CALL);
 
   const getOutputFromActionResponse = await getOutputFromLLMStream(auth, {
@@ -1000,30 +1070,37 @@ export async function runModel(
   // Create a new object to avoid mutation
   const updatedFunctionCallStepContentIds = { ...functionCallStepContentIds };
 
-  // It is possible that temporal requested activity cancellation but the
-  // activity has not yet received the signal. In that case, the agent message
-  // row would have status to cancelled (done via finalizeCancellationActivity).
-  const messageRes = await ConversationResource.getMessageByIdInConversation(
-    auth,
-    conversation,
-    agentMessage.sId,
-    agentMessage.version
-  );
-
-  if (messageRes.isErr()) {
-    logger.info("Agent message not found, stopping");
+  // Temporal may have requested activity cancellation before this worker receives the signal.
+  // finalizeCancellationActivity marks the message cancelled in the database first.
+  if (await isAgentMessageCancelled()) {
     return null;
   }
 
-  const messageRow = messageRes.value;
-
-  if (!messageRow.agentMessage) {
-    logger.info("Agent message not found, stopping");
-    return null;
+  const afterModelCall = await runBlockingInferenceHooks({
+    featureFlags,
+    hooks: blockingInferenceHooks,
+    input: {
+      ...hookInputBase,
+      lifecycleEvent: "after_model_call",
+      modelOutput: output,
+      dustRunId,
+    },
+    signal: hookCancellationSignal,
+  });
+  // The model output is complete, so a verdict reached during shutdown is still persisted within
+  // the grace period. Only hooks aborted by the shutdown need a retry on another worker.
+  if (afterModelCall.action === "cancelled" && getShutdownSignal().aborted) {
+    throw makeModelInterruptionError();
   }
-
-  if (messageRow.agentMessage.status === "cancelled") {
-    logger.info("Agent message cancelled, stopping");
+  if (afterModelCall.action === "deny") {
+    // `agent_error` does not retract tokens already streamed to the client. Denied output can
+    // remain visible until reload even though it is not persisted.
+    await publishAgentError(
+      makeInferenceHookDeniedError("after_model_call", afterModelCall),
+      dustRunId
+    );
+  }
+  if (afterModelCall.action !== "allow") {
     return null;
   }
 

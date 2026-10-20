@@ -1,6 +1,10 @@
 import type {
   AgentContentItemType,
   AgentErrorContentType,
+  AgentFunctionCallContentType,
+  AgentProviderPassthroughContentType,
+  AgentReasoningContentType,
+  AgentTextContentType,
 } from "@app/types/assistant/agent_message_content";
 import type { ReasoningEffort } from "@app/types/assistant/models/types";
 
@@ -107,6 +111,20 @@ export type ModelMessageTypeMultiActions =
 
 export type ModelConversationTypeMultiActions = {
   messages: ModelMessageTypeMultiActionsWithoutContentFragment[];
+};
+
+export type NormalizedModelOutput = {
+  actions: Array<{
+    functionCallId: string;
+    name: string | null;
+  }>;
+  generation: string | null;
+  contents: Array<
+    | AgentTextContentType
+    | AgentFunctionCallContentType
+    | AgentReasoningContentType
+    | AgentProviderPassthroughContentType
+  >;
 };
 
 /**

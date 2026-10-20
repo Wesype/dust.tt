@@ -11,6 +11,12 @@ export const WHITELISTABLE_FEATURES_CONFIG = {
     stage: "dust_only",
     owner: "flvndvd",
   },
+  inference_hooks: {
+    description:
+      "Evaluate model inputs and outputs with workspace inference hook policies",
+    stage: "dust_only",
+    owner: "frankaloia",
+  },
   group_seat_provisioning: {
     description:
       "Map workspace groups to seat types so group membership drives members' seats",
