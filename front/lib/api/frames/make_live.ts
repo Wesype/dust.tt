@@ -7,6 +7,7 @@ import { canWriteFrameV2Source } from "@app/lib/api/frames/permissions";
 import type { FramePublicationError } from "@app/lib/api/frames/publication_storage";
 import {
   activateFramePublication,
+  checkFramePublicFunctionSharing,
   loadFramePublicationDescriptor,
 } from "@app/lib/api/frames/publication_storage";
 import { checkFrameFunctionSharing } from "@app/lib/api/frames/publish_from_source";
@@ -117,6 +118,14 @@ export async function makeFrameDraftLive(
       });
       if (sharing.isErr()) {
         return sharing;
+      }
+
+      const publicSharing = await checkFramePublicFunctionSharing(
+        fresh,
+        descriptor.value.functions
+      );
+      if (publicSharing.isErr()) {
+        return publicSharing;
       }
 
       const wasInDraftMode = fresh.isInFrameDraftMode;
