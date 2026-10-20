@@ -454,7 +454,7 @@ function buildColumns({
             meta: {
               className: cn(
                 COLLAPSED_COLUMN_CLASSES,
-                "@xs:w-56 @xs:max-w-none @xs:px-2"
+                "@xs:w-44 @xs:max-w-none @xs:px-2"
               ),
               headerAlign: "left",
             },
@@ -475,7 +475,9 @@ function buildColumns({
       id: "credits",
       accessorKey: "credits",
       header: labels.totalCredits,
-      meta: { headerAlign: "right" },
+      // Numeric columns have fixed widths that fit their header and values in
+      // every locale, so the free width goes to the name column.
+      meta: { className: "w-28", headerAlign: "right" },
       cell: (info) => (
         <DataTable.BasicCellContent
           className="justify-end text-right tabular-nums"
@@ -491,7 +493,7 @@ function buildColumns({
       meta: {
         className: cn(
           COLLAPSED_COLUMN_CLASSES,
-          "@sm:w-auto @sm:max-w-none @sm:px-2"
+          "@sm:w-32 @sm:max-w-none @sm:px-2"
         ),
         headerAlign: "right",
       },
@@ -510,7 +512,7 @@ function buildColumns({
       meta: {
         className: cn(
           COLLAPSED_COLUMN_CLASSES,
-          "@lg:w-auto @lg:max-w-none @lg:px-2"
+          "@lg:w-40 @lg:max-w-none @lg:px-2"
         ),
         headerAlign: "right",
       },
@@ -726,10 +728,10 @@ export function ConsumptionAttributionRowsView({
   const columnLabels = useMemo<AttributionColumnLabels>(
     () => ({
       name: t`Name`,
-      activeMembers: t`Active / total members`,
+      activeMembers: t`Active users`,
       usageVsAverage: t`Vs workspace avg`,
       costShare: t`Consumption share`,
-      totalCredits: t`Total credits`,
+      totalCredits: t`Credits`,
       vsPrev: t`Vs prev`,
       addToFilters: t`Add to filters`,
       removeFromFilters: t`Remove from filters`,
