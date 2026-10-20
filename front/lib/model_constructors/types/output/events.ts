@@ -106,7 +106,7 @@ export type TokenUsageContent = {
   serviceTier?: ServiceTier;
   // The model that answered, when the provider switched to another model (for
   // example after an Anthropic refusal). Absent when the requested model
-  // answered. Usage is still billed under the requested model for now.
+  // answered.
   servedModel?: string;
   // Token usage of each model the provider tried, in order. Only set when the
   // provider switched models.
@@ -117,7 +117,9 @@ export type TokenUsageIteration = {
   // model that answered and "message" an earlier attempt.
   type: string;
   model: string | null;
+  // Total cache-write tokens. longCacheCreated is the part written to the 1h cache.
   cacheCreated: number;
+  longCacheCreated: number;
   cacheHit: number;
   standardInput: number;
   totalOutput: number;

@@ -423,6 +423,8 @@ function fallbackUsageFields(
       type: iteration.type,
       model: "model" in iteration ? iteration.model : null,
       cacheCreated: iteration.cache_creation_input_tokens,
+      longCacheCreated:
+        iteration.cache_creation?.ephemeral_1h_input_tokens ?? 0,
       cacheHit: iteration.cache_read_input_tokens,
       standardInput: iteration.input_tokens,
       totalOutput: iteration.output_tokens,

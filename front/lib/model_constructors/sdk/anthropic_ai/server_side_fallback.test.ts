@@ -84,7 +84,10 @@ const FALLBACK_ITERATIONS: BetaIterationsUsage = [
     input_tokens: 110,
     cache_read_input_tokens: 0,
     cache_creation_input_tokens: 20,
-    cache_creation: null,
+    cache_creation: {
+      ephemeral_1h_input_tokens: 15,
+      ephemeral_5m_input_tokens: 5,
+    },
     output_tokens: 30,
   },
 ];
@@ -94,6 +97,7 @@ const EXPECTED_USAGE_ITERATIONS = [
     type: "message",
     model: REQUESTED_MODEL,
     cacheCreated: 0,
+    longCacheCreated: 0,
     cacheHit: 0,
     standardInput: 100,
     totalOutput: 7,
@@ -102,6 +106,7 @@ const EXPECTED_USAGE_ITERATIONS = [
     type: "fallback_message",
     model: FALLBACK_MODEL,
     cacheCreated: 20,
+    longCacheCreated: 15,
     cacheHit: 0,
     standardInput: 110,
     totalOutput: 30,
