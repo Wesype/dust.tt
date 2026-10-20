@@ -50,6 +50,7 @@ function describe(error: DfmError): string {
 const EDITOR_REFUSALS = [
   /^The Markdown uses formatting the editor cannot keep: [^\n]+\.$/,
   /^The Markdown could not be parsed\.$/,
+  /^The Markdown's task lists would not read back the same\.$/,
   /^The Markdown does not fit the editor's document structure\.$/,
   /^The Markdown would not read back the same after editing\.$/,
   /^A comment is anchored where the editor cannot show it\.$/,

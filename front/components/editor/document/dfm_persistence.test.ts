@@ -225,24 +225,9 @@ describe("loadDfm", () => {
 
   it.each([
     [
-      "a task list",
-      "Intro.\n\n- [ ] todo\n",
-      "The Markdown uses formatting the editor cannot keep: a task list.",
-    ],
-    [
       "HTML",
       "Intro.\n\n<div>x</div>\n",
       "The Markdown uses formatting the editor cannot keep: HTML.",
-    ],
-    [
-      "a numbered task list",
-      "1. [ ] todo\n",
-      "The Markdown uses formatting the editor cannot keep: a task list.",
-    ],
-    [
-      "a task list nested in an ordered list",
-      "1. one\n   - [ ] todo\n",
-      "The Markdown uses formatting the editor cannot keep: a task list.",
     ],
     [
       "HTML in a quote",
@@ -258,7 +243,8 @@ describe("loadDfm", () => {
   // Each source makes the editor write one of its own refusals: rewording one without updating
   // the log allowlist fails here instead of silently logging it as invalid DFM.
   it.each([
-    ["an unsupported element", "Intro.\n\n- [ ] todo\n"],
+    ["an unsupported element", "Intro.\n\n<div>x</div>\n"],
+    ["a task the editor would not read as one", "- 1. [ ] todo\n"],
     [
       "Markdown that changes when saved",
       "See [docs](<https://example.com/a b>)\n",
@@ -392,7 +378,7 @@ describe("loadDfm", () => {
     ],
     [
       "Markdown the editor cannot reproduce",
-      "Intro.\n\n- [ ] todo\n",
+      "Intro.\n\n<div>x</div>\n",
       "formatting the editor cannot keep",
     ],
     [
@@ -987,6 +973,106 @@ describe("TipTap's token parsing step", () => {
     expect(publicParse).toHaveBeenCalled();
     expect(expected.loaded).toHaveProperty("value");
     expect(loadAndSave({ loadDfm, saveDfm }, source)).toEqual(expected);
+  });
+});
+
+/** Each list item as `depth:mark:text`, the mark `[ ]`, `[x]` or `-` for a plain item. */
+function listItems(document: JSONContent): string[] {
+  const items: string[] = [];
+  const visit = (node: JSONContent, depth: number) => {
+    if (node.type === "listItem") {
+      const mark = node.attrs?.task
+        ? node.attrs.checked
+          ? "[x]"
+          : "[ ]"
+        : "-";
+      const text = (node.content?.[0]?.content ?? [])
+        .map((inline) => inline.text ?? "")
+        .join("");
+      items.push(`${depth}:${mark}:${text}`);
+    }
+    node.content?.forEach((child) =>
+      visit(child, node.type === "listItem" ? depth + 1 : depth)
+    );
+  };
+  visit(document, 0);
+  return items;
+}
+
+describe("task lists", () => {
+  it.each([
+    [
+      "checked and unchecked items, nested",
+      "- [ ] Prepare the launch\n  - [x] Blog post\n  - [ ] Press kit\n- [x] Done\n",
+      [
+        "0:[ ]:Prepare the launch",
+        "1:[x]:Blog post",
+        "1:[ ]:Press kit",
+        "0:[x]:Done",
+      ],
+    ],
+    [
+      "alternating items",
+      "- a\n- [ ] b\n- c\n- [x] d\n",
+      ["0:-:a", "0:[ ]:b", "0:-:c", "0:[x]:d"],
+    ],
+    [
+      "a numbered task list starting at 3",
+      "3. [x] Third\n4. [ ] Fourth\n",
+      ["0:[x]:Third", "0:[ ]:Fourth"],
+    ],
+    [
+      "a task list nested in a numbered list",
+      "1. one\n   - [ ] todo\n   - [x] done\n2. two\n",
+      ["0:-:one", "1:[ ]:todo", "1:[x]:done", "0:-:two"],
+    ],
+    [
+      "a task with two paragraphs",
+      "- [ ] A task\n\n  and its second paragraph\n- [x] Another\n",
+      ["0:[ ]:A task", "0:[x]:Another"],
+    ],
+  ])("opens %s and saves it as written", (_, source, items) => {
+    expect(listItems(load(source).content)).toEqual(items);
+    expect(roundTrip(source)).toBe(source);
+  });
+
+  it.each([
+    [
+      "`*` bullets and `X`",
+      "* [X] Done\n* [ ] Open\n",
+      "- [x] Done\n- [ ] Open\n",
+    ],
+    ["`)` numbers", "1) [ ] One\n2) [x] Two\n", "1. [ ] One\n2. [x] Two\n"],
+  ])("normalizes %s", (_, source, saved) => {
+    expect(roundTrip(source)).toBe(saved);
+    expect(roundTrip(saved)).toBe(saved);
+  });
+
+  it.each([
+    [
+      "inside one item",
+      "- [ ] Buy :comment-start{id=c1}fresh:comment-end{id=c1} milk\n- Notes\n",
+    ],
+    [
+      "across a task and a plain item",
+      "- [ ] Buy :comment-start{id=c1}milk\n- Notes:comment-end{id=c1} here\n",
+    ],
+  ])("keeps a comment %s", (_, body) => {
+    const source = `${body}\n${OPEN_THREAD}`;
+    const { content } = load(source);
+
+    expect(markedTexts(content).some((text) => text.endsWith("[c1]"))).toBe(
+      true
+    );
+    expect(roundTrip(source)).toBe(source);
+  });
+
+  it("refuses a task the editor would not read as one", () => {
+    const loaded = loadDfm("- 1. [ ] todo\n");
+
+    expect(loaded.isErr() && loaded.error).toBe(
+      "The Markdown's task lists would not read back the same."
+    );
   });
 });
 

@@ -16,6 +16,7 @@ import {
 import { serializeDfm } from "@app/lib/markdown/dfm";
 import { FIXTURE, FIXTURES } from "@app/lib/markdown/dfm/tests/dfm.test_utils";
 import { BODY_FRAGMENT_NAME } from "@app/types/collab";
+import { Ok } from "@app/types/shared/result";
 import type { LocalTransactionOrigin } from "@hocuspocus/server";
 import type { JSONContent } from "@tiptap/core";
 import { prosemirrorJSONToYXmlFragment } from "@tiptap/y-tiptap";
@@ -78,6 +79,21 @@ describe("dfmToYDoc and yDocToDfm", () => {
     expect(yDocToDfm({ doc: copy, comments: live.value.comments })).toEqual(
       savedByEditor(FIXTURE)
     );
+  });
+
+  it("keep the tasks of a mixed list through a Yjs update", () => {
+    const source =
+      "- Groceries\n- [ ] Milk\n- [x] Eggs\n\n1. [x] Write\n2. Send\n";
+    const live = dfmToYDoc(source);
+    expect(live.isOk()).toBe(true);
+    if (!live.isOk()) {
+      return;
+    }
+
+    const copy = new Y.Doc();
+    Y.applyUpdate(copy, Y.encodeStateAsUpdate(live.value.doc));
+
+    expect(yDocToDfm({ doc: copy, comments: [] })).toEqual(new Ok(source));
   });
 
   it("write the edits and threads the session holds, never threads from the shared document", () => {
@@ -161,9 +177,9 @@ describe("dfmToYDoc and yDocToDfm", () => {
   });
 
   it("refuse a file the editor refuses, with the same reason", () => {
-    const taskList = "Intro.\n\n- [ ] todo\n";
-    const editor = loadDfm(taskList);
-    const live = dfmToYDoc(taskList);
+    const html = "Intro.\n\n<div>x</div>\n";
+    const editor = loadDfm(html);
+    const live = dfmToYDoc(html);
 
     expect(editor.isErr()).toBe(true);
     expect(live.isErr()).toBe(true);
@@ -246,11 +262,11 @@ describe("replaceYDocContent", () => {
   });
 
   it("refuse a file the editor refuses, with the same reason, changing nothing", () => {
-    const taskList = "Intro.\n\n- [ ] todo\n";
-    const editor = loadDfm(taskList);
+    const html = "Intro.\n\n<div>x</div>\n";
+    const editor = loadDfm(html);
     const { doc, comments } = loadLive(BEFORE);
 
-    const replaced = replaceYDocContent(doc, taskList, ORIGIN);
+    const replaced = replaceYDocContent(doc, html, ORIGIN);
 
     expect(editor.isErr() && replaced.isErr()).toBe(true);
     if (editor.isErr() && replaced.isErr()) {

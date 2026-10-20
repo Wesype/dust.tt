@@ -7,6 +7,37 @@ import type { JSONContent, MarkdownToken, RenderContext } from "@tiptap/core";
 import { renderNestedMarkdownContent } from "@tiptap/core";
 import { ListItem } from "@tiptap/extension-list";
 
+export const LIST_ITEM_NODE_NAME = "listItem";
+
+const isCheckbox = (token: MarkdownToken) => token.type === "checkbox";
+
+/**
+ * A task item's tokens without its checkbox, which marked puts either first in the item or first
+ * in the item's first paragraph or text.
+ */
+export const taskItemTokens = (token: MarkdownToken): MarkdownToken[] => {
+  const [first, ...rest] = token.tokens ?? [];
+  if (!token.task || !first) {
+    return token.tokens ?? [];
+  }
+  if (isCheckbox(first)) {
+    return rest;
+  }
+  return first.tokens?.some(isCheckbox)
+    ? [
+        { ...first, tokens: first.tokens.filter((t) => !isCheckbox(t)) },
+        ...rest,
+      ]
+    : (token.tokens ?? []);
+};
+
+/** GFM reads a task marker only when text follows it on its line. */
+export const isWritableTask = (node: JSONContent) =>
+  node.attrs?.task === true && (node.content?.[0]?.content?.length ?? 0) > 0;
+
+const taskMarker = (node: JSONContent) =>
+  isWritableTask(node) ? (node.attrs?.checked ? "[x] " : "[ ] ") : "";
+
 const ALTERNATE_MARKER_ATTR = "alternateMarker";
 
 const isList = (node: JSONContent | undefined) =>
@@ -78,7 +109,11 @@ const isMarkerParagraph = (node: JSONContent | undefined) => {
   );
 };
 
-/** StarterKit's list item, a numbered one counted from its list's `start`, 0 included. */
+/**
+ * StarterKit's list item, which is a task when `task` is set, done when `checked` also is. A
+ * task item is written `- [ ] ` or `1. [x] `, its content aligned with the list marker, and an
+ * empty one as an empty item.
+ */
 /**
  * @cc [owner:rfrenoy,label:product] document-empty-list-item
  * An item whose first paragraph consists only of `&nbsp;` or a non-breaking space MUST read with
@@ -86,24 +121,48 @@ const isMarkerParagraph = (node: JSONContent | undefined) => {
  * included, MUST read as text.
  */
 export const DocumentListItem = ListItem.extend({
-  parseMarkdown(token, helpers) {
-    const parsed = this.parent?.(token, helpers) ?? [];
-    if (
-      Array.isArray(parsed) ||
-      "mark" in parsed ||
-      !opensWithEmptyParagraphMarker(token)
-    ) {
-      return parsed;
-    }
-    const [first, ...rest] = parsed.content ?? [];
-    return isMarkerParagraph(first)
-      ? { ...parsed, content: [{ type: "paragraph" }, ...rest] }
-      : parsed;
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      task: {
+        default: false,
+        keepOnSplit: true,
+        renderHTML: ({ task }) => (task ? { "data-task": "true" } : {}),
+      },
+      checked: {
+        default: false,
+        keepOnSplit: false,
+        renderHTML: ({ task, checked }) =>
+          task && checked ? { "data-checked": "true" } : {},
+      },
+    };
   },
 
+  parseMarkdown(token, helpers) {
+    const itemToken = { ...token, tokens: taskItemTokens(token) };
+    const parsed = this.parent?.(itemToken, helpers) ?? [];
+    if (Array.isArray(parsed) || "mark" in parsed) {
+      return parsed;
+    }
+    const [first, ...others] = parsed.content ?? [];
+    const item =
+      opensWithEmptyParagraphMarker(itemToken) && isMarkerParagraph(first)
+        ? { ...parsed, content: [{ type: "paragraph" }, ...others] }
+        : parsed;
+    return token.task
+      ? {
+          ...item,
+          attrs: { ...item.attrs, task: true, checked: token.checked === true },
+        }
+      : item;
+  },
+
+  // The task marker follows the list marker, which alone sets where nested content aligns.
   renderMarkdown(node, h, context) {
-    return renderNestedMarkdownContent(node, h, listMarker(context), context, {
+    const prefix = listMarker(context);
+    const rendered = renderNestedMarkdownContent(node, h, prefix, context, {
       alignNestedToPrefix: context.parentType === "orderedList",
     });
+    return `${prefix}${taskMarker(node)}${rendered.slice(prefix.length)}`;
   },
 });
