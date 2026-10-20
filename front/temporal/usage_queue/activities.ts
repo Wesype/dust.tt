@@ -418,6 +418,7 @@ export async function emitMetronomeUsageEventsActivity(
     const json = a.toJSON();
 
     return {
+      createdAt: json.createdAt,
       toolName: json.toolName,
       mcpServerId: json.mcpServerId,
       internalMCPServerName: json.internalMCPServerName,

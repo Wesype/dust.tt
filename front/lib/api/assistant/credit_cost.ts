@@ -43,6 +43,7 @@ import type { UserMessageOrigin } from "@app/types/assistant/conversation";
 import { AGENT_MESSAGE_STATUSES_TO_TRACK } from "@app/types/assistant/conversation";
 
 interface CreditActionMinimalInput {
+  createdAt?: number;
   toolName: string;
   internalMCPServerName: InternalMCPServerNameType | null;
   mcpServerId?: string | null;
@@ -172,6 +173,7 @@ export async function computeAndStoreAgentMessageCredits(
   const costCredits = computeAgentMessageCredits({
     runUsages,
     actions: actions.map((action) => ({
+      createdAt: action.createdAt.getTime(),
       toolName: action.toolName,
       internalMCPServerName: action.metadata.internalMCPServerName,
       mcpServerId: action.metadata.mcpServerId ?? null,

@@ -114,6 +114,7 @@ export function toolAwuFromActions(
 // ---------------------------------------------------------------------------
 
 interface ToolAction {
+  createdAt?: number;
   toolName: string;
   mcpServerId: string | null;
   internalMCPServerName: InternalMCPServerNameType | null;
