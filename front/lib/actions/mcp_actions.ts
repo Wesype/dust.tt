@@ -316,6 +316,7 @@ function makeClientSideMCPToolConfigurations(
     displayLabels: tool.displayLabels,
     ...(tool.timeoutMs && { timeoutMs: tool.timeoutMs }),
     ...(tool.eager && { eager: true }),
+    ...(tool.declaredBilling && { declaredBilling: tool.declaredBilling }),
   }));
 }
 
@@ -1451,6 +1452,7 @@ async function listToolsForClientSideMCPServer(
             dustMeta?.stake ?? DEFAULT_CLIENT_SIDE_MCP_TOOL_STAKE_LEVEL,
           argumentsRequiringApproval: dustMeta?.argumentsRequiringApproval,
           ...(dustMeta?.timeoutMs && { timeoutMs: dustMeta.timeoutMs }),
+          ...(dustMeta?.billing && { declaredBilling: dustMeta.billing }),
         };
       }),
     ];

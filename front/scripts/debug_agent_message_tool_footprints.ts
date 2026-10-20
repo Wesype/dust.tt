@@ -628,6 +628,7 @@ makeScript(
         createdAt: action.createdAt.getTime(),
         internalMCPServerName: action.metadata.internalMCPServerName,
         mcpServerId: action.metadata.mcpServerId ?? null,
+        declaredBilling: action.declaredBilling,
         status: action.status,
         toolName: getToolNameFromFunctionCallName(action.functionCallName),
       })),

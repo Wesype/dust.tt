@@ -30,6 +30,7 @@ import type { AgentActionSpecification } from "@app/lib/actions/types/agent";
 import { isInternalServerSideMCPToolConfiguration } from "@app/lib/actions/types/guards";
 import type {
   MCPToolRetryPolicyType,
+  ToolBillingInfo,
   ToolDisplayLabels,
 } from "@app/lib/api/mcp";
 import type { AgentMCPActionWithOutputType } from "@app/types/actions";
@@ -94,6 +95,8 @@ export type ClientSideMCPToolType = Omit<
   // When true, the tool is loaded upfront in the cached tools prefix instead of
   // being deferred behind tool search.
   eager?: boolean;
+  // Price declared by the client. Billing only honors it for Dust's own client-side servers.
+  declaredBilling?: ToolBillingInfo;
 };
 
 type WithToolNameMetadata<

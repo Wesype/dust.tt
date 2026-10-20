@@ -7,8 +7,7 @@ import {
 import type { ToolExecutionStatus } from "@app/lib/actions/statuses";
 import { isToolExecutionStatusBillable } from "@app/lib/actions/statuses";
 import { getMCPServerIdFromServerName } from "@app/lib/api/actions/mcp/client_side_server_id";
-import type { ToolCostCategory } from "@app/lib/api/mcp";
-import { TOOL_COST_CATEGORIES } from "@app/lib/api/mcp";
+import type { ToolBillingInfo, ToolCostCategory } from "@app/lib/api/mcp";
 import {
   allocateMicroCreditsByLargestRemainder,
   roundCreditsToMicroCredits,
@@ -47,9 +46,8 @@ export const TOOL_COST_CATEGORY_AWU_WEIGHTS: Record<ToolCostCategory, number> =
 // that reaches (or crosses) the cap remains fully billed.
 export const MCP_SERVER_AGENT_MESSAGE_TOOL_AWU_CAP = 20;
 
-// Tools of Dust's own client-side MCP servers run on the user's device and are billed like internal
-// utilities: rated basic, but free. Client-side servers registered by third-party apps through the
-// API remain external servers.
+// Tools of Dust's own client-side MCP servers are billed at the price they declare. Client-side
+// servers registered by third-party apps through the API remain external servers.
 const DUST_CLIENT_SIDE_MCP_SERVER_IDS: ReadonlySet<string> = new Set(
   Object.values(DUST_CLIENT_SIDE_MCP_SERVER_NAMES).map((serverName) =>
     getMCPServerIdFromServerName({ serverName })
@@ -75,6 +73,8 @@ export type AgentMessageBillingAction = {
   // Old actions may not carry their server id. Internal servers still have a
   // stable name fallback. Unidentified external actions are left uncapped.
   mcpServerId?: string | null;
+  // Price the tool declared, stored on its action when its client-side server listed it.
+  declaredBilling?: ToolBillingInfo | null;
   status: ToolExecutionStatus;
   toolName: string;
 };
@@ -155,32 +155,35 @@ export function computeRunKey(dustRunIds: string[]): string {
   return computeRunFingerprint(dustRunIds).slice(0, 8);
 }
 
-export function isToolCostCategory(value: string): value is ToolCostCategory {
-  return TOOL_COST_CATEGORIES.some((category) => category === value);
-}
-
 /**
  * @cc [owner:philipperolet,label:product] client-side-tool-pricing
  * A tool call made from `DUST_CLIENT_SIDE_TOOL_PRICING_DATE` on a client-side MCP server registered
- * under a `DUST_CLIENT_SIDE_MCP_SERVER_NAMES` name MUST be rated `basic` with `freeUsage`. Any
- * other client-side tool call, including one of these servers' made before that date, MUST be
- * rated like an external server's: `advanced`, without `freeUsage`.
+ * under a `DUST_CLIENT_SIDE_MCP_SERVER_NAMES` name MUST be rated with the `toolCostCategory` and
+ * `freeUsage` the tool declared, or `basic` with `freeUsage` if it declared none. Any other
+ * client-side tool call, including one of these servers' made before that date, MUST be rated like
+ * an external server's, whatever it declared: `advanced`, without `freeUsage`.
  */
 export function getToolBillingInfo({
   createdAt,
+  declaredBilling,
   internalMCPServerName,
   mcpServerId,
   toolName,
 }: Pick<
   AgentMessageBillingAction,
-  "createdAt" | "internalMCPServerName" | "mcpServerId" | "toolName"
->): { toolCostCategory: ToolCostCategory; freeUsage: boolean } {
+  | "createdAt"
+  | "declaredBilling"
+  | "internalMCPServerName"
+  | "mcpServerId"
+  | "toolName"
+>): ToolBillingInfo {
   const isDustClientSideToolCall =
     !!mcpServerId &&
     DUST_CLIENT_SIDE_MCP_SERVER_IDS.has(mcpServerId) &&
     (!createdAt || createdAt >= DUST_CLIENT_SIDE_TOOL_PRICING_DATE.getTime());
   if (isDustClientSideToolCall) {
-    return { toolCostCategory: "basic", freeUsage: true };
+    // Clients that predate price declarations only had basic, free tools.
+    return declaredBilling ?? { toolCostCategory: "basic", freeUsage: true };
   }
 
   // External servers default to the paid advanced category.

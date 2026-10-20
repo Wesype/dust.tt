@@ -8,6 +8,7 @@ import { maybeProactivelyAutoUpgradeSeatOnCapReached } from "@app/lib/api/credit
 import { recordProgrammaticSpendLimitUsage } from "@app/lib/api/credits/programmatic_usage_limit";
 import { recordGroupSharedUsage } from "@app/lib/api/groups/group_shared_usage_limit";
 import { recordApiKeySpendLimitUsage } from "@app/lib/api/keys/spend_limit";
+import type { ToolBillingInfo } from "@app/lib/api/mcp";
 import { PostHogServerSideTracking } from "@app/lib/api/posthog";
 import { isProgrammaticUsage } from "@app/lib/api/programmatic_usage/tracking";
 import {
@@ -47,6 +48,7 @@ interface CreditActionMinimalInput {
   toolName: string;
   internalMCPServerName: InternalMCPServerNameType | null;
   mcpServerId?: string | null;
+  declaredBilling?: ToolBillingInfo | null;
   status: ToolExecutionStatus;
 }
 
@@ -177,6 +179,7 @@ export async function computeAndStoreAgentMessageCredits(
       toolName: action.toolName,
       internalMCPServerName: action.metadata.internalMCPServerName,
       mcpServerId: action.metadata.mcpServerId ?? null,
+      declaredBilling: action.declaredBilling,
       status: action.status,
     })),
     contextOrigin: triggeringUserMessageOrigin,

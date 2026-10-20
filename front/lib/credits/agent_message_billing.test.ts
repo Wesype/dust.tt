@@ -218,7 +218,7 @@ describe("buildAgentMessageBillingPlan", () => {
     ]);
   });
 
-  it("makes Dust's own client-side tool calls free from the pricing date, but not third-party ones", () => {
+  it("prices Dust's own client-side tool calls as declared from the pricing date, third-party ones as external", () => {
     const plan = buildAgentMessageBillingPlan({
       actions: [
         {
@@ -236,8 +236,16 @@ describe("buildAgentMessageBillingPlan", () => {
           status: "succeeded",
         },
         {
+          toolName: "write_workbook",
+          mcpServerId: "mcp-client-side:excel_add_in_client",
+          declaredBilling: { toolCostCategory: "advanced", freeUsage: false },
+          internalMCPServerName: null,
+          status: "succeeded",
+        },
+        {
           toolName: "create_ticket",
           mcpServerId: "mcp-client-side:my_ticketing_app",
+          declaredBilling: { toolCostCategory: "basic", freeUsage: true },
           internalMCPServerName: null,
           status: "succeeded",
         },
@@ -251,6 +259,11 @@ describe("buildAgentMessageBillingPlan", () => {
         ratedCredits: 1,
         billedCredits: 0,
         billingDisposition: "free_tool",
+      }),
+      expect.objectContaining({
+        ratedCredits: 3,
+        billedCredits: 3,
+        billingDisposition: "billed",
       }),
       expect.objectContaining({
         ratedCredits: 3,
