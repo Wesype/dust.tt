@@ -6,6 +6,13 @@ import {
   saveCollabSession,
 } from "@app/lib/api/collab/session_file";
 import { replaceYDocContent, yDocToDfm } from "@app/lib/api/collab/ydoc";
+import type { EditSourceFailure } from "@app/lib/api/documents/agent_edit_source";
+import {
+  DfmAgentDocumentError,
+  EDIT_TOO_LARGE_MESSAGE,
+  editDocumentSource,
+} from "@app/lib/api/documents/agent_edit_source";
+import { WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES } from "@app/lib/api/files/file_system_ops";
 import type { DfmComment } from "@app/lib/markdown/dfm";
 import { setTimeoutAsync } from "@app/lib/utils/async_utils";
 import logger from "@app/logger/logger";
@@ -22,6 +29,8 @@ import type {
 } from "@app/types/collab";
 import { BODY_FRAGMENT_NAME, toSessionName } from "@app/types/collab";
 import type {
+  CollabSourceEdit,
+  CollabSourceEditResult,
   CollabSourceWriteResult,
   CollabSourceReadResponse,
 } from "@app/types/collab_internal";
@@ -221,16 +230,145 @@ export async function writeSessionSource(
     agent,
   }: { file: CollabAccess; base: string; source: string; agent?: CollabAgent }
 ): Promise<Result<CollabSourceWriteResult, string>> {
+  const outcome = await applyInTurn(hocuspocus, {
+    file,
+    agent,
+    // A write applies only to the source it was made from.
+    fromCurrent: (current) => {
+      if (current !== base) {
+        return new Err("changed" as const);
+      }
+      return new Ok({ source, value: undefined });
+    },
+  });
+  if (outcome.isErr()) {
+    return outcome;
+  }
+  switch (outcome.value.kind) {
+    case "applied":
+      return new Ok("written");
+    case "declined":
+      return new Ok(outcome.value.reason);
+    case "closed":
+    case "busy":
+    case "unsaved":
+      return new Ok(outcome.value.kind);
+    default:
+      return assertNever(outcome.value);
+  }
+}
+
+/**
+ * @cc [owner:PopDaph,label:product;concurrency;security] collab-session-source-edit
+ * An edit MUST be applied as a write is (`collab-session-source-write`), with the same turn,
+ * `closed`, `busy` and `unsaved` answers and announcements, but MUST NOT compare with a `base`:
+ * at its turn, the source `readSessionSource` would return MUST be changed with
+ * `editDocumentSource`, so changes made since the agent read the document are kept. An edit that
+ * does not match that source, or whose result would be larger than
+ * `WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES`, MUST answer `edit_refused` with its reason
+ * (`too_large` for the size), and one whose result the codec refuses MUST fail; both change
+ * nothing.
+ */
+export async function editSessionSource(
+  hocuspocus: Hocuspocus<CollabAccess>,
+  {
+    file,
+    edit,
+    agent,
+  }: { file: CollabAccess; edit: CollabSourceEdit; agent?: CollabAgent }
+): Promise<Result<CollabSourceEditResult, string>> {
+  const outcome = await applyInTurn(hocuspocus, {
+    file,
+    agent,
+    fromCurrent: (
+      current
+    ): Result<{ source: string; value: number }, EditSourceFailure> => {
+      const edited = editDocumentSource(current, edit);
+      if (edited.isErr()) {
+        return edited;
+      }
+      if (
+        Buffer.byteLength(edited.value.source, "utf8") >
+        WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES
+      ) {
+        return new Err({
+          kind: "edit_refused",
+          error: new DfmAgentDocumentError("too_large", EDIT_TOO_LARGE_MESSAGE),
+        });
+      }
+      return new Ok({
+        source: edited.value.source,
+        value: edited.value.replacements,
+      });
+    },
+  });
+  if (outcome.isErr()) {
+    return outcome;
+  }
+  switch (outcome.value.kind) {
+    case "applied":
+      return new Ok({ result: "written", replacements: outcome.value.value });
+    case "declined": {
+      const { reason } = outcome.value;
+      switch (reason.kind) {
+        case "edit_refused":
+          return new Ok({
+            result: "edit_refused",
+            code: reason.error.code,
+            message: reason.error.message,
+          });
+        case "failed":
+          return new Err(reason.message);
+        default:
+          return assertNever(reason);
+      }
+    }
+    case "closed":
+    case "busy":
+    case "unsaved":
+      return new Ok({ result: outcome.value.kind });
+    default:
+      return assertNever(outcome.value);
+  }
+}
+
+/** What `applyInTurn` did: `declined` by `fromCurrent`, or not reached, changes nothing. */
+type TurnOutcome<T, R> =
+  | { kind: "applied"; value: T }
+  | { kind: "declined"; reason: R }
+  | { kind: "closed" | "busy" | "unsaved" };
+
+/**
+ * Changes `file`'s live document in its turn, as `collab-session-source-write` describes:
+ * 1. waits for the document's turn among its writes, edits and comment commands (`busy` after
+ *    `COLLAB_SOURCE_WRITE_WAIT_MS`, then never applied);
+ * 2. checks the document is still open (`closed`) and its saves work (`unsaved`);
+ * 3. reads its current source and asks `fromCurrent` for the new one, or a reason to decline;
+ * 4. applies it in the same synchronous step, so no edit slips in between, tells editors what
+ *    the agent did, and stores the document so the save writes it.
+ */
+async function applyInTurn<T, R>(
+  hocuspocus: Hocuspocus<CollabAccess>,
+  {
+    file,
+    agent,
+    fromCurrent,
+  }: {
+    file: CollabAccess;
+    agent?: CollabAgent;
+    fromCurrent: (current: string) => Result<{ source: string; value: T }, R>;
+  }
+): Promise<Result<TurnOutcome<T, R>, string>> {
   if (!file.canWrite) {
     return new Err("The file cannot be written.");
   }
   const documentName = toSessionName(file.workspaceId, file.canonicalPath);
   const open = await getLoadedSession(hocuspocus, documentName);
   if (!open) {
-    return new Ok("closed");
+    return new Ok({ kind: "closed" });
   }
   if (isStoppingWrites(hocuspocus)) {
-    return new Ok("busy");
+    return new Ok({ kind: "busy" });
   }
   const { document, session } = open;
   if (session.lastSave.revision === undefined) {
@@ -240,25 +378,27 @@ export async function writeSessionSource(
   }
 
   let turn: "waiting" | "taken" | "expired" = "waiting";
-  const write = (): Result<CollabSourceWriteResult, string> => {
+  const write = (): Result<TurnOutcome<T, R>, string> => {
     if (turn === "expired") {
-      return new Ok("busy");
+      return new Ok({ kind: "busy" });
     }
     turn = "taken";
     // Unloaded while it waited for its turn: a reload reads the file into a new document.
     if (document.isDestroyed) {
-      return new Ok("closed");
+      return new Ok({ kind: "closed" });
     }
     if (session.saveFailed) {
-      return new Ok("unsaved");
+      return new Ok({ kind: "unsaved" });
     }
     const current = yDocToDfm({ doc: document, comments: session.comments });
     if (current.isErr()) {
       return current;
     }
-    if (current.value !== base) {
-      return new Ok("changed");
+    const next = fromCurrent(current.value);
+    if (next.isErr()) {
+      return new Ok({ kind: "declined", reason: next.error });
     }
+    const { source } = next.value;
 
     // Before the change: Hocuspocus may batch the update, never a stateless message.
     const announced = agent !== undefined && source !== current.value;
@@ -330,7 +470,7 @@ export async function writeSessionSource(
       lastContext: file,
       lastTransactionOrigin: undefined,
     });
-    return new Ok("written");
+    return new Ok({ kind: "applied", value: next.value.value });
   };
 
   // A comment command builds the threads across an await: the write takes its turn among them, so
@@ -348,7 +488,7 @@ export async function writeSessionSource(
   // `write` runs at once when its turn comes: a turn already taken has finished.
   if (answered === "timeout" && turn === "waiting") {
     turn = "expired";
-    return new Ok("busy");
+    return new Ok({ kind: "busy" });
   }
   return written;
 }

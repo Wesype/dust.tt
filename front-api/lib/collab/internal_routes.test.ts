@@ -10,10 +10,12 @@ import { writeUserFile } from "@app/tests/utils/user_files";
 import { toSessionName } from "@app/types/collab";
 import {
   COLLAB_INTERNAL_ROUTES_PREFIX,
+  COLLAB_SOURCE_EDIT_PATH,
   COLLAB_SOURCE_READ_PATH,
   COLLAB_SOURCE_WRITE_PATH,
 } from "@app/types/collab_internal";
 import { Err } from "@app/types/shared/result";
+import { giveSessionRevision } from "@front-api/lib/collab/collab.test_utils";
 import { createCollabHocuspocus } from "@front-api/lib/collab/hocuspocus";
 import { createInternalRoutes } from "@front-api/lib/collab/internal_routes";
 import { createHono } from "@front-api/lib/hono";
@@ -268,6 +270,70 @@ describe("createInternalRoutes", () => {
     );
 
     expect(await response.json()).toMatchObject({ result: "refused" });
+    const after = await post(
+      COLLAB_SOURCE_READ_PATH,
+      request,
+      `Bearer ${SECRET}`,
+      hocuspocus
+    );
+    expect(await after.json()).toEqual({ open: true, source: "# Notes\n" });
+  });
+
+  it("applies an edit to the open document's current source", async () => {
+    const { hocuspocus, name, request } = await openNotes();
+    giveSessionRevision(hocuspocus, name);
+
+    const response = await post(
+      COLLAB_SOURCE_EDIT_PATH,
+      {
+        ...request,
+        edit: {
+          oldString: "Notes",
+          newString: "Edited",
+          expectedReplacements: 1,
+        },
+      },
+      `Bearer ${SECRET}`,
+      hocuspocus
+    );
+
+    expect(await response.json()).toEqual({
+      result: "written",
+      replacements: 1,
+    });
+    const after = await post(
+      COLLAB_SOURCE_READ_PATH,
+      request,
+      `Bearer ${SECRET}`,
+      hocuspocus
+    );
+    expect(await after.json()).toEqual({ open: true, source: "# Edited\n" });
+  });
+
+  it("refuses an edit for a user who can only read the document, changing nothing", async () => {
+    const { hocuspocus, request } = await openNotes();
+    vi.spyOn(DustFileSystem.prototype, "checkWriteAccess").mockReturnValue(
+      new Err(new DustFileSystemError("internal", "Read-only mount."))
+    );
+
+    const response = await post(
+      COLLAB_SOURCE_EDIT_PATH,
+      {
+        ...request,
+        edit: {
+          oldString: "Notes",
+          newString: "Edited",
+          expectedReplacements: 1,
+        },
+      },
+      `Bearer ${SECRET}`,
+      hocuspocus
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      error: { type: "file_read_only" },
+    });
     const after = await post(
       COLLAB_SOURCE_READ_PATH,
       request,

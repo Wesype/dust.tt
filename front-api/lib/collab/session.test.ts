@@ -3,6 +3,7 @@ import {
   saveCollabSession,
 } from "@app/lib/api/collab/session_file";
 import { dfmToYDoc } from "@app/lib/api/collab/ydoc";
+import { WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES } from "@app/lib/api/files/file_system_ops";
 import { toSessionName } from "@app/types/collab";
 import { Ok } from "@app/types/shared/result";
 import {
@@ -13,6 +14,7 @@ import {
 } from "@front-api/lib/collab/collab.test_utils";
 import { createCollabHocuspocus } from "@front-api/lib/collab/hocuspocus";
 import {
+  editSessionSource,
   readSessionSource,
   writeSessionSource,
 } from "@front-api/lib/collab/session";
@@ -39,7 +41,7 @@ vi.mock("@app/lib/api/collab/comments", () => ({
   dispatchSessionCommentMentions: vi.fn(async () => undefined),
 }));
 
-describe("readSessionSource and writeSessionSource", () => {
+describe("readSessionSource, writeSessionSource and editSessionSource", () => {
   const THREAD_SOURCE =
     "# Notes\n\nHello :comment-start{id=c1}there:comment-end{id=c1}.\n\n" +
     ":::annotations\n::comment{id=c1 status=open}\n\n" +
@@ -339,5 +341,71 @@ describe("readSessionSource and writeSessionSource", () => {
     expect(html.isErr()).toBe(true);
     expect(unwritable.isErr()).toBe(true);
     expect(await openSource(hocuspocus, name)).toBe(base);
+  });
+
+  it("apply an edit to the current source, keeping what was typed since the agent read it", async () => {
+    const hocuspocus = createCollabHocuspocus();
+    const { agent, name } = await collabAccesses();
+    const connection = await hocuspocus.openDirectConnection(name, {
+      ...agent,
+    });
+    await connection.transact((doc) => typeInto(doc, "Typed meanwhile."));
+
+    const edited = await editSessionSource(hocuspocus, {
+      file: agent,
+      edit: {
+        oldString: "Hello.",
+        newString: "Hello, edited.",
+        expectedReplacements: 1,
+      },
+    });
+
+    expect(edited).toEqual(new Ok({ result: "written", replacements: 1 }));
+    expect(await openSource(hocuspocus, name)).toBe(
+      "# Notes\n\nHello, edited.\n\nTyped meanwhile.\n"
+    );
+  });
+
+  it("refuse an edit whose text is no longer in the source, changing nothing", async () => {
+    const hocuspocus = createCollabHocuspocus();
+    const { agent, reader, name } = await collabAccesses();
+    await hocuspocus.openDirectConnection(name, reader);
+
+    const edited = await editSessionSource(hocuspocus, {
+      file: agent,
+      edit: {
+        oldString: "Goodbye.",
+        newString: "Hello, edited.",
+        expectedReplacements: 1,
+      },
+    });
+
+    expect(edited.isOk() && edited.value).toMatchObject({
+      result: "edit_refused",
+      code: "string_not_found",
+    });
+    expect(await openSource(hocuspocus, name)).toBe(SOURCE);
+  });
+
+  it("refuse an edit too large to build before building it, changing nothing", async () => {
+    const hocuspocus = createCollabHocuspocus();
+    const { agent, reader, name } = await collabAccesses();
+    await hocuspocus.openDirectConnection(name, reader);
+
+    // "l" twice in the body: twice a replacement over half the limit.
+    const edited = await editSessionSource(hocuspocus, {
+      file: agent,
+      edit: {
+        oldString: "l",
+        newString: "a".repeat(WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES / 2 + 1),
+        expectedReplacements: 2,
+      },
+    });
+
+    expect(edited.isOk() && edited.value).toMatchObject({
+      result: "edit_refused",
+      code: "too_large",
+    });
+    expect(await openSource(hocuspocus, name)).toBe(SOURCE);
   });
 });
