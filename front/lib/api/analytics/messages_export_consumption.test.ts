@@ -1,4 +1,5 @@
-import { fetchMessageExportRows } from "@app/lib/api/analytics/messages_export";
+import type { MessageExportRow } from "@app/lib/api/analytics/messages_export";
+import { generateMessageExportRows } from "@app/lib/api/analytics/messages_export";
 import type { ElasticsearchBaseDocument } from "@app/lib/api/elasticsearch";
 import { searchConsumptionAnalytics } from "@app/lib/api/elasticsearch";
 import { MICRO_CREDITS_PER_CREDIT } from "@app/lib/credits/units";
@@ -23,7 +24,20 @@ vi.mock("@app/lib/resources/storage", async (importActual) => {
   };
 });
 
-describe("fetchMessageExportRows (consumption index)", () => {
+async function collectMessageExportRows(
+  params: Parameters<typeof generateMessageExportRows>[0]
+): Promise<MessageExportRow[]> {
+  const rows: MessageExportRow[] = [];
+  for await (const page of generateMessageExportRows(params)) {
+    if (page.isErr()) {
+      throw page.error;
+    }
+    rows.push(...page.value);
+  }
+  return rows;
+}
+
+describe("generateMessageExportRows (consumption index)", () => {
   it("maps a composite aggregation response to MessageExportRow fields", async () => {
     const { authenticator, workspace } = await createResourceTest({
       role: "admin",
@@ -113,7 +127,7 @@ describe("fetchMessageExportRows (consumption index)", () => {
       })
     );
 
-    const result = await fetchMessageExportRows({
+    const rows = await collectMessageExportRows({
       auth: authenticator,
       owner: workspace,
       startDate: "2026-07-01",
@@ -122,13 +136,8 @@ describe("fetchMessageExportRows (consumption index)", () => {
       useConsumptionIndex: true,
     });
 
-    expect(result.isOk()).toBe(true);
-    if (result.isErr()) {
-      throw result.error;
-    }
-
-    expect(result.value).toHaveLength(1);
-    const row = result.value[0];
+    expect(rows).toHaveLength(1);
+    const row = rows[0];
 
     expect(row.messageId).toBe("msg_42");
     expect(row.createdAt).toBe("2026-07-01 14:30:00");

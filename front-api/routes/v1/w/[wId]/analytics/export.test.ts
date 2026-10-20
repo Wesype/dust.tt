@@ -113,24 +113,23 @@ vi.mock("@app/lib/api/analytics/messages_export", async () => ({
     "toolsUsed",
     "skillsUsed",
   ],
-  fetchMessageExportRows: vi.fn(
-    async () =>
-      new Ok([
-        {
-          messageId: "msg-1",
-          createdAt: "2024-06-01 10:00:00",
-          assistantId: "agent-1",
-          assistantName: "TestAgent",
-          assistantSettings: "published",
-          conversationId: "conv-1",
-          userId: "user-1",
-          userEmail: "alice@example.com",
-          source: "web",
-          toolsUsed: "Slack__post_message,Slack__search_messages",
-          skillsUsed: "research",
-        },
-      ])
-  ),
+  generateMessageExportRows: vi.fn(async function* () {
+    yield new Ok([
+      {
+        messageId: "msg-1",
+        createdAt: "2024-06-01 10:00:00",
+        assistantId: "agent-1",
+        assistantName: "TestAgent",
+        assistantSettings: "published",
+        conversationId: "conv-1",
+        userId: "user-1",
+        userEmail: "alice@example.com",
+        source: "web",
+        toolsUsed: "Slack__post_message,Slack__search_messages",
+        skillsUsed: "research",
+      },
+    ]);
+  }),
 }));
 
 vi.mock("@app/lib/api/analytics/feedback_export", async () => ({

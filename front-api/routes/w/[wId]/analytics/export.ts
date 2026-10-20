@@ -2,7 +2,7 @@ import {
   exportTable,
   isExportRangeTooLong,
   MAX_MESSAGES_EXPORT_DAYS,
-  stringifyExportTableAsCsv,
+  serializeExportTable,
 } from "@app/lib/api/analytics/export_tables";
 import { parseCalendarDate, timezoneSchema } from "@app/lib/api/timezone";
 import logger from "@app/logger/logger";
@@ -99,7 +99,8 @@ app.get(
     );
 
     if (format === "json") {
-      return ctx.json(result.value.rows);
+      ctx.header("Content-Type", "application/json");
+      return ctx.body(serializeExportTable(result.value, "json"));
     }
 
     ctx.header("Content-Type", "text/csv");
@@ -107,7 +108,7 @@ app.get(
       "Content-Disposition",
       `attachment; filename="dust_${table}_${startDate}_${endDate}.csv"`
     );
-    return ctx.body(stringifyExportTableAsCsv(result.value));
+    return ctx.body(serializeExportTable(result.value, "csv"));
   }
 );
 

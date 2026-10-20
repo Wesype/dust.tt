@@ -14,7 +14,7 @@ import {
 } from "@app/lib/api/analytics/feedback_export";
 import type { MessageExportRow } from "@app/lib/api/analytics/messages_export";
 import {
-  fetchMessageExportRows,
+  generateMessageExportRows,
   MESSAGE_EXPORT_HEADERS,
 } from "@app/lib/api/analytics/messages_export";
 import { fetchSkillUsageExportRows } from "@app/lib/api/analytics/skill_usage_export";
@@ -37,10 +37,12 @@ import {
 } from "@app/lib/api/timezone";
 import type { Authenticator } from "@app/lib/auth";
 import { hasFeatureFlag } from "@app/lib/auth";
+import logger from "@app/logger/logger";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
 import { assertNever } from "@app/types/shared/utils/assert_never";
 import { ONE_DAY_MS } from "@app/types/shared/utils/date_utils";
+import { asyncGeneratorToReadableStream } from "@app/types/shared/utils/streams";
 import type { WorkspaceType } from "@app/types/user";
 import type { estypes } from "@elastic/elasticsearch";
 
@@ -168,7 +170,8 @@ type ExportTableData =
   | {
       table: "messages";
       headers: typeof MESSAGE_EXPORT_HEADERS;
-      rows: MessageExportRow[];
+      workspaceId: string;
+      pages: AsyncGenerator<Result<MessageExportRow[], Error>>;
     }
   | {
       table: "feedback";
@@ -197,8 +200,8 @@ export function isExportRangeTooLong({
 /**
  * @cc [owner:philipperolet,label:performance] messages-export-range-cap
  * For `table: "messages"`, when `endDate` is more than `MAX_MESSAGES_EXPORT_DAYS` days after
- * `startDate`, `exportTable` MUST return an error without fetching any data: every message of the
- * range is loaded in memory, and wider ranges on large workspaces crash the server.
+ * `startDate`, `exportTable` MUST return an error without fetching any data: a single request pages
+ * through the whole range in Elasticsearch, and wider ranges on large workspaces run for too long.
  */
 export async function exportTable({
   auth,
@@ -257,7 +260,71 @@ export async function exportTable({
   }
 }
 
-export function stringifyExportTableAsCsv(data: ExportTableData): string {
+/**
+ * @cc [owner:tdraier,label:performance;error-handling] messages-export-streamed
+ * For `table: "messages"`, the returned body MUST be a stream that pulls the next page only when
+ * the consumer reads it; the full export MUST NOT be buffered in memory. When a page after the first
+ * one fails, the stream MUST error so the HTTP response is aborted rather than ending as if complete.
+ */
+export function serializeExportTable(
+  data: ExportTableData,
+  format: "csv" | "json"
+): string | ReadableStream<Uint8Array> {
+  if (data.table === "messages") {
+    return asyncGeneratorToReadableStream(
+      encodeMessageExportPages(data, format),
+      {
+        highWaterMark: 0,
+        onError: (err) =>
+          logger.error(
+            { workspaceId: data.workspaceId, err },
+            "[Analytics Export] Messages export failed mid-stream"
+          ),
+      }
+    );
+  }
+
+  return format === "json"
+    ? JSON.stringify(data.rows)
+    : stringifyExportTableAsCsv(data);
+}
+
+async function* encodeMessageExportPages(
+  { headers, pages }: Extract<ExportTableData, { table: "messages" }>,
+  format: "csv" | "json"
+): AsyncGenerator<Uint8Array> {
+  const encoder = new TextEncoder();
+  yield encoder.encode(format === "csv" ? rowsToCsv(headers, []) : "[");
+
+  let hasRows = false;
+  for await (const page of pages) {
+    if (page.isErr()) {
+      throw page.error;
+    }
+
+    if (page.value.length === 0) {
+      continue;
+    }
+
+    if (format === "csv") {
+      yield encoder.encode(
+        rowsToCsv(headers, page.value, { includeHeader: false })
+      );
+    } else {
+      const json = page.value.map((row) => JSON.stringify(row)).join(",");
+      yield encoder.encode(hasRows ? `,${json}` : json);
+      hasRows = true;
+    }
+  }
+
+  if (format === "json") {
+    yield encoder.encode("]");
+  }
+}
+
+function stringifyExportTableAsCsv(
+  data: Exclude<ExportTableData, { table: "messages" }>
+): string {
   switch (data.table) {
     case "usage_metrics":
       return rowsToCsv(data.headers, data.rows);
@@ -274,8 +341,6 @@ export function stringifyExportTableAsCsv(data: ExportTableData): string {
     case "skill_usage":
       return rowsToCsv(data.headers, data.rows);
     case "tool_usage":
-      return rowsToCsv(data.headers, data.rows);
-    case "messages":
       return rowsToCsv(data.headers, data.rows);
     case "feedback":
       return rowsToCsv(data.headers, data.rows);
@@ -615,7 +680,7 @@ async function exportMessages({
     "message_export_from_consumption_index"
   );
 
-  const result = await fetchMessageExportRows({
+  const pages = generateMessageExportRows({
     auth,
     owner,
     startDate,
@@ -624,17 +689,34 @@ async function exportMessages({
     useConsumptionIndex,
   });
 
-  if (result.isErr()) {
+  // Pull the first page now so a failing query surfaces as an Err before the caller commits to a
+  // streamed 200 response.
+  const firstPage = await pages.next();
+  if (!firstPage.done && firstPage.value.isErr()) {
     return new Err(
-      new Error(`Failed to retrieve message export: ${result.error.message}`)
+      new Error(
+        `Failed to retrieve message export: ${firstPage.value.error.message}`
+      )
     );
   }
 
   return new Ok({
     table: "messages",
     headers: MESSAGE_EXPORT_HEADERS,
-    rows: result.value,
+    workspaceId: owner.sId,
+    pages: prependPage(firstPage, pages),
   });
+}
+
+async function* prependPage<T>(
+  first: IteratorResult<T>,
+  rest: AsyncGenerator<T>
+): AsyncGenerator<T> {
+  if (first.done) {
+    return;
+  }
+  yield first.value;
+  yield* rest;
 }
 
 async function exportFeedback({

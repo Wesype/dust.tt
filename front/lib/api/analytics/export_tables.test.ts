@@ -1,9 +1,19 @@
-import { exportTable } from "@app/lib/api/analytics/export_tables";
-import { searchConsumptionAnalytics } from "@app/lib/api/elasticsearch";
+import {
+  exportTable,
+  serializeExportTable,
+} from "@app/lib/api/analytics/export_tables";
+import type { MessageExportRow } from "@app/lib/api/analytics/messages_export";
+import { MESSAGE_EXPORT_HEADERS } from "@app/lib/api/analytics/messages_export";
+import {
+  ElasticsearchError,
+  searchAnalytics,
+  searchConsumptionAnalytics,
+} from "@app/lib/api/elasticsearch";
 import { AgentConfigurationFactory } from "@app/tests/utils/AgentConfigurationFactory";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import { SkillFactory } from "@app/tests/utils/SkillFactory";
-import { Ok } from "@app/types/shared/result";
+import type { Result } from "@app/types/shared/result";
+import { Err, Ok } from "@app/types/shared/result";
 import { ONE_DAY_MS } from "@app/types/shared/utils/date_utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -16,7 +26,11 @@ const formatUtcDate = (date: Date) => date.toISOString().slice(0, 10);
 vi.mock("@app/lib/api/elasticsearch", async (importActual) => {
   const actual =
     await importActual<typeof import("@app/lib/api/elasticsearch")>();
-  return { ...actual, searchConsumptionAnalytics: vi.fn() };
+  return {
+    ...actual,
+    searchAnalytics: vi.fn(),
+    searchConsumptionAnalytics: vi.fn(),
+  };
 });
 
 // The export reads from the read replica; in tests there is no replica so
@@ -936,5 +950,156 @@ describe("exportTable source", () => {
       { date: "2024-01-15", source: "slack", messageCount: 2 },
       { date: "2024-01-15", source: "web", messageCount: 3 },
     ]);
+  });
+});
+
+function messageRow(messageId: string): MessageExportRow {
+  return {
+    messageId,
+    createdAt: "2026-07-01 12:00:00",
+    assistantId: "agent_1",
+    assistantName: "Agent",
+    assistantSettings: "published",
+    assistantTags: "",
+    conversationId: "conv_1",
+    parentMessageId: "",
+    userId: "user_1",
+    userEmail: "alice@example.com",
+    source: "web",
+    toolsUsed: "",
+    skillsUsed: "",
+    modelId: "",
+    modelProviderId: "",
+    modelResolutionMethod: "",
+    credits: 1,
+  };
+}
+
+function messagesExport(pages: Result<MessageExportRow[], Error>[]) {
+  const pulled: number[] = [];
+  async function* generate() {
+    for (const [i, page] of pages.entries()) {
+      pulled.push(i);
+      yield page;
+    }
+  }
+  return {
+    pulled,
+    data: {
+      table: "messages" as const,
+      headers: MESSAGE_EXPORT_HEADERS,
+      workspaceId: "w_test",
+      pages: generate(),
+    },
+  };
+}
+
+async function readBody(body: string | ReadableStream<Uint8Array>) {
+  return new Response(body).text();
+}
+
+describe("serializeExportTable messages", () => {
+  it("streams CSV with a single header line across pages", async () => {
+    const { data } = messagesExport([
+      new Ok([messageRow("msg_1"), messageRow("msg_2")]),
+      new Ok([]),
+      new Ok([messageRow("msg_3")]),
+    ]);
+
+    const lines = (await readBody(serializeExportTable(data, "csv")))
+      .trim()
+      .split("\n");
+
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toBe(MESSAGE_EXPORT_HEADERS.join(","));
+    expect(lines.slice(1).map((l) => l.split(",")[0])).toEqual([
+      "msg_1",
+      "msg_2",
+      "msg_3",
+    ]);
+  });
+
+  it("streams a single valid JSON array across pages", async () => {
+    const { data } = messagesExport([
+      new Ok([messageRow("msg_1")]),
+      new Ok([]),
+      new Ok([messageRow("msg_2"), messageRow("msg_3")]),
+    ]);
+
+    const parsed = JSON.parse(
+      await readBody(serializeExportTable(data, "json"))
+    );
+
+    expect(parsed).toEqual([
+      messageRow("msg_1"),
+      messageRow("msg_2"),
+      messageRow("msg_3"),
+    ]);
+  });
+
+  it("streams an empty JSON array when there are no messages", async () => {
+    const { data } = messagesExport([new Ok([])]);
+
+    expect(
+      JSON.parse(await readBody(serializeExportTable(data, "json")))
+    ).toEqual([]);
+  });
+
+  it("errors the stream when a later page fails", async () => {
+    const { data, pulled } = messagesExport([
+      new Ok([messageRow("msg_1")]),
+      new Err(new Error("es unavailable")),
+      new Ok([messageRow("msg_2")]),
+    ]);
+
+    await expect(readBody(serializeExportTable(data, "csv"))).rejects.toThrow(
+      "es unavailable"
+    );
+    expect(pulled).toEqual([0, 1]);
+  });
+
+  it("pulls the next page only when the consumer reads", async () => {
+    const { data, pulled } = messagesExport([
+      new Ok([messageRow("msg_1")]),
+      new Ok([messageRow("msg_2")]),
+    ]);
+
+    const body = serializeExportTable(data, "csv");
+    if (typeof body === "string") {
+      throw new Error("Expected a stream for the messages table.");
+    }
+    const reader = body.getReader();
+
+    await reader.read();
+    await reader.read();
+    expect(pulled).toEqual([0]);
+
+    await reader.read();
+    expect(pulled).toEqual([0, 1]);
+    await reader.cancel();
+  });
+});
+
+describe("exportTable messages", () => {
+  it("returns an Err when the first Elasticsearch page fails", async () => {
+    const { authenticator, workspace } = await createResourceTest({
+      role: "admin",
+    });
+
+    vi.mocked(searchAnalytics).mockResolvedValueOnce(
+      new Err(new ElasticsearchError("query_error", "es unavailable"))
+    );
+
+    const result = await exportTable({
+      auth: authenticator,
+      table: "messages",
+      startDate: "2026-07-01",
+      endDate: "2026-07-02",
+      timezone: "UTC",
+      owner: workspace,
+      includeHiddenAgents: false,
+    });
+
+    expect(result.isErr()).toBe(true);
   });
 });

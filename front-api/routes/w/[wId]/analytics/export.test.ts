@@ -1,7 +1,4 @@
-import {
-  exportTable,
-  stringifyExportTableAsCsv,
-} from "@app/lib/api/analytics/export_tables";
+import { exportTable } from "@app/lib/api/analytics/export_tables";
 import { createPrivateApiMockRequest } from "@app/tests/utils/generic_private_api_tests";
 import type { MembershipRoleType } from "@app/types/memberships";
 import { Ok } from "@app/types/shared/result";
@@ -13,7 +10,6 @@ vi.mock(import("@app/lib/api/analytics/export_tables"), async (orig) => {
   return {
     ...mod,
     exportTable: vi.fn(),
-    stringifyExportTableAsCsv: vi.fn(),
   };
 });
 
@@ -61,7 +57,6 @@ describe("GET /api/w/:wId/analytics/export", () => {
         rows: [],
       })
     );
-    vi.mocked(stringifyExportTableAsCsv).mockReturnValue("date,messages\n");
     const { workspace } = await setupTest();
 
     const response = await exportRequest(workspace.sId);
@@ -71,7 +66,9 @@ describe("GET /api/w/:wId/analytics/export", () => {
     expect(response.headers.get("Content-Disposition")).toContain(
       "dust_usage_metrics_2026-01-01_2026-01-31.csv"
     );
-    expect(await response.text()).toBe("date,messages\n");
+    expect(await response.text()).toBe(
+      "date,messages,conversations,activeUsers\n"
+    );
   });
 
   it("returns 200 with JSON rows when format is json", async () => {

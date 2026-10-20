@@ -5,6 +5,7 @@ import {
   fetchTagNames,
   fetchUserEmails,
 } from "@app/lib/api/analytics/enrichment";
+import { ExportLookupCache } from "@app/lib/api/analytics/export_lookup_cache";
 import { resolveServerDisplayNames } from "@app/lib/api/assistant/observability/tool_usage";
 import { buildAgentAnalyticsBaseQuery } from "@app/lib/api/assistant/observability/utils";
 import type { ElasticsearchBaseDocument } from "@app/lib/api/elasticsearch";
@@ -28,6 +29,7 @@ import {
 import { isModelResolutionMethod } from "@app/types/assistant/models/types";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
+import { removeNulls } from "@app/types/shared/utils/general";
 import type { WorkspaceType } from "@app/types/user";
 import type { estypes } from "@elastic/elasticsearch";
 import { buildConsumptionScopeQuery } from "./consumption/scope";
@@ -101,10 +103,9 @@ function joinDistinctSorted(values: (string | undefined | null)[]): string {
     .join(",");
 }
 
-async function fetchAllMessageDocuments(
+async function* generateMessageDocumentPages(
   query: estypes.QueryDslQueryContainer
-): Promise<Result<AgentMessageDocument[], Error>> {
-  const allDocs: AgentMessageDocument[] = [];
+): AsyncGenerator<Result<AgentMessageDocument[], Error>> {
   let searchAfter: estypes.SortResults | undefined;
 
   while (true) {
@@ -115,25 +116,20 @@ async function fetchAllMessageDocuments(
     });
 
     if (result.isErr()) {
-      return new Err(new Error(result.error.message));
+      yield new Err(new Error(result.error.message));
+      return;
     }
 
     const { hits } = result.value.hits;
-    for (const hit of hits) {
-      if (hit._source) {
-        allDocs.push(hit._source);
-      }
-    }
+    yield new Ok(removeNulls(hits.map((hit) => hit._source)));
 
     if (hits.length < PAGE_SIZE) {
-      break;
+      return;
     }
 
     const lastHit = hits[hits.length - 1];
     searchAfter = lastHit.sort;
   }
-
-  return new Ok(allDocs);
 }
 
 // Limit page size so we don't exceed the 65536 bucket limits.
@@ -341,18 +337,17 @@ function consumptionBucketToDocument(
   };
 }
 
-async function fetchAllMessageDocumentsFromConsumptionIndex(
+async function* generateConsumptionMessageDocumentPages(
   auth: Authenticator,
   startDate: string,
   endDate: string
-): Promise<Result<AgentMessageDocument[], Error>> {
+): AsyncGenerator<Result<AgentMessageDocument[], Error>> {
   const query = buildConsumptionScopeQuery({
     auth,
     startDate,
     endDate,
   });
 
-  const allDocs: AgentMessageDocument[] = [];
   let afterKey: Record<string, string> | undefined;
 
   while (true) {
@@ -365,35 +360,41 @@ async function fetchAllMessageDocumentsFromConsumptionIndex(
     });
 
     if (result.isErr()) {
-      return new Err(new Error(result.error.message));
+      yield new Err(new Error(result.error.message));
+      return;
     }
 
     const byMessage = result.value.aggregations?.by_message;
     if (!byMessage) {
-      break;
+      yield new Ok([]);
+      return;
     }
 
     const buckets = bucketsToArray(
       byMessage.buckets
     ) as ConsumptionMessageBucket[];
 
-    for (const bucket of buckets) {
-      allDocs.push(
+    yield new Ok(
+      buckets.map((bucket) =>
         consumptionBucketToDocument(bucket.key.agent_message_id, bucket)
-      );
-    }
+      )
+    );
 
     if (buckets.length < CONSUMPTION_AGG_PAGE_SIZE) {
-      break;
+      return;
     }
 
     afterKey = buckets[buckets.length - 1].key;
   }
-
-  return new Ok(allDocs);
 }
 
-export async function fetchMessageExportRows({
+/**
+ * @cc [owner:tdraier,label:performance] page-bounded-memory
+ * Each yielded page MUST be built from a single Elasticsearch page, and documents or rows of
+ * previously yielded pages MUST NOT be retained. Only the agent, user, tag and server lookups MAY
+ * be kept across pages. After yielding an `Err`, the generator MUST stop.
+ */
+export async function* generateMessageExportRows({
   auth,
   owner,
   startDate,
@@ -407,80 +408,75 @@ export async function fetchMessageExportRows({
   endDate: string;
   timezone: string;
   useConsumptionIndex?: boolean;
-}): Promise<Result<MessageExportRow[], Error>> {
-  const docsResult = useConsumptionIndex
-    ? await fetchAllMessageDocumentsFromConsumptionIndex(
-        auth,
-        startDate,
-        endDate
-      )
-    : await fetchAllMessageDocuments(
+}): AsyncGenerator<Result<MessageExportRow[], Error>> {
+  const documentPages = useConsumptionIndex
+    ? generateConsumptionMessageDocumentPages(auth, startDate, endDate)
+    : generateMessageDocumentPages(
         buildAgentAnalyticsBaseQuery({
           workspaceId: owner.sId,
           startDate,
           endDate,
         })
       );
-  if (docsResult.isErr()) {
-    return new Err(docsResult.error);
-  }
 
-  const docs = docsResult.value;
+  const agentMeta = new ExportLookupCache((ids) =>
+    fetchAgentMetadata(ids, owner)
+  );
+  const userEmails = new ExportLookupCache(fetchUserEmails);
+  const tagNames = new ExportLookupCache((ids) => fetchTagNames(auth, ids));
+  const serverDisplayNames = new ExportLookupCache((names) =>
+    resolveServerDisplayNames(auth, names)
+  );
 
-  const uniqueAgentIds = [
-    ...new Set(docs.map((d) => d.agent_id).filter(Boolean)),
-  ];
-  const uniqueUserIds = [
-    ...new Set(docs.map((d) => d.user_id).filter(Boolean)),
-  ];
-  const uniqueTagIds = [
-    ...new Set(docs.flatMap((d) => d.agent_tag_ids ?? []).filter(Boolean)),
-  ];
-  const uniqueServerNames = [
-    ...new Set(
-      docs.flatMap((d) => (d.tools_used ?? []).map((t) => t.server_name))
-    ),
-  ];
+  for await (const page of documentPages) {
+    if (page.isErr()) {
+      yield new Err(page.error);
+      return;
+    }
 
-  const [agentMeta, userEmails, tagNames, serverDisplayNames] =
+    const docs = page.value;
+
     await Promise.all([
-      fetchAgentMetadata(uniqueAgentIds, owner),
-      fetchUserEmails(uniqueUserIds),
-      fetchTagNames(auth, uniqueTagIds),
-      resolveServerDisplayNames(auth, uniqueServerNames),
+      agentMeta.load(docs.map((d) => d.agent_id)),
+      userEmails.load(docs.map((d) => d.user_id)),
+      tagNames.load(docs.flatMap((d) => d.agent_tag_ids ?? [])),
+      serverDisplayNames.load(
+        docs.flatMap((d) => (d.tools_used ?? []).map((t) => t.server_name))
+      ),
     ]);
 
-  const rows: MessageExportRow[] = docs.map((doc) => {
-    const agent = agentMeta.get(doc.agent_id);
-    return {
-      messageId: doc.message_id,
-      createdAt: formatExportCellDateTime(doc.timestamp, timezone),
-      assistantId: doc.agent_id,
-      assistantName: agent?.name ?? doc.agent_id,
-      assistantSettings: agent?.settings ?? "unknown",
-      assistantTags: joinDistinctSorted(
-        (doc.agent_tag_ids ?? []).map((id) => tagNames.get(id))
-      ),
-      conversationId: doc.conversation_id,
-      parentMessageId: doc.ancestor_message_ids?.[0] ?? "",
-      userId: doc.user_id,
-      userEmail: userEmails.get(doc.user_id) ?? "",
-      source: doc.context_origin ?? "",
-      toolsUsed: joinDistinctSorted(
-        (doc.tools_used ?? []).map(
-          (t) =>
-            `${serverDisplayNames.get(t.server_name) ?? t.server_name}${TOOL_NAME_SEPARATOR}${t.tool_name}`
-        )
-      ),
-      skillsUsed: joinDistinctSorted(
-        (doc.skills_used ?? []).map((s) => s.skill_name)
-      ),
-      modelId: doc.model?.model_id ?? "",
-      modelProviderId: doc.model?.provider_id ?? "",
-      modelResolutionMethod: doc.model?.resolution_method ?? "",
-      credits: Math.round(doc.cost?.billable_awu ?? 0),
-    };
-  });
+    const rows: MessageExportRow[] = docs.map((doc) => {
+      const agent = agentMeta.get(doc.agent_id);
+      return {
+        messageId: doc.message_id,
+        createdAt: formatExportCellDateTime(doc.timestamp, timezone),
+        assistantId: doc.agent_id,
+        assistantName: agent?.name ?? doc.agent_id,
+        assistantSettings: agent?.settings ?? "unknown",
+        assistantTags: joinDistinctSorted(
+          (doc.agent_tag_ids ?? []).map((id) => tagNames.get(id))
+        ),
+        conversationId: doc.conversation_id,
+        parentMessageId: doc.ancestor_message_ids?.[0] ?? "",
+        userId: doc.user_id,
+        userEmail: userEmails.get(doc.user_id) ?? "",
+        source: doc.context_origin ?? "",
+        toolsUsed: joinDistinctSorted(
+          (doc.tools_used ?? []).map(
+            (t) =>
+              `${serverDisplayNames.get(t.server_name) ?? t.server_name}${TOOL_NAME_SEPARATOR}${t.tool_name}`
+          )
+        ),
+        skillsUsed: joinDistinctSorted(
+          (doc.skills_used ?? []).map((s) => s.skill_name)
+        ),
+        modelId: doc.model?.model_id ?? "",
+        modelProviderId: doc.model?.provider_id ?? "",
+        modelResolutionMethod: doc.model?.resolution_method ?? "",
+        credits: Math.round(doc.cost?.billable_awu ?? 0),
+      };
+    });
 
-  return new Ok(rows);
+    yield new Ok(rows);
+  }
 }

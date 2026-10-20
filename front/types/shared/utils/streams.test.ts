@@ -1,7 +1,10 @@
 import { PassThrough } from "stream";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { readableToReadableStream } from "./streams";
+import {
+  asyncGeneratorToReadableStream,
+  readableToReadableStream,
+} from "./streams";
 
 describe("readableToReadableStream", () => {
   it("streams data chunks to the web ReadableStream", async () => {
@@ -78,5 +81,42 @@ describe("readableToReadableStream", () => {
     src.pipe(readable); // triggers 'pipe' on readable → our once-listener destroys
 
     expect(readable.destroyed).toBe(true);
+  });
+});
+
+describe("asyncGeneratorToReadableStream", () => {
+  it("errors the stream and reports the error when the generator throws", async () => {
+    async function* generate() {
+      yield "a";
+      throw new Error("lookup failed");
+    }
+    const onError = vi.fn();
+    const reader = asyncGeneratorToReadableStream(generate(), {
+      onError,
+    }).getReader();
+
+    expect(await reader.read()).toEqual({ value: "a", done: false });
+    await expect(reader.read()).rejects.toThrow("lookup failed");
+    expect(onError).toHaveBeenCalledWith(new Error("lookup failed"));
+  });
+
+  it("returns the generator when the stream is cancelled", async () => {
+    let finalized = false;
+    async function* generate() {
+      try {
+        yield "a";
+        yield "b";
+      } finally {
+        finalized = true;
+      }
+    }
+    const reader = asyncGeneratorToReadableStream(generate(), {
+      highWaterMark: 0,
+    }).getReader();
+
+    await reader.read();
+    await reader.cancel();
+
+    expect(finalized).toBe(true);
   });
 });

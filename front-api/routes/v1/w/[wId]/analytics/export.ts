@@ -82,7 +82,7 @@
 
 import {
   exportTable,
-  stringifyExportTableAsCsv,
+  serializeExportTable,
 } from "@app/lib/api/analytics/export_tables";
 import logger from "@app/logger/logger";
 import { GetAnalyticsExportRequestSchema } from "@dust-tt/client";
@@ -162,7 +162,8 @@ app.get("/", ensureIsAdmin(), exportRateLimit, async (ctx) => {
   }
 
   if (q.data.format === "json") {
-    return ctx.json(result.value.rows);
+    ctx.header("Content-Type", "application/json");
+    return ctx.body(serializeExportTable(result.value, "json"));
   }
 
   ctx.header("Content-Type", "text/csv");
@@ -170,7 +171,7 @@ app.get("/", ensureIsAdmin(), exportRateLimit, async (ctx) => {
     "Content-Disposition",
     `attachment; filename="dust_${q.data.table}_${q.data.startDate}_${q.data.endDate}.csv"`
   );
-  return ctx.body(stringifyExportTableAsCsv(result.value));
+  return ctx.body(serializeExportTable(result.value, "csv"));
 });
 
 // Hono does not emit 405 for a matched path with an unsupported method, so we

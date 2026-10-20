@@ -1,6 +1,8 @@
 import { Readable } from "stream";
 import type { ReadableStream as NodeReadableStream } from "stream/web";
 
+import { normalizeError } from "@app/types/shared/utils/error_utils";
+
 // Define a type for the RequestInit object with duplex set to "half" because the official types are
 // lagging behind.
 export interface RequestInitWithDuplex extends RequestInit {
@@ -66,4 +68,46 @@ export function readableToReadableStream<T = unknown>(
       cancelReadable();
     },
   });
+}
+
+/**
+ * @cc [owner:tdraier,label:error-handling] async-generator-stream-errors
+ * A value is pulled from the generator only when the stream needs one. When the generator throws,
+ * the stream MUST be errored (never closed), so an HTTP response built on it is aborted instead of
+ * ending as if complete. Cancelling the stream MUST return the generator.
+ */
+export function asyncGeneratorToReadableStream<T>(
+  generator: AsyncGenerator<T>,
+  {
+    highWaterMark,
+    onError,
+  }: { highWaterMark?: number; onError?: (error: Error) => void } = {}
+): ReadableStream<T> {
+  let cancelled = false;
+
+  return new ReadableStream<T>(
+    {
+      async pull(controller) {
+        try {
+          const { value, done } = await generator.next();
+          if (done) {
+            controller.close();
+          } else {
+            controller.enqueue(value);
+          }
+        } catch (err) {
+          if (!cancelled) {
+            const error = normalizeError(err);
+            onError?.(error);
+            controller.error(error);
+          }
+        }
+      },
+      async cancel() {
+        cancelled = true;
+        await generator.return(undefined);
+      },
+    },
+    { highWaterMark }
+  );
 }

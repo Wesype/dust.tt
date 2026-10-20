@@ -10,6 +10,7 @@ import {
   roundToTwoDecimals,
   rowsToCsv,
 } from "@app/lib/api/analytics/csv_utils";
+import { ExportLookupCache } from "@app/lib/api/analytics/export_lookup_cache";
 import type { ElasticsearchError } from "@app/lib/api/elasticsearch";
 import { searchConsumptionAnalytics } from "@app/lib/api/elasticsearch";
 import type { Authenticator } from "@app/lib/auth";
@@ -18,8 +19,8 @@ import logger from "@app/logger/logger";
 import type { AgentMessageConsumptionAnalyticsData } from "@app/types/assistant/analytics";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
-import { normalizeError } from "@app/types/shared/utils/error_utils";
 import { removeNulls } from "@app/types/shared/utils/general";
+import { asyncGeneratorToReadableStream } from "@app/types/shared/utils/streams";
 import type { estypes } from "@elastic/elasticsearch";
 
 const EXPORT_PAGE_SIZE = 10_000;
@@ -121,31 +122,26 @@ const ES_SORT: estypes.Sort = [
 ];
 
 class DimensionLabelCache {
-  private readonly labelsByDimension = new Map<
+  private readonly cacheByDimension = new Map<
     ConsumptionTopDimension,
-    Map<string, DimensionLabel>
+    ExportLookupCache<DimensionLabel>
   >();
 
   async resolve(
     auth: Authenticator,
     dimension: ConsumptionTopDimension,
     keys: string[]
-  ): Promise<Map<string, DimensionLabel>> {
-    let cached = this.labelsByDimension.get(dimension);
-    if (!cached) {
-      cached = new Map();
-      this.labelsByDimension.set(dimension, cached);
+  ): Promise<ExportLookupCache<DimensionLabel>> {
+    let cache = this.cacheByDimension.get(dimension);
+    if (!cache) {
+      cache = new ExportLookupCache((ids) =>
+        resolveDimensionLabels(auth, dimension, ids)
+      );
+      this.cacheByDimension.set(dimension, cache);
     }
 
-    const uncached = keys.filter((k) => !cached.has(k));
-    if (uncached.length > 0) {
-      const resolved = await resolveDimensionLabels(auth, dimension, uncached);
-      for (const [k, v] of resolved) {
-        cached.set(k, v);
-      }
-    }
-
-    return cached;
+    await cache.load(keys);
+    return cache;
   }
 }
 
@@ -398,7 +394,6 @@ export async function streamConsumptionExport(
   }
 
   const firstPageHits = firstResult.value.hits.hits;
-  let cancelled = false;
 
   async function* pages(): AsyncGenerator<Uint8Array> {
     // Yield the first (already-fetched) page, then continue paginating.
@@ -434,9 +429,6 @@ export async function streamConsumptionExport(
         break;
       }
 
-      if (cancelled) {
-        return;
-      }
       if (signal?.aborted) {
         yield encoder.encode("ERROR: Export timed out.");
         return;
@@ -472,28 +464,12 @@ export async function streamConsumptionExport(
     }
   }
 
-  const gen = pages();
-  const stream = new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      try {
-        const { value, done } = await gen.next();
-        if (done) {
-          controller.close();
-        } else {
-          controller.enqueue(value);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          logger.error({ err }, "[Consumption Export] Unexpected stream error");
-          controller.error(normalizeError(err));
-        } else {
-          controller.close();
-        }
-      }
-    },
-    cancel() {
-      cancelled = true;
-    },
+  const stream = asyncGeneratorToReadableStream(pages(), {
+    onError: (err) =>
+      logger.error(
+        { workspaceId: auth.getNonNullableWorkspace().sId, err },
+        "[Consumption Export] Unexpected stream error"
+      ),
   });
 
   return new Ok(stream);

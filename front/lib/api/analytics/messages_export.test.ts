@@ -1,9 +1,14 @@
-import { fetchMessageExportRows } from "@app/lib/api/analytics/messages_export";
+import type { MessageExportRow } from "@app/lib/api/analytics/messages_export";
+import { generateMessageExportRows } from "@app/lib/api/analytics/messages_export";
 import type { ElasticsearchBaseDocument } from "@app/lib/api/elasticsearch";
-import { searchAnalytics } from "@app/lib/api/elasticsearch";
+import {
+  ElasticsearchError,
+  searchAnalytics,
+} from "@app/lib/api/elasticsearch";
+import { TagResource } from "@app/lib/resources/tags_resource";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import { TagFactory } from "@app/tests/utils/TagFactory";
-import { Ok } from "@app/types/shared/result";
+import { Err, Ok } from "@app/types/shared/result";
 import { describe, expect, it, vi } from "vitest";
 
 // Keep everything real; only stub the Elasticsearch query so the test does not
@@ -25,20 +30,29 @@ vi.mock("@app/lib/resources/storage", async (importActual) => {
   };
 });
 
+function messageHits(docs: ElasticsearchBaseDocument[]) {
+  return new Ok({
+    took: 1,
+    timed_out: false,
+    _shards: { total: 1, successful: 1, skipped: 0, failed: 0 },
+    hits: {
+      total: { value: docs.length, relation: "eq" as const },
+      hits: docs.map((doc, i) => ({
+        _index: "test",
+        _source: doc,
+        sort: [i],
+      })),
+    },
+  });
+}
+
 function mockMessageHits(docs: ElasticsearchBaseDocument[]) {
   vi.mocked(searchAnalytics).mockClear();
-  vi.mocked(searchAnalytics).mockResolvedValue(
-    new Ok({
-      took: 1,
-      timed_out: false,
-      _shards: { total: 1, successful: 1, skipped: 0, failed: 0 },
-      hits: {
-        total: { value: docs.length, relation: "eq" },
-        hits: docs.map((doc) => ({ _index: "test", _source: doc })),
-      },
-    })
-  );
+  vi.mocked(searchAnalytics).mockResolvedValue(messageHits(docs));
 }
+
+// Must match PAGE_SIZE in messages_export.ts: a full page makes the generator fetch the next one.
+const ES_PAGE_SIZE = 10_000;
 
 function messageDoc(
   overrides: Record<string, unknown> = {}
@@ -56,7 +70,20 @@ function messageDoc(
   };
 }
 
-describe("fetchMessageExportRows", () => {
+async function collectMessageExportRows(
+  params: Parameters<typeof generateMessageExportRows>[0]
+): Promise<MessageExportRow[]> {
+  const rows: MessageExportRow[] = [];
+  for await (const page of generateMessageExportRows(params)) {
+    if (page.isErr()) {
+      throw page.error;
+    }
+    rows.push(...page.value);
+  }
+  return rows;
+}
+
+describe("generateMessageExportRows", () => {
   it("correctly reports credits column", async () => {
     const { authenticator, workspace } = await createResourceTest({
       role: "admin",
@@ -68,20 +95,15 @@ describe("fetchMessageExportRows", () => {
       }),
     ]);
 
-    const result = await fetchMessageExportRows({
+    const rows = await collectMessageExportRows({
       auth: authenticator,
       owner: workspace,
       startDate: "2026-07-01",
       endDate: "2026-07-02",
       timezone: "UTC",
     });
-
-    expect(result.isOk()).toBe(true);
-    if (result.isErr()) {
-      throw result.error;
-    }
-    expect(result.value).toHaveLength(1);
-    expect(result.value[0].credits).toBe(7);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].credits).toBe(7);
   });
 
   it("does not filter on status, so failed messages keep their billable credits", async () => {
@@ -99,21 +121,16 @@ describe("fetchMessageExportRows", () => {
       }),
     ]);
 
-    const result = await fetchMessageExportRows({
+    const rows = await collectMessageExportRows({
       auth: authenticator,
       owner: workspace,
       startDate: "2026-07-01",
       endDate: "2026-07-02",
       timezone: "UTC",
     });
-
-    expect(result.isOk()).toBe(true);
-    if (result.isErr()) {
-      throw result.error;
-    }
-    expect(result.value).toHaveLength(1);
-    expect(result.value[0].messageId).toBe("msg_failed");
-    expect(result.value[0].credits).toBe(5);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].messageId).toBe("msg_failed");
+    expect(rows[0].credits).toBe(5);
   });
 
   it("resolves agent_tag_ids to sorted, distinct tag names in the assistantTags column", async () => {
@@ -130,20 +147,15 @@ describe("fetchMessageExportRows", () => {
       messageDoc({ agent_tag_ids: [zeta.sId, alpha.sId, "tag_unknown"] }),
     ]);
 
-    const result = await fetchMessageExportRows({
+    const rows = await collectMessageExportRows({
       auth: authenticator,
       owner: workspace,
       startDate: "2026-07-01",
       endDate: "2026-07-02",
       timezone: "UTC",
     });
-
-    expect(result.isOk()).toBe(true);
-    if (result.isErr()) {
-      throw result.error;
-    }
     // Sorted, distinct, and unknown ids dropped.
-    expect(result.value[0].assistantTags).toBe("Alpha,Zeta");
+    expect(rows[0].assistantTags).toBe("Alpha,Zeta");
   });
 
   it("leaves assistantTags empty for docs indexed before agent_tag_ids shipped", async () => {
@@ -153,19 +165,14 @@ describe("fetchMessageExportRows", () => {
 
     mockMessageHits([messageDoc()]);
 
-    const result = await fetchMessageExportRows({
+    const rows = await collectMessageExportRows({
       auth: authenticator,
       owner: workspace,
       startDate: "2026-07-01",
       endDate: "2026-07-02",
       timezone: "UTC",
     });
-
-    expect(result.isOk()).toBe(true);
-    if (result.isErr()) {
-      throw result.error;
-    }
-    expect(result.value[0].assistantTags).toBe("");
+    expect(rows[0].assistantTags).toBe("");
   });
 
   it("defaults credits to 0 for docs indexed before the cost fields shipped", async () => {
@@ -175,19 +182,14 @@ describe("fetchMessageExportRows", () => {
 
     mockMessageHits([messageDoc()]);
 
-    const result = await fetchMessageExportRows({
+    const rows = await collectMessageExportRows({
       auth: authenticator,
       owner: workspace,
       startDate: "2026-07-01",
       endDate: "2026-07-02",
       timezone: "UTC",
     });
-
-    expect(result.isOk()).toBe(true);
-    if (result.isErr()) {
-      throw result.error;
-    }
-    expect(result.value[0].credits).toBe(0);
+    expect(rows[0].credits).toBe(0);
   });
 
   it("reports the resolved model columns", async () => {
@@ -206,21 +208,16 @@ describe("fetchMessageExportRows", () => {
       }),
     ]);
 
-    const result = await fetchMessageExportRows({
+    const rows = await collectMessageExportRows({
       auth: authenticator,
       owner: workspace,
       startDate: "2026-07-01",
       endDate: "2026-07-02",
       timezone: "UTC",
     });
-
-    expect(result.isOk()).toBe(true);
-    if (result.isErr()) {
-      throw result.error;
-    }
-    expect(result.value[0].modelId).toBe("claude-opus-5");
-    expect(result.value[0].modelProviderId).toBe("anthropic");
-    expect(result.value[0].modelResolutionMethod).toBe("agent");
+    expect(rows[0].modelId).toBe("claude-opus-5");
+    expect(rows[0].modelProviderId).toBe("anthropic");
+    expect(rows[0].modelResolutionMethod).toBe("agent");
   });
 
   it("leaves the model columns empty for docs indexed before the model fields shipped", async () => {
@@ -230,21 +227,16 @@ describe("fetchMessageExportRows", () => {
 
     mockMessageHits([messageDoc()]);
 
-    const result = await fetchMessageExportRows({
+    const rows = await collectMessageExportRows({
       auth: authenticator,
       owner: workspace,
       startDate: "2026-07-01",
       endDate: "2026-07-02",
       timezone: "UTC",
     });
-
-    expect(result.isOk()).toBe(true);
-    if (result.isErr()) {
-      throw result.error;
-    }
-    expect(result.value[0].modelId).toBe("");
-    expect(result.value[0].modelProviderId).toBe("");
-    expect(result.value[0].modelResolutionMethod).toBe("");
+    expect(rows[0].modelId).toBe("");
+    expect(rows[0].modelProviderId).toBe("");
+    expect(rows[0].modelResolutionMethod).toBe("");
   });
 
   it("reports the direct parent in parentMessageId and defaults to empty", async () => {
@@ -260,20 +252,94 @@ describe("fetchMessageExportRows", () => {
       messageDoc({ message_id: "msg_root" }),
     ]);
 
-    const result = await fetchMessageExportRows({
+    const rows = await collectMessageExportRows({
       auth: authenticator,
       owner: workspace,
       startDate: "2026-07-01",
       endDate: "2026-07-02",
       timezone: "UTC",
     });
+    expect(rows).toHaveLength(2);
+    expect(rows[0].parentMessageId).toBe("msg_parent");
+    expect(rows[1].parentMessageId).toBe("");
+  });
 
-    expect(result.isOk()).toBe(true);
-    if (result.isErr()) {
-      throw result.error;
+  it("yields one page per Elasticsearch page and looks each tag up once", async () => {
+    const { authenticator, workspace } = await createResourceTest({
+      role: "admin",
+    });
+    const tag = await TagFactory.create(workspace, { name: "Alpha" });
+    const fetchTagsSpy = vi.spyOn(TagResource, "fetchByIds");
+
+    vi.mocked(searchAnalytics).mockClear();
+    vi.mocked(searchAnalytics)
+      .mockResolvedValueOnce(
+        messageHits(
+          Array.from({ length: ES_PAGE_SIZE }, (_, i) =>
+            messageDoc({ message_id: `msg_${i}`, agent_tag_ids: [tag.sId] })
+          )
+        )
+      )
+      .mockResolvedValueOnce(
+        messageHits([
+          messageDoc({ message_id: "msg_last", agent_tag_ids: [tag.sId] }),
+        ])
+      );
+
+    const pageSizes: number[] = [];
+    let lastRow: MessageExportRow | undefined;
+    for await (const page of generateMessageExportRows({
+      auth: authenticator,
+      owner: workspace,
+      startDate: "2026-07-01",
+      endDate: "2026-07-02",
+      timezone: "UTC",
+    })) {
+      if (page.isErr()) {
+        throw page.error;
+      }
+      pageSizes.push(page.value.length);
+      lastRow = page.value.at(-1);
     }
-    expect(result.value).toHaveLength(2);
-    expect(result.value[0].parentMessageId).toBe("msg_parent");
-    expect(result.value[1].parentMessageId).toBe("");
+
+    expect(pageSizes).toEqual([ES_PAGE_SIZE, 1]);
+    expect(vi.mocked(searchAnalytics)).toHaveBeenCalledTimes(2);
+    expect(lastRow?.messageId).toBe("msg_last");
+    expect(lastRow?.assistantTags).toBe("Alpha");
+    expect(fetchTagsSpy).toHaveBeenCalledTimes(1);
+    fetchTagsSpy.mockRestore();
+  });
+
+  it("yields an Err and stops when a later Elasticsearch page fails", async () => {
+    const { authenticator, workspace } = await createResourceTest({
+      role: "admin",
+    });
+
+    vi.mocked(searchAnalytics).mockClear();
+    vi.mocked(searchAnalytics)
+      .mockResolvedValueOnce(
+        messageHits(
+          Array.from({ length: ES_PAGE_SIZE }, (_, i) =>
+            messageDoc({ message_id: `msg_${i}` })
+          )
+        )
+      )
+      .mockResolvedValueOnce(
+        new Err(new ElasticsearchError("query_error", "es unavailable"))
+      );
+
+    const outcomes: string[] = [];
+    for await (const page of generateMessageExportRows({
+      auth: authenticator,
+      owner: workspace,
+      startDate: "2026-07-01",
+      endDate: "2026-07-02",
+      timezone: "UTC",
+    })) {
+      outcomes.push(page.isOk() ? "ok" : page.error.message);
+    }
+
+    expect(outcomes).toEqual(["ok", "es unavailable"]);
+    expect(vi.mocked(searchAnalytics)).toHaveBeenCalledTimes(2);
   });
 });

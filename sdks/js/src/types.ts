@@ -3303,8 +3303,8 @@ const AnalyticsDateSchema = z.string().refine(isRealCalendarDate, {
   message: "Date must be a real calendar day in YYYY-MM-DD format",
 });
 
-// The server holds every exported message in memory. Mirrors MAX_MESSAGES_EXPORT_DAYS in
-// front/lib/api/analytics/export_tables.ts.
+// Bounds how long a single streamed export keeps paging through Elasticsearch. Mirrors
+// MAX_MESSAGES_EXPORT_DAYS in front/lib/api/analytics/export_tables.ts.
 const MAX_MESSAGES_EXPORT_DAYS = 90;
 
 export const GetAnalyticsExportRequestSchema = z
