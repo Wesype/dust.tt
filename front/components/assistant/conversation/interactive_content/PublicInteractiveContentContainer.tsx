@@ -20,6 +20,7 @@ interface PublicInteractiveContentContainerProps {
   logoUrl?: string | null;
   showSignUpCta?: boolean;
   hideHeader?: boolean;
+  frameProps?: Record<string, string>;
 }
 
 /**
@@ -34,6 +35,7 @@ export function PublicInteractiveContentContainer({
   logoUrl,
   showSignUpCta = false,
   hideHeader = false,
+  frameProps,
 }: PublicInteractiveContentContainerProps) {
   const { frameMetadata, isFrameLoading, error } = usePublicFrame({
     shareToken,
@@ -74,6 +76,7 @@ export function PublicInteractiveContentContainer({
             logoUrl={logoUrl}
             showSignUpCta={showSignUpCta}
             hideHeader={hideHeader}
+            frameProps={frameProps}
           />
         );
 

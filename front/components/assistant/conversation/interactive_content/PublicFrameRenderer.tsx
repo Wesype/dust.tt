@@ -23,6 +23,7 @@ interface PublicFrameRendererProps {
   shareToken: string;
   workspaceId: string;
   vizUrl: string;
+  frameProps?: Record<string, string>;
 }
 
 interface PublicFrameViewer extends WorkspaceUserIdentity {
@@ -70,6 +71,7 @@ export function PublicFrameRenderer({
   shareToken,
   workspaceId,
   vizUrl,
+  frameProps,
 }: PublicFrameRendererProps) {
   const {
     conversationUrl,
@@ -207,6 +209,7 @@ export function PublicFrameRenderer({
               }
               frameId={frameId}
               frameFileId={fileId}
+              frameProps={frameProps}
               isInDrawer
             />
           )}

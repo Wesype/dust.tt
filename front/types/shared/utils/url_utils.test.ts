@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { isHostUnderDomain, isIpAddress } from "./url_utils";
+import {
+  isHostUnderDomain,
+  isIpAddress,
+  validateRelativePath,
+} from "./url_utils";
 
 describe("isIpAddress", () => {
   describe("IPv4 addresses", () => {
@@ -143,6 +147,42 @@ describe("isHostUnderDomain", () => {
 
     it("should not match reversed relationship", () => {
       expect(isHostUnderDomain("example.com", "sub.example.com")).toBe(false);
+    });
+  });
+});
+
+describe("validateRelativePath", () => {
+  it.each([
+    ["/w/abc", "/w/abc"],
+    [
+      "/share/frame/t?props.region=EU%20%26%20UK%23x%25",
+      "/share/frame/t?props.region=EU%20%26%20UK%23x%25",
+    ],
+    ["%2Fw%2Fabc%3Fa%3D1%2526b", "/w/abc?a=1%26b"],
+    ["/w/abc#section", "/w/abc"],
+    ["/w?discount=50%25", "/w?discount=50%25"],
+  ])("sanitizes %s to %s", (path, sanitizedPath) => {
+    expect(validateRelativePath(path)).toEqual({ valid: true, sanitizedPath });
+  });
+
+  it.each([
+    "",
+    "w/abc",
+    "//attacker.com",
+    "/%2F%2Fattacker.com",
+    "/%252F%252Fattacker.com",
+    "/%252F%252Fattacker.com?x=%25",
+    "/%25252525252Fattacker.com",
+    "/\\localhost:1234/a",
+    "/\t/localhost:1234/a",
+    "%252F%252Fattacker.com",
+    "/\\attacker.com",
+    "https://attacker.com/w",
+    "/%E0%A4%A",
+  ])("rejects %s", (path) => {
+    expect(validateRelativePath(path)).toEqual({
+      valid: false,
+      sanitizedPath: null,
     });
   });
 });

@@ -33,6 +33,7 @@ import type {
   VisualizationRPCRequest,
 } from "@app/types/assistant/visualization";
 import {
+  FRAME_PROP_URL_PARAM_PREFIX,
   isVisualizationRPCRequest,
   TailwindMissingClassesMessageSchema,
   WriteFileRequestEnvelopeSchema,
@@ -70,8 +71,6 @@ import {
   useRef,
   useState,
 } from "react";
-
-const FRAME_PROP_URL_PARAM_PREFIX = "props.";
 
 interface BaseVisualization {
   complete: boolean;

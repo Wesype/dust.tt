@@ -1,6 +1,38 @@
 import { FileRevisionSchema } from "@app/types/files";
 import { z } from "zod";
 
+export const FRAME_PROP_URL_PARAM_PREFIX = "props.";
+
+const FRAME_PROP_NAME_REGEX = /^[A-Za-z][A-Za-z0-9_]*$/;
+
+const REACT_RESERVED_PROP_NAMES = new Set(["key", "ref"]);
+
+// Front cannot import viz, so a test pins this to viz's `getFramePropsFromSearchParams`.
+/**
+ * @cc [owner:tdraier,label:product] frame-props-match-viz
+ * MUST return exactly the props viz's `getFramePropsFromSearchParams` reads from the same params.
+ */
+export function getFramePropsFromUrlParams(
+  params: Record<string, string | string[] | undefined>
+): Record<string, string> {
+  const props: Record<string, string> = {};
+  for (const [param, value] of Object.entries(params)) {
+    if (!param.startsWith(FRAME_PROP_URL_PARAM_PREFIX)) {
+      continue;
+    }
+    const name = param.slice(FRAME_PROP_URL_PARAM_PREFIX.length);
+    const propValue = Array.isArray(value) ? value[0] : value;
+    if (
+      FRAME_PROP_NAME_REGEX.test(name) &&
+      !REACT_RESERVED_PROP_NAMES.has(name) &&
+      propValue !== undefined
+    ) {
+      props[name] = propValue;
+    }
+  }
+  return props;
+}
+
 // Best-effort event, intentionally outside the request/response RPC protocol so
 // older hosts can ignore it without leaving a pending request in Viz.
 export const TailwindMissingClassesMessageSchema = z.object({

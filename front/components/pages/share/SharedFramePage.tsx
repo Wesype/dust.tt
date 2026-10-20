@@ -6,11 +6,13 @@ import { ThemeProvider } from "@app/components/sparkle/ThemeContext";
 import { useDocumentTitle } from "@app/hooks/useDocumentTitle";
 import config from "@app/lib/api/config";
 import { DUST_HAS_SESSION, hasSessionIndicator } from "@app/lib/cookies";
-import { usePathParam } from "@app/lib/platform";
+import { useAppRouter, usePathParam } from "@app/lib/platform";
 import { usePublicFrame } from "@app/lib/swr/frames";
 import { useShareFrameMetadata } from "@app/lib/swr/share";
 import { useUser } from "@app/lib/swr/user";
 import { getFaviconPath } from "@app/lib/utils";
+import type { GetShareFrameMetadataResponseBody } from "@app/types/api/files/share";
+import { getFramePropsFromUrlParams } from "@app/types/assistant/visualization";
 import { LogIn01, Spinner } from "@dust-tt/sparkle";
 import { useLingui } from "@lingui/react/macro";
 import { usePostHog } from "posthog-js/react";
@@ -31,9 +33,16 @@ function buildLoginUrl() {
  * Shared Frame content MUST have theme context even without the authenticated app layout,
  * resolving the viewer's saved theme or system preference.
  */
+/**
+ * @cc [owner:tdraier,label:product;security] shared-frame-props-from-url
+ * The Frame MUST receive as props exactly `getFramePropsFromUrlParams` of the share URL's search
+ * params. Whoever writes the link sets them, so the page MUST NOT use them for anything but these
+ * string props.
+ */
 export function SharedFramePage() {
   const { t } = useLingui();
   const token = usePathParam("token");
+  const { query } = useAppRouter();
   const posthog = usePostHog();
 
   const [isVerified, setIsVerified] = useState(false);
@@ -89,6 +98,80 @@ export function SharedFramePage() {
   // 3. The user hasn't just completed verification in this session.
   const needsEmailVerification =
     !isVerified && !!shareMetadata?.requiresEmailVerification && !!frameError;
+
+  useSharedFrameHeadTags(shareMetadata);
+
+  const handleVerified = () => {
+    setIsVerified(true);
+    // Refetch the frame now that the cookie is set.
+    void mutateFrame();
+  };
+
+  if (isShareMetadataLoading) {
+    return (
+      <div className="flex h-dvh w-full items-center justify-center">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (!token || shareMetadataError || !shareMetadata) {
+    // A Frame hidden from this viewer and a token that never existed must render the same page,
+    // so the sign-in affordance has to live on the 404 rather than replace it: a logged-out
+    // workspace member reaches a Frame with functions only by signing in from here.
+    return hasSession ? (
+      <Custom404 />
+    ) : (
+      <CustomErrorPage
+        title={t`404: Page not found`}
+        description={t`If you have access to this page, sign in to open it.`}
+        href={buildLoginUrl()}
+        label={t`Sign in`}
+        icon={LogIn01}
+      />
+    );
+  }
+
+  // Show email verification form when scope requires it and user isn't authorized yet.
+  if (needsEmailVerification) {
+    return (
+      <EmailVerificationFlow shareToken={token} onVerified={handleVerified} />
+    );
+  }
+
+  if (frameError) {
+    return (
+      <SharedFrameAccessError
+        hasSession={hasSession}
+        isUserLoading={isUserLoading}
+        hasUserError={!!userError}
+        hasUser={!!user}
+      />
+    );
+  }
+
+  return (
+    <ThemeProvider>
+      <div className="flex h-dvh w-full">
+        <PublicInteractiveContentContainer
+          shareToken={token}
+          title={shareMetadata.title}
+          workspaceId={shareMetadata.workspaceId}
+          vizUrl={shareMetadata.vizUrl}
+          logoUrl={shareMetadata.logoUrl}
+          showSignUpCta={shareMetadata.showSignUpCta}
+          hideHeader={hideHeader}
+          frameProps={getFramePropsFromUrlParams(query)}
+        />
+      </div>
+    </ThemeProvider>
+  );
+}
+
+function useSharedFrameHeadTags(
+  shareMetadata: GetShareFrameMetadataResponseBody | undefined
+) {
+  const { t } = useLingui();
 
   const humanFriendlyTitle = shareMetadata?.title ?? "";
 
@@ -162,14 +245,24 @@ export function SharedFramePage() {
       }
     };
   }, [shareMetadata, humanFriendlyTitle, t]);
+}
 
-  const handleVerified = () => {
-    setIsVerified(true);
-    // Refetch the frame now that the cookie is set.
-    void mutateFrame();
-  };
+interface SharedFrameAccessErrorProps {
+  hasSession: boolean;
+  isUserLoading: boolean;
+  hasUserError: boolean;
+  hasUser: boolean;
+}
 
-  if (isShareMetadataLoading) {
+function SharedFrameAccessError({
+  hasSession,
+  isUserLoading,
+  hasUserError,
+  hasUser,
+}: SharedFrameAccessErrorProps) {
+  const { t } = useLingui();
+
+  if (hasSession && isUserLoading && !hasUserError) {
     return (
       <div className="flex h-dvh w-full items-center justify-center">
         <Spinner size="lg" />
@@ -177,16 +270,11 @@ export function SharedFramePage() {
     );
   }
 
-  if (!token || shareMetadataError || !shareMetadata) {
-    // A Frame hidden from this viewer and a token that never existed must render the same page,
-    // so the sign-in affordance has to live on the 404 rather than replace it: a logged-out
-    // workspace member reaches a Frame with functions only by signing in from here.
-    return hasSession ? (
-      <Custom404 />
-    ) : (
+  if (!hasSession || hasUserError || !hasUser) {
+    return (
       <CustomErrorPage
-        title={t`404: Page not found`}
-        description={t`If you have access to this page, sign in to open it.`}
+        title={t`Sign in to open this Frame`}
+        description={t`Sign in with an account that has access. We’ll bring you back here.`}
         href={buildLoginUrl()}
         label={t`Sign in`}
         icon={LogIn01}
@@ -194,52 +282,7 @@ export function SharedFramePage() {
     );
   }
 
-  // Show email verification form when scope requires it and user isn't authorized yet.
-  if (needsEmailVerification) {
-    return (
-      <EmailVerificationFlow shareToken={token} onVerified={handleVerified} />
-    );
-  }
-
-  if (frameError) {
-    if (hasSession && isUserLoading && !userError) {
-      return (
-        <div className="flex h-dvh w-full items-center justify-center">
-          <Spinner size="lg" />
-        </div>
-      );
-    }
-
-    if (!hasSession || userError || !user) {
-      return (
-        <CustomErrorPage
-          title={t`Sign in to open this Frame`}
-          description={t`Sign in with an account that has access. We’ll bring you back here.`}
-          href={buildLoginUrl()}
-          label={t`Sign in`}
-          icon={LogIn01}
-        />
-      );
-    }
-
-    // Keep the existing non-enumerating response for authenticated users who
-    // do not have access (or whose link no longer resolves).
-    return <Custom404 />;
-  }
-
-  return (
-    <ThemeProvider>
-      <div className="flex h-dvh w-full">
-        <PublicInteractiveContentContainer
-          shareToken={token}
-          title={shareMetadata.title}
-          workspaceId={shareMetadata.workspaceId}
-          vizUrl={shareMetadata.vizUrl}
-          logoUrl={shareMetadata.logoUrl}
-          showSignUpCta={shareMetadata.showSignUpCta}
-          hideHeader={hideHeader}
-        />
-      </div>
-    </ThemeProvider>
-  );
+  // Keep the existing non-enumerating response for authenticated users who
+  // do not have access (or whose link no longer resolves).
+  return <Custom404 />;
 }

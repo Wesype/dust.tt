@@ -70,18 +70,6 @@ msgid "Verify"
 msgstr "Bestätigen"
 
 #: front/components/pages/share/SharedFramePage.tsx
-msgid "{humanFriendlyTitle} - Powered by Dust"
-msgstr "{humanFriendlyTitle} - Erstellt mit Dust"
-
-#: front/components/pages/share/SharedFramePage.tsx
-msgid "Discover what {workspaceName} built with AI. Explore now."
-msgstr "Entdecken Sie, was {workspaceName} mit KI erstellt hat. Jetzt ansehen."
-
-#: front/components/pages/share/SharedFramePage.tsx
-msgid "Preview of {humanFriendlyTitle} created by {workspaceName}"
-msgstr "Vorschau von {humanFriendlyTitle}, erstellt von {workspaceName}"
-
-#: front/components/pages/share/SharedFramePage.tsx
 msgid "404: Page not found"
 msgstr "404: Seite nicht gefunden"
 
@@ -92,6 +80,18 @@ msgstr "Wenn Sie Zugriff auf diese Seite haben, melden Sie sich an, um sie zu ö
 #: front/components/pages/share/SharedFramePage.tsx
 msgid "Sign in"
 msgstr "Anmelden"
+
+#: front/components/pages/share/SharedFramePage.tsx
+msgid "{humanFriendlyTitle} - Powered by Dust"
+msgstr "{humanFriendlyTitle} - Erstellt mit Dust"
+
+#: front/components/pages/share/SharedFramePage.tsx
+msgid "Discover what {workspaceName} built with AI. Explore now."
+msgstr "Entdecken Sie, was {workspaceName} mit KI erstellt hat. Jetzt ansehen."
+
+#: front/components/pages/share/SharedFramePage.tsx
+msgid "Preview of {humanFriendlyTitle} created by {workspaceName}"
+msgstr "Vorschau von {humanFriendlyTitle}, erstellt von {workspaceName}"
 
 #: front/components/pages/share/SharedFramePage.tsx
 msgid "Sign in to open this Frame"

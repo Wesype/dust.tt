@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   iframeProps: null as {
     canInvokeFunctions: boolean;
     frameId?: string;
+    frameProps?: Record<string, string>;
     functionTarget?: string;
     scopedUserIdentity?: ScopedWorkspaceUserIdentity;
     viewer: unknown;
@@ -31,6 +32,7 @@ vi.mock(
     VisualizationActionIframe: (props: {
       canInvokeFunctions: boolean;
       frameId?: string;
+      frameProps?: Record<string, string>;
       functionTarget?: string;
       scopedUserIdentity?: ScopedWorkspaceUserIdentity;
       viewer: unknown;
@@ -217,6 +219,25 @@ describe("PublicFrameRenderer", () => {
 
     expect(mocks.iframeProps).not.toBeNull();
     expect(mocks.iframeProps?.functionTarget).toBeUndefined();
+  });
+
+  it("renders the Frame with the share URL's props", () => {
+    mocks.isUserLoading = false;
+
+    render(
+      createElement(PublicFrameRenderer, {
+        fileId: "fil_frame",
+        frameId: "fil_frame",
+        frameProps: { region: "EU" },
+        hideHeader: true,
+        shareToken: "share-token",
+        title: "Frame",
+        workspaceId: "w_current",
+        vizUrl: "https://viz.dust.tt",
+      })
+    );
+
+    expect(mocks.iframeProps?.frameProps).toEqual({ region: "EU" });
   });
 
   it("marks a shared Frame declaring functions as beta", () => {

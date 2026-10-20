@@ -37,11 +37,27 @@ export function sanitizeUrlForDisplay(url: string): string {
   }
 }
 
+// A host matching the base would go unnoticed against a single base, such as `/\localhost:1234/a`.
+const RELATIVE_PATH_PROBE_BASES = ["http://a.invalid", "http://b.invalid"];
+
+function namesHost(path: string): boolean {
+  return RELATIVE_PATH_PROBE_BASES.some(
+    (base) => new URL(path, base).origin !== base
+  );
+}
+
 /**
  * Validates and sanitizes a path to ensure it's a relative path.
  * This prevents open redirect vulnerabilities by rejecting absolute URLs.
  * @param path - The path string to validate (e.g., from returnTo parameter)
  * @returns Object with valid flag and sanitized path (pathname + search only)
+ */
+/**
+ * @cc [owner:tdraier,label:security;api] relative-path-keeps-query-encoding
+ * A path MUST be rejected unless its first decoding starting with `/`, and that decoding's path
+ * part fully decoded within five passes, both start with a single `/` and name no host, whatever
+ * the host. The sanitized path MUST be that first decoding's pathname and search,
+ * percent-encoding kept, so each search param reads back its given value.
  */
 export const validateRelativePath = (
   path: string | string[] | undefined
@@ -59,14 +75,28 @@ export const validateRelativePath = (
     return { valid: false, sanitizedPath: null };
   }
 
+  // The returned path is the least-decoded form starting with `/`, so encoded query values such
+  // as `%26`, `%23` or `%25` keep their meaning.
+  let relativePath = path;
+  for (let i = 0; i < 5 && !relativePath.startsWith("/"); i++) {
+    try {
+      relativePath = decodeURIComponent(relativePath);
+    } catch {
+      return { valid: false, sanitizedPath: null };
+    }
+  }
+
   // Safely decode percent-encoded input to prevent bypasses such as /%2F%2Fattacker.com
   // Decode iteratively to handle double-encoding (e.g., %252F -> %2F)
-  let decodedPath = path;
+  let decodedPath = relativePath.split(/[?#]/, 1)[0];
   try {
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; ; i++) {
       const next = decodeURIComponent(decodedPath);
       if (next === decodedPath) {
         break;
+      }
+      if (i === 5) {
+        return { valid: false, sanitizedPath: null };
       }
       decodedPath = next;
     }
@@ -76,25 +106,26 @@ export const validateRelativePath = (
   }
 
   // Must start with / (relative path)
-  if (!decodedPath.startsWith("/")) {
+  if (!relativePath.startsWith("/") || !decodedPath.startsWith("/")) {
     return { valid: false, sanitizedPath: null };
   }
 
   // Reject protocol-relative URLs (//example.com)
-  if (decodedPath.startsWith("//")) {
+  if (relativePath.startsWith("//") || decodedPath.startsWith("//")) {
     return { valid: false, sanitizedPath: null };
   }
 
   // Try to parse as URL to extract only pathname and search
   // This also validates the URL structure
   try {
-    const url = new URL(decodedPath, "http://localhost");
+    const decodedUrl = new URL(decodedPath, "http://localhost");
+    const url = new URL(relativePath, "http://localhost");
     // Ensure no host was somehow injected
-    if (url.hostname !== "localhost") {
+    if (namesHost(decodedPath) || namesHost(relativePath)) {
       return { valid: false, sanitizedPath: null };
     }
     // Ensure normalized pathname does not start with protocol-relative marker
-    if (url.pathname.startsWith("//")) {
+    if (decodedUrl.pathname.startsWith("//") || url.pathname.startsWith("//")) {
       return { valid: false, sanitizedPath: null };
     }
     // Return only the pathname and search params (no host, protocol, etc.)

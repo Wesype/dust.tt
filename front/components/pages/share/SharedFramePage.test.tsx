@@ -8,17 +8,31 @@ const mocks = vi.hoisted(() => ({
   hasSession: false,
   isUserError: null as unknown,
   isUserLoading: false,
+  query: {} as Record<string, string | string[] | undefined>,
   requiresEmailVerification: false,
   shareMetadataError: null as unknown,
   user: null as { sId: string } | null,
 }));
 
+interface PublicInteractiveContentContainerMockProps {
+  frameProps?: Record<string, string>;
+}
+
 vi.mock(
   "@app/components/assistant/conversation/interactive_content/PublicInteractiveContentContainer",
   () => ({
-    PublicInteractiveContentContainer: () => {
+    PublicInteractiveContentContainer: ({
+      frameProps,
+    }: PublicInteractiveContentContainerMockProps) => {
       const { isDark } = useTheme();
-      return <div data-theme={isDark ? "dark" : "light"}>frame content</div>;
+      return (
+        <div
+          data-theme={isDark ? "dark" : "light"}
+          data-frame-props={JSON.stringify(frameProps)}
+        >
+          frame content
+        </div>
+      );
     },
   })
 );
@@ -67,6 +81,7 @@ vi.mock("@app/lib/cookies", () => ({
 }));
 
 vi.mock("@app/lib/platform", () => ({
+  useAppRouter: () => ({ query: mocks.query }),
   usePathParam: () => "share-token",
 }));
 
@@ -143,6 +158,7 @@ afterEach(() => {
   mocks.hasSession = false;
   mocks.isUserError = null;
   mocks.isUserLoading = false;
+  mocks.query = {};
   mocks.requiresEmailVerification = false;
   mocks.shareMetadataError = null;
   mocks.user = null;
@@ -150,6 +166,22 @@ afterEach(() => {
 });
 
 describe("SharedFramePage", () => {
+  it("passes the share URL's props to the Frame", () => {
+    mocks.query = {
+      "props.region": "EU",
+      "props.year": ["2026", "2025"],
+      "props.key": "x",
+      source: "email",
+    };
+
+    render(<SharedFramePage />);
+
+    expect(screen.getByText("frame content")).toHaveAttribute(
+      "data-frame-props",
+      JSON.stringify({ region: "EU", year: "2026" })
+    );
+  });
+
   it("prompts a logged-out viewer to sign in and preserves the Frame URL", () => {
     mocks.frameError = new Error("not found");
     window.history.replaceState(
