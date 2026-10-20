@@ -17,7 +17,7 @@ import {
   addAgentComment,
   replyToAgentComment,
 } from "@app/lib/api/documents/agent_comments";
-import type { DfmAgentDocumentError } from "@app/lib/api/documents/agent_edits";
+import type { DfmAgentDocumentError } from "@app/lib/api/documents/agent_edit_source";
 import {
   editAgentDocument,
   readAgentDocument,
