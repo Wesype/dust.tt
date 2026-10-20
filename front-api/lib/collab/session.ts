@@ -249,6 +249,8 @@ export async function writeSessionSource(
       return new Ok("written");
     case "declined":
       return new Ok(outcome.value.reason);
+    case "unreadable":
+      return new Err(outcome.value.message);
     case "closed":
     case "busy":
     case "unsaved":
@@ -258,16 +260,23 @@ export async function writeSessionSource(
   }
 }
 
+/** Why an edit failed: `refused` for what the edit caused, `unavailable` for the session's own. */
+export interface CollabSourceEditFailure {
+  kind: "refused" | "unavailable";
+  message: string;
+}
+
 /**
  * @cc [owner:PopDaph,label:product;concurrency;security] collab-session-source-edit
  * An edit MUST be applied as a write is (`collab-session-source-write`), with the same turn,
  * `closed`, `busy` and `unsaved` answers and announcements, but MUST NOT compare with a `base`:
  * at its turn, the source `readSessionSource` would return MUST be changed with
  * `editDocumentSource`, so changes made since the agent read the document are kept. An edit that
- * does not match that source, or whose result would be larger than
- * `WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES`, MUST answer `edit_refused` with its reason
- * (`too_large` for the size), and one whose result the codec refuses MUST fail; both change
- * nothing.
+ * does not match that source, whose result would be longer than the codec reads
+ * (`dfm-agent-document-edit`) or larger than `WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES`, MUST answer
+ * `edit_refused` with its reason (`too_large` for the size), and one whose result the codec
+ * refuses MUST fail as `refused`; both change nothing. An edit whose session cannot read its own
+ * document MUST fail as `unavailable`, a failure of the session rather than of the edit.
  */
 export async function editSessionSource(
   hocuspocus: Hocuspocus<CollabAccess>,
@@ -276,7 +285,7 @@ export async function editSessionSource(
     edit,
     agent,
   }: { file: CollabAccess; edit: CollabSourceEdit; agent?: CollabAgent }
-): Promise<Result<CollabSourceEditResult, string>> {
+): Promise<Result<CollabSourceEditResult, CollabSourceEditFailure>> {
   const outcome = await applyInTurn(hocuspocus, {
     file,
     agent,
@@ -303,7 +312,7 @@ export async function editSessionSource(
     },
   });
   if (outcome.isErr()) {
-    return outcome;
+    return new Err({ kind: "refused", message: outcome.error });
   }
   switch (outcome.value.kind) {
     case "applied":
@@ -318,11 +327,13 @@ export async function editSessionSource(
             message: reason.error.message,
           });
         case "failed":
-          return new Err(reason.message);
+          return new Err({ kind: "refused", message: reason.message });
         default:
           return assertNever(reason);
       }
     }
+    case "unreadable":
+      return new Err({ kind: "unavailable", message: outcome.value.message });
     case "closed":
     case "busy":
     case "unsaved":
@@ -336,6 +347,7 @@ export async function editSessionSource(
 type TurnOutcome<T, R> =
   | { kind: "applied"; value: T }
   | { kind: "declined"; reason: R }
+  | { kind: "unreadable"; message: string }
   | { kind: "closed" | "busy" | "unsaved" };
 
 /**
@@ -392,7 +404,7 @@ async function applyInTurn<T, R>(
     }
     const current = yDocToDfm({ doc: document, comments: session.comments });
     if (current.isErr()) {
-      return current;
+      return new Ok({ kind: "unreadable", message: current.error });
     }
     const next = fromCurrent(current.value);
     if (next.isErr()) {

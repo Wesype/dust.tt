@@ -22,6 +22,7 @@ import {
   collabSourceReadRequestSchema,
   collabSourceWriteRequestSchema,
 } from "@app/types/collab_internal";
+import { assertNever } from "@app/types/shared/utils/assert_never";
 import { collabAccessErrorToApiError } from "@front-api/lib/collab/collab_access_errors";
 import {
   editSessionSource,
@@ -61,7 +62,9 @@ function isAuthorized(authorization: string | undefined): boolean {
  * one. A write whose source is larger than `WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES` MUST be refused
  * before it reaches the session, since no save could write it. An edit MUST be checked as a write
  * is, its replacement text in place of the source, answering `edit_refused` with `too_large` as
- * the session does for an edited source over that size (`collab-session-source-edit`).
+ * the session does for an edited source over that size (`collab-session-source-edit`). An edit
+ * the session cannot apply because it cannot read its own document MUST answer 500, so the caller
+ * reports a failure of the server rather than a refusal of the edit.
  */
 export function createInternalRoutes(hocuspocus: Hocuspocus<CollabAccess>) {
   const app = createHono();
@@ -204,11 +207,30 @@ export function createInternalRoutes(hocuspocus: Hocuspocus<CollabAccess>) {
         edit,
         agent,
       });
-      return ctx.json<CollabSourceEditResponse>(
-        edited.isOk()
-          ? edited.value
-          : { result: "refused", message: edited.error }
-      );
+      if (edited.isOk()) {
+        return ctx.json<CollabSourceEditResponse>(edited.value);
+      }
+      switch (edited.error.kind) {
+        case "refused":
+          return ctx.json<CollabSourceEditResponse>({
+            result: "refused",
+            message: edited.error.message,
+          });
+        case "unavailable":
+          return apiError(
+            ctx,
+            {
+              status_code: 500,
+              api_error: {
+                type: "internal_server_error",
+                message: "The live document could not be read.",
+              },
+            },
+            new Error(edited.error.message)
+          );
+        default:
+          return assertNever(edited.error.kind);
+      }
     }
   );
 

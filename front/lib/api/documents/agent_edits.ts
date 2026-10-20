@@ -32,19 +32,22 @@ export async function readAgentDocument(
 
 /**
  * @cc [owner:tdraier,label:product;concurrency] dfm-agent-document-edit
- * An edit MUST replace exactly `expectedReplacements` occurrences of `oldString` in the body of
- * the source `readAgentDocument` returns, or, with an empty `oldString`, write `newString` as
- * the body of a document whose body is empty or blank, and refuse an empty `oldString` otherwise
- * or with `expectedReplacements` other than 1.
- * Line breaks in the source and `oldString` MUST be matched normalized to `\n`, so a passage
- * quoted from a CRLF source still matches; they MAY be normalized to `\n` and trailing ones
- * dropped from the edited body. It MUST leave the front matter and the comment threads unchanged,
- * and refuse with `anchors_invalid` an edit that adds anchors or breaks a pair, and with
- * `too_large`, before building it, an edit whose body would exceed
- * `WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES` characters. It MAY remove whole anchor pairs, keeping
- * their threads. While a live session holds the document, the session
- * MUST apply it to its source at its turn (`editLiveDocument`), so changes made since the agent's
- * call do not refuse it; otherwise it MUST be written through `writeDocumentChange`.
+ * An edit MUST replace exactly `expectedReplacements` occurrences of `oldString` in the body of the
+ * source `readAgentDocument` returns, or, with an empty `oldString`, write `newString` as the body
+ * of a document whose body is empty or blank, and refuse an empty `oldString` otherwise or with
+ * `expectedReplacements` other than 1. Line breaks in the source and `oldString` MUST be matched
+ * normalized to `\n`, so a passage quoted from a CRLF source still matches; they MAY be normalized
+ * to `\n` and trailing ones dropped from the edited body. It MUST leave the front matter and the
+ * comment threads unchanged, refuse with `anchors_invalid` an edit that adds anchors or breaks a
+ * pair, and refuse with `too_large` an edit whose source after its front matter, threads included,
+ * would be longer than the codec reads (`INPUT_LIMITS.length`, `dfm-bounded-input`) once its line
+ * breaks are normalized, never building a body over twice that length. It MAY remove whole anchor
+ * pairs, keeping their threads. While a live session holds the document, the session MUST apply it
+ * to its source at its turn (`editLiveDocument`), so changes made since the agent's call do not
+ * refuse it; otherwise it MUST be written through `writeDocumentChange`. When `editLiveDocument`
+ * answers `no_session` and a session then holds the document, `writeDocumentChange` applies the
+ * edit to the session's source as a conditional write of the whole source (`collab-session-write`),
+ * starting over from a fresh read when the session changed.
  */
 export async function editAgentDocument(
   auth: Authenticator,

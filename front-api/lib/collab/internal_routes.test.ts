@@ -342,4 +342,29 @@ describe("createInternalRoutes", () => {
     );
     expect(await after.json()).toEqual({ open: true, source: "# Notes\n" });
   });
+
+  it("answers 500 to an edit when the session cannot read its own document", async () => {
+    const { hocuspocus, name, request } = await openNotes();
+    giveSessionRevision(hocuspocus, name);
+    hocuspocus.documents.get(name)?.getMap(ENVELOPE_MAP_NAME).clear();
+
+    const response = await post(
+      COLLAB_SOURCE_EDIT_PATH,
+      {
+        ...request,
+        edit: {
+          oldString: "Notes",
+          newString: "Edited",
+          expectedReplacements: 1,
+        },
+      },
+      `Bearer ${SECRET}`,
+      hocuspocus
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({
+      error: { type: "internal_server_error" },
+    });
+  });
 });

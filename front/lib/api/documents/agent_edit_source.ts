@@ -1,6 +1,10 @@
-import { WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES } from "@app/lib/api/files/file_system_ops";
 import type { DfmDocument } from "@app/lib/markdown/dfm";
-import { extractAnchors, parseDfm, serializeDfm } from "@app/lib/markdown/dfm";
+import {
+  extractAnchors,
+  INPUT_LIMITS,
+  parseDfm,
+  serializeDfm,
+} from "@app/lib/markdown/dfm";
 import type {
   CollabEditRefusalCode,
   CollabSourceEdit,
@@ -8,7 +12,11 @@ import type {
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
 
-/** Why an edit is refused when its document would exceed the size a save can write. */
+// Twice what the codec reads: an edit is only refused here when it could never fit, unless it
+// ends with more line breaks than the codec reads, which are dropped.
+const MAX_BUILT_BODY_LENGTH = 2 * INPUT_LIMITS.length;
+
+/** Why an edit is refused when its document would be too large to read or save. */
 export const EDIT_TOO_LARGE_MESSAGE =
   "The edit would make the document too large. Make a smaller change.";
 
@@ -60,14 +68,15 @@ function replaceInBody({
         )
       );
     }
-    return body.trim() === ""
-      ? new Ok({ editedBody: newString, replacements: 1 })
-      : new Err(
-          new DfmAgentDocumentError(
-            "string_not_found",
-            "The text to replace can only be empty when the document body is empty."
-          )
-        );
+    if (body.trim() !== "") {
+      return new Err(
+        new DfmAgentDocumentError(
+          "string_not_found",
+          "The text to replace can only be empty when the document body is empty."
+        )
+      );
+    }
+    return new Ok({ editedBody: newString, replacements: 1 });
   }
 
   const occurrences = countOccurrences(body, oldString);
@@ -94,11 +103,11 @@ function replaceInBody({
       )
     );
   }
-  // Checked before building it: a short text replaced many times could take the process's memory.
-  // A string's length never exceeds its size in UTF-8 bytes, so a longer one is surely too large.
+  // Bounded before building it, so a short text replaced many times cannot take the process's
+  // memory. Loose on purpose: the exact size is checked once line breaks are normalized.
   if (
     body.length + occurrences * (newString.length - oldString.length) >
-    WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES
+    MAX_BUILT_BODY_LENGTH
   ) {
     return new Err(
       new DfmAgentDocumentError("too_large", EDIT_TOO_LARGE_MESSAGE)
@@ -128,12 +137,13 @@ export function applyAgentEdit(
   DfmAgentDocumentError
 > {
   // The codec normalizes the body's line breaks to `\n`, so a passage quoted from a source
-  // stored with CRLF line endings only matches once normalized the same way.
+  // stored with CRLF line endings only matches once normalized the same way. The replacement is
+  // normalized too, so the size checks count the text that is written.
   const replaced = replaceInBody({
     text: text.replaceAll("\r\n", "\n"),
     body: document.body,
     oldString: oldString.replaceAll("\r\n", "\n"),
-    newString,
+    newString: newString.replaceAll("\r\n", "\n"),
     expectedReplacements,
   });
   if (replaced.isErr()) {
@@ -145,6 +155,22 @@ export function applyAgentEdit(
   const editedBody = replaced.value.editedBody
     .replaceAll("\r\n", "\n")
     .replace(/\n+$/, "");
+
+  // The codec bounds the source as written after its front matter: the threads, then the body
+  // with the blank line before them, or with the line break after it when it is alone.
+  const withoutBody = serializeDfm({
+    ...document,
+    frontMatter: null,
+    body: "",
+  });
+  if (withoutBody.isOk() && editedBody !== "") {
+    const rest = withoutBody.value === "" ? 1 : withoutBody.value.length + 2;
+    if (editedBody.length + rest > INPUT_LIMITS.length) {
+      return new Err(
+        new DfmAgentDocumentError("too_large", EDIT_TOO_LARGE_MESSAGE)
+      );
+    }
+  }
 
   // Removing a whole pair is allowed, as when people delete commented text in the editor:
   // its thread stays in the annotations block, without an anchor.
