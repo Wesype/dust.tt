@@ -7,7 +7,8 @@ import type { MessageDescriptor } from "@lingui/core";
 import { Editor } from "@tiptap/core";
 import { afterAll, beforeAll, expect, vi } from "vitest";
 
-const translate = (descriptor: MessageDescriptor) => descriptor.id ?? "";
+const translate = (descriptor: MessageDescriptor) =>
+  descriptor.message ?? descriptor.id ?? "";
 
 const opened: Editor[] = [];
 
@@ -20,7 +21,10 @@ export function destroyOpenedEditors() {
 }
 
 /** An editor on the file `markdown`, mounted in the document, as a browser shows it. */
-export function openEditor(markdown: string, { live = false } = {}) {
+export function openEditor(
+  markdown: string,
+  { editable = true, live = false } = {}
+) {
   const loaded = loadDfm(markdown);
   if (loaded.isErr()) {
     throw new Error(loaded.error);
@@ -33,6 +37,7 @@ export function openEditor(markdown: string, { live = false } = {}) {
       resolveImageSource: () => null,
     }),
     content: loaded.value.content,
+    editable,
   });
   opened.push(built);
   return built;
@@ -125,5 +130,37 @@ export function stubClipboardEvent() {
   });
   afterAll(() => {
     vi.unstubAllGlobals();
+  });
+}
+
+/** jsdom lays nothing out; ProseMirror measures ranges when it scrolls to the selection. */
+export function stubRangeLayout() {
+  const stubs = [
+    ["getClientRects", () => []],
+    [
+      "getBoundingClientRect",
+      () => ({ top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 }),
+    ],
+  ] as const;
+  let originals: (PropertyDescriptor | undefined)[] = [];
+  beforeAll(() => {
+    originals = stubs.map(([key, value]) => {
+      const original = Object.getOwnPropertyDescriptor(Range.prototype, key);
+      Object.defineProperty(Range.prototype, key, {
+        configurable: true,
+        value,
+      });
+      return original;
+    });
+  });
+  afterAll(() => {
+    stubs.forEach(([key], i) => {
+      const original = originals[i];
+      if (original) {
+        Object.defineProperty(Range.prototype, key, original);
+      } else {
+        Reflect.deleteProperty(Range.prototype, key);
+      }
+    });
   });
 }

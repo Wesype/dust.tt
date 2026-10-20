@@ -470,6 +470,11 @@ msgid "Choose an image"
 msgstr ""
 
 #: front/components/editor/document/editorExtensions.ts
+msgctxt "name of a task's checkbox when the task has no text"
+msgid "Task"
+msgstr ""
+
+#: front/components/editor/document/editorExtensions.ts
 msgid "Untitled"
 msgstr ""
 

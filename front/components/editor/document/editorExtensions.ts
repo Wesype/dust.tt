@@ -28,6 +28,12 @@ export const buildDocumentEditorExtensions = (
     live,
     resolveImageSource,
     parsePastedMarkdown: parseMarkdownBlocks,
+    emptyTaskLabel: t(
+      msg({
+        message: "Task",
+        context: "name of a task's checkbox when the task has no text",
+      })
+    ),
   }),
   DocumentListJoin,
   DocumentLinks,
