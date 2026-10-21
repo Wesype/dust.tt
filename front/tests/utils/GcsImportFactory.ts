@@ -1,6 +1,9 @@
+import assert from "node:assert";
 import { Authenticator } from "@app/lib/auth";
 import { DfsClient } from "@app/lib/dfs/client";
 import { DfsFileSystem } from "@app/lib/dfs/file_system";
+import { ConversationResource } from "@app/lib/resources/conversation_resource";
+import { ConversationFactory } from "@app/tests/utils/ConversationFactory";
 import { FakeDfsTransport } from "@app/tests/utils/dfs/FakeDfsTransport";
 import { InMemoryDfs } from "@app/tests/utils/dfs/InMemoryDfs";
 import { GcsNotificationFactory } from "@app/tests/utils/GcsNotificationFactory";
@@ -57,5 +60,30 @@ export class GcsImportFactory {
     });
 
     return { auth, workspace, user, globalGroup, pod, source };
+  }
+
+  static async podConversation({
+    withActiveEditor = true,
+    depth = 0,
+  }: { withActiveEditor?: boolean; depth?: number } = {}) {
+    const fixture = await this.pod({ withActiveEditor });
+    const created = await ConversationFactory.create(fixture.auth, {
+      agentConfigurationId: "dust",
+      messagesCreatedAt: [],
+      spaceId: fixture.pod.id,
+      depth,
+    });
+    const conversation = await ConversationResource.fetchById(
+      fixture.auth,
+      created.sId
+    );
+    assert(conversation);
+
+    const source = GcsNotificationFactory.replicationSource({
+      workspaceId: fixture.workspace.sId,
+      objectName: `w/${fixture.workspace.sId}/conversations/${conversation.sId}/files/nested/report.txt`,
+    });
+
+    return { ...fixture, conversation, source };
   }
 }
