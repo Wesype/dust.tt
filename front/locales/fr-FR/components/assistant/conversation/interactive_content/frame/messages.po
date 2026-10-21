@@ -127,23 +127,6 @@ msgid "Only workspace member email addresses can be added."
 msgstr "Seules les adresses e-mail des membres du workspace peuvent être ajoutées."
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "Remove access rule"
-msgstr "Supprimer la règle d’accès"
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "Remove"
-msgstr "Retirer"
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-#: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
-msgid "Cancel"
-msgstr "Annuler"
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "Remove access for <0>{label}</0>? People may still have access through another invitation, domain or the frame’s general access setting."
-msgstr "Supprimer l’accès de <0>{label}</0> ? Ces personnes peuvent encore y accéder via une autre invitation, un domaine ou le paramètre d’accès général du Frame."
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
 msgid "Add people or domains"
 msgstr "Ajouter des personnes ou domaines"
 
@@ -436,6 +419,10 @@ msgstr "Vous avez des modifications de texte non enregistrées. Quitter le mode 
 #: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
 msgid "Discard"
 msgstr "Abandonner"
+
+#: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
+msgid "Cancel"
+msgstr "Annuler"
 
 #: front/components/assistant/conversation/interactive_content/frame/useLiveFrameEditing.tsx
 msgid "This Frame is in draft mode. Edit it from the conversation."

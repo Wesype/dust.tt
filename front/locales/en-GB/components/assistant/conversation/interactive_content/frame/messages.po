@@ -127,23 +127,6 @@ msgid "Only workspace member email addresses can be added."
 msgstr ""
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "Remove access rule"
-msgstr ""
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "Remove"
-msgstr ""
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-#: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
-msgid "Cancel"
-msgstr ""
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "Remove access for <0>{label}</0>? People may still have access through another invitation, domain or the frame’s general access setting."
-msgstr ""
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
 msgid "Add people or domains"
 msgstr ""
 
@@ -435,6 +418,10 @@ msgstr ""
 
 #: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
 msgid "Discard"
+msgstr ""
+
+#: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
+msgid "Cancel"
 msgstr ""
 
 #: front/components/assistant/conversation/interactive_content/frame/useLiveFrameEditing.tsx

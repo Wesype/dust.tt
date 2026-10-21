@@ -3,7 +3,6 @@ import {
   FrameSharingRow,
 } from "@app/components/assistant/conversation/interactive_content/frame/FrameSharingRow";
 import { Section } from "@app/components/assistant/conversation/interactive_content/frame/ShareFrameSection";
-import { useAwaitableDialog } from "@app/hooks/useAwaitableDialog";
 import { compareStrings } from "@app/lib/i18n/format";
 import { MAX_EMAILS_OR_DOMAINS_PER_INVITE } from "@app/types/files";
 import type {
@@ -145,8 +144,7 @@ export function FrameSharingGrants({
       reValidateMode: "onSubmit",
     }
   );
-  const { AwaitableDialog, showDialog } = useAwaitableDialog();
-  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [revokingIds, setRevokingIds] = useState<string[]>([]);
 
   const grants = [...(sharing?.accessGrants ?? [])].sort(
     (a, b) =>
@@ -155,33 +153,11 @@ export function FrameSharingGrants({
   );
 
   const revoke = async (grant: FileSharingGrantType) => {
-    const label =
-      grant.target.kind === "domain"
-        ? `@${grant.target.value}`
-        : grant.target.value;
-    const confirmed = await showDialog({
-      title: t`Remove access rule`,
-      validateLabel: t`Remove`,
-      validateVariant: "warning",
-      cancelLabel: t`Cancel`,
-      children: (
-        <p>
-          <Trans>
-            Remove access for <strong>{label}</strong>? People may still have
-            access through another invitation, domain or the frame’s general
-            access setting.
-          </Trans>
-        </p>
-      ),
-    });
-    if (!confirmed) {
-      return;
-    }
-    setRevokingId(grant.sId);
+    setRevokingIds((ids) => [...ids, grant.sId]);
     try {
       await onRevoke(grant.sId);
     } finally {
-      setRevokingId(null);
+      setRevokingIds((ids) => ids.filter((id) => id !== grant.sId));
     }
   };
 
@@ -211,7 +187,6 @@ export function FrameSharingGrants({
 
   return (
     <div className="flex flex-col gap-4">
-      <AwaitableDialog />
       <Section
         label={inviteLabel}
         description={
@@ -276,12 +251,8 @@ export function FrameSharingGrants({
               <li key={grant.sId}>
                 <GrantRow
                   grant={grant}
-                  isRevoking={revokingId === grant.sId}
-                  onRevoke={
-                    canRevoke && revokingId === null
-                      ? () => revoke(grant)
-                      : undefined
-                  }
+                  isRevoking={revokingIds.includes(grant.sId)}
+                  onRevoke={canRevoke ? () => revoke(grant) : undefined}
                 />
               </li>
             ))}
