@@ -36,14 +36,21 @@ interface UseMarkdownFileEditorParams {
   processedContent: ProcessedContent | null;
 }
 
+export type CollabViewMode = "live" | "source" | "preview";
+
+const NEXT_COLLAB_VIEW_MODE: Record<CollabViewMode, CollabViewMode> = {
+  live: "source",
+  source: "preview",
+  preview: "live",
+};
+
 export interface MarkdownFileEditor {
   canEdit: boolean;
+  collabViewMode: CollabViewMode;
   content: string | undefined;
   /** Unsaved edits in the plain editor. */
   isDirty: boolean;
   isSaving: boolean;
-  /** The rich editor is set aside for the plain editor on the file's Markdown source. */
-  isSourceMode: boolean;
   revert: () => void;
   /**
    * Set when the file opens in the rich editor: every Markdown file behind the co_edition flag,
@@ -53,8 +60,11 @@ export interface MarkdownFileEditor {
   save: () => Promise<void>;
   setDraft: (content: string) => void;
   setViewMode: (mode: MarkdownFilePreviewViewMode) => void;
-  /** Hidden switch between the rich editor and the source; a no-op while an edit is unsaved. */
-  toggleSourceMode: () => void;
+  /**
+   * Hidden switch cycling the rich editor, the source and the read-only preview; a no-op while an
+   * edit is unsaved.
+   */
+  cycleCollabViewMode: () => void;
   viewMode: MarkdownFilePreviewViewMode;
 }
 
@@ -66,14 +76,16 @@ export interface MarkdownFileEditor {
  * and without its comments, whose signatures cannot be checked, when it has no canonical path.
  */
 /**
- * @cc [owner:tdraier,label:product] source-mode-toggle
- * `toggleSourceMode` MUST enter source mode only when debug tools are shown (`showDebugTools`), from
- * an open rich editor on a file the plain editor can edit, and MUST NOT leave it while the plain
- * editor holds an unsaved or saving edit. In source mode the rich editor MUST NOT be open and the plain editor MUST
- * stay in edit mode on the file's text as fetched, unprocessed, savable even while a live session
- * holds the file, unless that session refuses outside writes (`collab-session-source-write`). Leaving
- * it MUST reopen the rich editor on the file as fetched then, not on what it held before. Source mode MUST end when another file opens or the
- * preview closes.
+ * @cc [owner:tdraier,label:product] collab-view-mode-cycle
+ * `cycleCollabViewMode` MUST cycle `live` → `source` → `preview` → `live`. It MUST leave `live`
+ * only when debug tools are shown (`showDebugTools`), from an open rich editor on a file the plain
+ * editor can edit, and MUST NOT leave `source` while the plain editor holds an unsaved or saving
+ * edit. In `source` the rich editor MUST NOT be open and the plain editor MUST stay in edit mode on
+ * the file's text as fetched, unprocessed, savable even while a live session holds the file, unless
+ * that session refuses outside writes (`collab-session-source-write`). In `preview` the rich editor
+ * MUST be open read-only, still live. Leaving `source` MUST reopen the rich editor on the file as
+ * fetched then, not on what it held before. The mode MUST go back to `live` when another file opens
+ * or the preview closes.
  */
 export function useMarkdownFileEditor({
   category,
@@ -94,7 +106,7 @@ export function useMarkdownFileEditor({
   const [savedContent, setSavedContent] = useState("");
   const [sourcePath, setSourcePath] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isSourceMode, setIsSourceMode] = useState(false);
+  const [collabViewMode, setCollabViewMode] = useState<CollabViewMode>("live");
   const [resetKey, setResetKey] = useState({ isActive, path: entryPath });
   const initKeyRef = useRef<string | null>(null);
 
@@ -114,7 +126,7 @@ export function useMarkdownFileEditor({
   if (isActive !== resetKey.isActive || entryPath !== resetKey.path) {
     setResetKey({ isActive, path: entryPath });
     setViewMode("preview");
-    setIsSourceMode(false);
+    setCollabViewMode("live");
     setSourcePath(null);
     setDraft("");
     setSavedContent("");
@@ -124,6 +136,7 @@ export function useMarkdownFileEditor({
   const isPlainDirty = draft !== savedContent;
   // Saving cut preview text would truncate the file. An open draft stays so it can be copied.
   const canEdit = canOpenEditor && (!isTruncated || isPlainDirty);
+  const isSourceMode = collabViewMode === "source";
   const plainText = isSourceMode
     ? rawContent
     : (processedContent?.text ?? null);
@@ -225,39 +238,40 @@ export function useMarkdownFileEditor({
     collabUrl: collabUrl,
     fileKey: fileUrl ?? undefined,
     livePath: editablePath,
-    // Each switch resets the rich editor, so it reopens on the file rather than its old content.
+    // Each switch to or from the source resets the rich editor, so it reopens on the file rather
+    // than its old content.
     isActive: isActive && !isSourceMode,
     rawContent,
     isTruncated,
-    readOnly: !canOpenEditor,
+    readOnly: !canOpenEditor || collabViewMode === "preview",
   });
 
-  const toggleSourceMode = () => {
+  const cycleCollabViewMode = () => {
     if (isPlainDirty || isSaving) {
       return;
     }
     if (
-      !isSourceMode &&
+      collabViewMode === "live" &&
       (!showDebugTools(featureFlags) || !rich.richEditor || !canEdit)
     ) {
       return;
     }
-    setIsSourceMode(!isSourceMode);
+    setCollabViewMode(NEXT_COLLAB_VIEW_MODE[collabViewMode]);
   };
 
   return {
     canEdit,
+    collabViewMode,
     content:
       canEdit && sourcePath === entryPath ? draft : (plainText ?? undefined),
     isDirty: isPlainDirty,
     isSaving,
-    isSourceMode,
     revert: () => setDraft(savedContent),
     richEditor: rich.richEditor,
     save,
     setDraft,
     setViewMode,
-    toggleSourceMode,
+    cycleCollabViewMode,
     viewMode: canEdit ? (isSourceMode ? "edit" : viewMode) : "preview",
   };
 }

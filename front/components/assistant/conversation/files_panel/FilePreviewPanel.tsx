@@ -7,6 +7,7 @@ import {
 import { ConversationSidePanelHeader } from "@app/components/assistant/conversation/ConversationSidePanelHeader";
 import { CenteredState } from "@app/components/assistant/conversation/interactive_content/CenteredState";
 import { useSidePanelFullScreen } from "@app/components/assistant/conversation/useSidePanelFullScreen";
+import { CollabViewModeFileIcon } from "@app/components/file_explorer/CollabViewModeFileIcon";
 import {
   FilePreviewBody,
   filePreviewLayoutClassName,
@@ -16,7 +17,6 @@ import {
   useFilePreviewContent,
 } from "@app/components/file_explorer/FilePreviewContent";
 import { MarkdownFilePreviewViewModeSwitch } from "@app/components/file_explorer/MarkdownFilePreview";
-import { SourceModeFileIcon } from "@app/components/file_explorer/SourceModeFileIcon";
 import type { FileEntry } from "@app/components/file_explorer/types";
 import { useMarkdownFileEditor } from "@app/components/file_explorer/useMarkdownFileEditor";
 import { useConversationSandboxFiles } from "@app/hooks/conversations/useConversationSandboxFiles";
@@ -260,7 +260,7 @@ export function FilePreviewPanelView({
           <>
             {markdown.canEdit && !markdown.richEditor && (
               <>
-                {!markdown.isSourceMode && (
+                {markdown.collabViewMode !== "source" && (
                   <MarkdownFilePreviewViewModeSwitch
                     viewMode={markdown.viewMode}
                     onViewModeChange={markdown.setViewMode}
@@ -328,7 +328,7 @@ export function FilePreviewPanelView({
             )}
             {!isMobile &&
               clientType !== "extension" &&
-              (markdown.richEditor || markdown.isSourceMode) && (
+              (markdown.richEditor || markdown.collabViewMode === "source") && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -345,13 +345,26 @@ export function FilePreviewPanelView({
         }
       >
         <div className="flex min-w-0 items-center gap-1.5">
-          <SourceModeFileIcon
+          <CollabViewModeFileIcon
             visual={FileIcon}
-            onToggleSourceMode={markdown.toggleSourceMode}
+            onCycleViewMode={markdown.cycleCollabViewMode}
           />
           <span className="min-w-16 truncate text-sm font-medium">
             {fileName}
           </span>
+          {markdown.collabViewMode !== "live" && (
+            <span className="shrink-0 text-xs text-muted-foreground">
+              {markdown.collabViewMode === "source"
+                ? t({
+                    message: "[source]",
+                    context: "file view mode label beside the file name",
+                  })
+                : t({
+                    message: "[read-only]",
+                    context: "file view mode label beside the file name",
+                  })}
+            </span>
+          )}
           <span ref={setDocumentStatus} className="flex empty:hidden" />
         </div>
       </ConversationSidePanelHeader>

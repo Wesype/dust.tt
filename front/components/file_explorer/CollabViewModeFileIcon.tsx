@@ -1,18 +1,21 @@
 import { Icon } from "@dust-tt/sparkle";
 import type { ComponentType } from "react";
 
-interface SourceModeFileIconProps {
+interface CollabViewModeFileIconProps {
   visual: ComponentType;
   className?: string;
-  onToggleSourceMode: () => void;
+  onCycleViewMode: () => void;
 }
 
-/** A file's icon that hides the switch to its Markdown source: Option/Alt-click toggles it. */
-export function SourceModeFileIcon({
+/**
+ * A file's icon that hides the switch between its live editor, its Markdown source and its read-only
+ * preview: Option/Alt-click cycles them.
+ */
+export function CollabViewModeFileIcon({
   visual,
   className,
-  onToggleSourceMode,
-}: SourceModeFileIconProps) {
+  onCycleViewMode,
+}: CollabViewModeFileIconProps) {
   return (
     <button
       type="button"
@@ -21,7 +24,7 @@ export function SourceModeFileIcon({
       className="flex shrink-0 cursor-default"
       onClick={(event) => {
         if (event.altKey) {
-          onToggleSourceMode();
+          onCycleViewMode();
         }
       }}
     >
