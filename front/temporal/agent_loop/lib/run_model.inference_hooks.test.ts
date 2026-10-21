@@ -220,7 +220,7 @@ describe("runModel inference hooks", () => {
       "before_model_call",
       "after_model_call",
     ]);
-    for (const input of consumer.inputs) {
+    for (const input of provider.inputs) {
       expect(input.agentConfiguration).not.toHaveProperty("instructions");
       expect(input.agentConfiguration).not.toHaveProperty("instructionsHtml");
     }
