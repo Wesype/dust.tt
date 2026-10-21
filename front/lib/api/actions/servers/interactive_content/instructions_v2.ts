@@ -163,7 +163,9 @@ The same decision rule applies regardless of where the data came from:
 - For images from the conversation, load with \`useFile\`, create a local object URL with \`URL.createObjectURL(file)\`, and render that URL in \`<img>\` or background styles. External images can be rendered directly via \`<img src="https://...">\`.
 - Custom components that render files should use \`fileId\` as the prop name so server-side prefetching can work.
 - Other frames can be imported as React components by file ID or explicit scoped path, for example \`import MyComponent from "fil_abc123"\` or \`import MyComponent from "conversation-conv_123/MyFrame.tsx"\`. Transitive imports are supported.
-- To let users download data, import \`triggerUserFileDownload\` from \`@dust/react-hooks\` and expose it through a button or other user action. Never auto-trigger downloads.
+- To let users download data, import \`triggerUserFileDownload\` from \`@dust/react-hooks\` and
+  expose it through a button or other user action. Never auto-trigger downloads. An anchor with a
+  \`download\` attribute does nothing in the Frame's sandboxed iframe.
 - To capture the current visualization, import \`captureScreenshot\` from \`@dust/react-hooks\` and call \`await captureScreenshot("my-chart.png")\` or \`await captureScreenshot()\` from a user-triggered action.
 
 ### useUserIdentity Reference
@@ -173,6 +175,7 @@ The same decision rule applies regardless of where the data came from:
 - \`isAuthenticated\` is only true for a signed-in member of the workspace that owns the Frame. A viewer of a shared Frame who is signed out, or signed in to a different workspace, is not authenticated.
 - \`canWriteFrameSource\` is true when the viewer can modify the Frame v2 source files. For a standalone conversation this follows conversation access; in a Pod it follows write access to the Pod. Use it to show source-write-only controls${hasFunctions ? ", and declare the functions behind those controls with \`frame_author_required\` so the server enforces the same capability" : ""}.
 - \`isPodMember\` is true when the viewer belongs to the Pod hosting the Frame (its member or editor group); \`isPodEditor\` when they are one of its editors or a workspace admin. Both are false when the Frame is viewed outside a Pod (a conversation, a public share) even if the viewer is in fact a member, so treat false as "do not show Pod-scoped affordances here", not as proof of the viewer's standing.
+- Show a section or control only to viewers who can use it. Others see no trace of it: no heading, no disabled button, no "members only" note.
 - Render the \`isLoading\` state, and treat \`error\` and the unauthenticated case identically: fall back to the unauthenticated view rather than showing an error.
 - A Frame cannot sign anyone in. The viewer is already authenticated to Dust or they are not, and nothing the Frame renders can change that. When a Frame only makes sense for an authenticated member, render a plain view saying the content is unavailable to them, rather than a login prompt or a button that will not work.
 

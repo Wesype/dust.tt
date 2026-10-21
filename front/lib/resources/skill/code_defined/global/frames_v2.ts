@@ -1,12 +1,24 @@
+import { getPrefixedToolName } from "@app/lib/actions/tool_name_utils";
+import {
+  FILES_MOVE_ACTION_NAME,
+  FILES_SERVER_NAME,
+} from "@app/lib/api/actions/servers/files/metadata";
 import { buildInteractiveContentAuthoringProseV2 } from "@app/lib/api/actions/servers/interactive_content/instructions_v2";
 import { MAX_FRAME_DATABASE_COUNT } from "@app/types/api/frame_manifest";
 
-const NO_BROWSER_DOWNLOADS = `\
-A Frame cannot make the browser download a file. Its UI runs in a sandboxed iframe that does not
-allow downloads, so building an anchor with a \`download\` attribute and clicking it silently does
-nothing — no error to catch. Do not offer a download button. Render the contents in the UI
-instead: an \`<img>\` for an image, formatted text for data, a table for rows.
-`;
+const FILES_MOVE_TOOL_NAME = getPrefixedToolName(
+  FILES_SERVER_NAME,
+  FILES_MOVE_ACTION_NAME
+);
+
+const FRAME_FOLDER_NAMING = `\
+- A Frame is named by its folder, and \`manifest.json\` carries no name. Choose the folder name
+  carefully at creation: it is the name users see. To rename or move a Frame, move its folder with
+  \`${FILES_MOVE_TOOL_NAME}\`: the Frame keeps its ID, its active publication and its share link,
+  so there is nothing to republish. Never run \`mv\` or \`cp\` on a Frame folder from the Computer:
+  \`mv\` strands the Frame and \`cp\` does not clone it. The user can rename it the same way from
+  the Pod UI, so refer to a Frame by its stable ID whenever you need an identifier that survives a
+  rename.`;
 
 const FUNCTIONS_SOURCE_LAYOUT = `\
 ## Frames v2 source layout
@@ -44,25 +56,19 @@ The manifest declares the UI entry point, every server function, and every datab
       "name": "list-comments",
       "description": "List comments for a thread.",
       "entryPoint": "functions/list-comments.ts",
-      "executionMode": "fast",
-      "defaultStake": "never_ask"
+      "executionMode": "fast"
     },
     {
       "name": "post-comment",
       "description": "Add a comment to a thread.",
       "entryPoint": "functions/post-comment.ts",
-      "executionMode": "durable",
-      "defaultStake": "low"
+      "executionMode": "durable"
     }
   ]
 }
 \`\`\`
 
-- A Frame is named by its folder, and \`manifest.json\` carries no name. Choose the folder name
-  carefully at creation: it is the name users see. To rename a Frame, move its folder — the Frame
-  keeps its ID, its active publication and its share link, so there is nothing to republish. The
-  user can rename it the same way from the Pod UI, so refer to a Frame by its stable ID whenever
-  you need an identifier that survives a rename.
+${FRAME_FOLDER_NAMING}
 - \`uiEntryPoint\` defaults to \`index.tsx\` when omitted.
 - Function names are lower-case alphanumeric segments separated by single hyphens.
 - \`entryPoint\` paths are relative to the Frame folder. Keep shared helpers under that folder and
@@ -72,8 +78,6 @@ The manifest declares the UI entry point, every server function, and every datab
   underscores. A Frame can declare up to ${MAX_FRAME_DATABASE_COUNT} databases.
 - \`executionMode\` defaults to \`durable\`. Use \`fast\` when the function never calls a Dust tool;
   use \`durable\` when it calls \`tools.call\` (or otherwise invokes a Dust tool).
-- \`defaultStake\` defaults to \`low\`. \`never_ask\` runs unattended, \`low\` asks once and can be
-  always approved, and \`high\` asks on every call when the function is exposed as a tool.
 - Input, output, and caller-identity schemas belong in the function's TypeScript \`schema\` export,
   not in \`manifest.json\`. The build extracts them from source.
 `;
@@ -100,11 +104,7 @@ The manifest declares the UI entry point:
 }
 \`\`\`
 
-- A Frame is named by its folder, and \`manifest.json\` carries no name. Choose the folder name
-  carefully at creation: it is the name users see. To rename a Frame, move its folder — the Frame
-  keeps its ID, its active publication and its share link, so there is nothing to republish. The
-  user can rename it the same way from the Pod UI, so refer to a Frame by its stable ID whenever
-  you need an identifier that survives a rename.
+${FRAME_FOLDER_NAMING}
 - \`uiEntryPoint\` defaults to \`index.tsx\` when omitted.
 - Do not declare \`functions\` or \`databases\`: this workspace rejects them at publish.
 `;
@@ -176,7 +176,9 @@ not guaranteed at build time.
 ## Persisting state in a Frame database
 
 A Frame owns its SQLite databases independently of its source folder and publications. Publishing
-reconciles the declared schemas but does not replace existing data. The runtime never mounts the
+reconciles the declared schemas but does not replace existing data: it creates a database on its
+first publish and applies additive changes to the live database before the new publication
+activates, so a publish that fails later keeps them. The runtime never mounts the
 Frame source: functions reach structured state only through the declared database handles, and
 bytes only through the files folder below.
 
@@ -293,8 +295,9 @@ export default {
 \`tools.call(server, tool, args?)\` takes a plain JSON \`args\` object (no stringification, no CLI
 flags). Transport failures throw; a tool that ran and reported an error resolves with
 \`isError: true\`. Publishing a function that calls Dust tools as \`fast\` is a bug: the runtime
-refuses the tool call. Function \`fetch()\` requests use the same workspace egress allowlist and
-\`DST_*\` / \`DSEC_*\` configuration rules as the Computer.
+refuses the tool call. Function \`fetch()\` requests get the same \`DST_*\` / \`DSEC_*\` variables
+and workspace and Pod egress allowlists as the Computer, but not the domains allowed for this
+conversation alone.
 
 ### Knowing who called a function
 
@@ -312,13 +315,20 @@ The \`schema.userIdentity\` policy decides whether the function may run:
 Frame UI calls are available only to authenticated members of the owning workspace; guest or link
 viewers must get a typed authorization error. A function policy can impose a stricter requirement.
 
-Use \`currentUser()\` from \`@dust/pod\` for the trusted caller. It returns
-\`{ sId, firstName, lastName, fullName, image, isPodMember, isPodEditor }\`, or \`null\` under the
-optional policy when there is no user. Never accept a caller \`userId\` as function input: the caller
-can forge it. The frontend's \`useUserIdentity\` hook also returns \`canWriteFrameSource\`; use that flag to
-show source-write-only UI, but enforce every such operation with \`frame_author_required\` (the
-server-side equivalent of \`canWriteFrameSource\`) because client-side conditions are not access
-control.
+Use \`currentUser()\` from \`@dust/pod\` for the trusted caller. It returns the caller's identity,
+including \`isPodMember\`, \`isPodEditor\` and \`canWriteFrameSource\`, or \`null\` when there is no
+user. Never accept a caller \`userId\` as function input: the caller can forge it. The frontend's
+\`useUserIdentity\` hook returns
+\`canWriteFrameSource\`; use that flag to show source-write-only UI, but enforce every such
+operation with \`frame_author_required\` (the server-side equivalent of \`canWriteFrameSource\`)
+because client-side conditions are not access control.
+
+Prefer precise functions over generic ones, each with its own access policy. For example, prefer
+\`set-ticket-priority\` and \`close-ticket\` over a vague \`update-ticket\`. Members can set the
+priority but only Frame authors should close tickets, so \`set-ticket-priority\` is
+\`workspace_user_required\` while \`close-ticket\` is \`frame_author_required\`. A single
+\`update-ticket\` cannot express that split. When a read must return more to some callers, decide
+from \`currentUser()\`, never from input the caller sends.
 
 ## Storing files in a Frame
 
@@ -407,8 +417,38 @@ loading (\`isLoading\` on reads, \`isMutating\` / \`isLoading\` on mutations), e
 for every call. Function failures are
 \`SandboxFunctionCallError\` instances with \`message\`, optional HTTP \`status\`, and an open-string
 \`code\`; handle known codes and provide a generic fallback.
+`;
 
-${NO_BROWSER_DOWNLOADS}`;
+const PUBLIC_FUNCTIONS_AUTHORING = `\
+## Functions for public visitors
+
+A Frame whose share is set to public can serve some of its functions to visitors outside the
+workspace, an exception to the members-only rule above. A visitor verifies an email on the share
+page, then may call only the functions declared \`userIdentity: "public"\`. Sharing a Frame with
+functions publicly requires at least one public function.
+
+A public function:
+
+- must declare \`"executionMode": "fast"\` in its manifest entry. Publishing refuses a \`public\`
+  function left on the \`durable\` default, so it cannot call Dust tools.
+- must not read \`DSEC_*\` secrets. Publishing refuses one that references them.
+- sees \`currentUser()\` return \`null\` for a visitor. Check it before using any caller data.
+- returns only data any visitor may see. A visitor can call it directly and read the whole
+  response, not just what the UI shows, and every visitor downloads the UI source, so keep
+  sensitive data out of both.
+- serves data that needs a Dust tool or a secret from storage: a function with another policy
+  fetches it into the Frame database, and the public function reads the stored rows. Visitors
+  cannot trigger that refresh.
+
+Split visitor and member use cases the same way: a \`public\` function for what visitors may do, a
+members-only one for the rest. A non-null user is a workspace member.
+
+In the UI, visitors (\`isAuthenticated: false\`) see no trace of member-only or author-only
+features. A visitor's call to a non-public
+function fails with \`user_authentication_required\`: show a message for that error. A visitor's
+call that runs longer than the share page waits fails, yet may still complete on the server. Never
+retry a failed call automatically: a retry can run it twice.
+`;
 
 const MIGRATING_LEGACY_FRAME = `\
 ## Migrating a legacy Frame
@@ -472,9 +512,11 @@ Edit existing Pod Frames in place.
  */
 export const buildFramesV2Instructions = ({
   hasFunctions,
+  hasPublicFunctions,
   isPod,
 }: {
   hasFunctions: boolean;
+  hasPublicFunctions: boolean;
   isPod: boolean;
 }) => `\
 # Frames v2
@@ -643,8 +685,11 @@ This command is read-only. It never creates sharing state, changes the scope, or
 recipients. It returns the stable Frame ID, current share scope, and existing share URL. If no share
 link exists, ask the user to configure sharing in the Dust UI.
 
-${hasFunctions ? FUNCTIONS_SOURCE_LAYOUT : CLIENT_ONLY_SOURCE_LAYOUT}
-${hasFunctions ? FUNCTIONS_AUTHORING : `${NO_BROWSER_DOWNLOADS}\n`}
+${
+  hasFunctions
+    ? `${FUNCTIONS_SOURCE_LAYOUT}\n${FUNCTIONS_AUTHORING}`
+    : CLIENT_ONLY_SOURCE_LAYOUT
+}${hasPublicFunctions ? `\n${PUBLIC_FUNCTIONS_AUTHORING}` : ""}
 ## Check the Frame UI
 
 For a v2 Frame, run the attached linter on its folder before publishing:
@@ -679,9 +724,9 @@ the Frame. Use the suggested \`./…\` path so those references still work when 
 
 ${
   hasFunctions
-    ? `There is no separate v2 function publish. Publish the manifest once; the UI source, all declared
-functions, and all declared database schemas are built or reconciled, stored, and activated
-atomically:
+    ? `There is no separate v2 function publish. Publish the manifest once: the UI source and all
+declared functions are built, stored, and activated atomically, and the declared databases are
+reconciled as described above:
 `
     : `Publish the manifest once; the UI source is built, stored, and activated atomically:
 `
@@ -740,9 +785,6 @@ unless the user asked for it.
 
 Use the Computer and CLI for all other Frame operations. Use \`dsbx frame --help\` as the authority
 for available operations.
-
-Do not use \`mv\` or \`cp\` on a Frame folder: move and clone are not supported in this
-initial scope.
 
 ${hasFunctions ? `${MIGRATING_LEGACY_FRAME}\n` : ""}## Editing
 

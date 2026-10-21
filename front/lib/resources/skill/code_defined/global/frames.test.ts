@@ -111,6 +111,8 @@ describe("framesSkill.fetchInstructions", () => {
     expect(instructions).toContain("## Persisting state in a Frame database");
     expect(instructions).toContain('db("comments")');
     expect(instructions).toContain("reconciles the declared schemas");
+    expect(instructions).toContain("move its folder with\n  `files__move`");
+    expect(instructions).not.toContain("defaultStake");
     expect(instructions).toContain("### React Component Rules");
     expect(instructions).toContain("### Slideshows");
     expect(instructions).toContain("Keep the built-in width and height");
@@ -167,7 +169,8 @@ describe("framesSkill.fetchInstructions", () => {
       "`dsbx frame publish` and `validate` reject them"
     );
     expect(instructions).toContain("this workspace rejects them at publish");
-    expect(instructions).toContain("does not\nallow downloads");
+    expect(instructions).toContain("triggerUserFileDownload");
+    expect(instructions).not.toContain("Do not offer a download button");
     expect(instructions).not.toContain("## Authoring a function");
     expect(instructions).not.toContain(
       "## Persisting state in a Frame database"
@@ -180,6 +183,32 @@ describe("framesSkill.fetchInstructions", () => {
     expect(instructions).not.toContain("dsbx db");
     expect(instructions).not.toContain("frame_author_required");
     expect(instructions).not.toContain("--replaces");
+  });
+
+  it("teaches functions for public visitors only when public functions are enabled", async () => {
+    const { authenticator: auth } = await createResourceTest({});
+    await FeatureFlagFactory.basic(auth, "frames_v2");
+    await FeatureFlagFactory.basic(auth, "frames_v2_functions");
+    const { authenticator: publicAuth } = await createResourceTest({});
+    await FeatureFlagFactory.basic(publicAuth, "frames_v2");
+    await FeatureFlagFactory.basic(publicAuth, "frames_v2_functions");
+    await FeatureFlagFactory.basic(publicAuth, "frames_v2_public_functions");
+
+    const withoutPublicFunctions = await framesSkill.fetchInstructions(auth, {
+      spaceIds: [],
+    });
+    const withPublicFunctions = await framesSkill.fetchInstructions(
+      publicAuth,
+      { spaceIds: [] }
+    );
+
+    expect(withoutPublicFunctions).not.toContain(
+      "## Functions for public visitors"
+    );
+    expect(withPublicFunctions).toContain("## Functions for public visitors");
+    expect(withPublicFunctions).toContain(
+      "A non-null user is a workspace member"
+    );
   });
 
   it("teaches the computer-first flow when the Computer is enabled", async () => {
