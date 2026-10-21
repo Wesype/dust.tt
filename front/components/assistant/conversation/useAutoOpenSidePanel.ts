@@ -30,6 +30,7 @@ export function useAutoOpenSidePanel({
     currentPanel,
     data: panelData,
     wasAutoOpenDismissedForFileId,
+    wasFilesPanelAutoOpenDismissed,
   } = useConversationSidePanelContext();
   const isMobile = useIsMobile();
   const clientType = useClientType();
@@ -197,7 +198,10 @@ export function useAutoOpenSidePanel({
       regularGeneratedFiles.length === 0 ||
       !isLastMessage ||
       autoOpenedFilesForRef.current === agentMessage.sId ||
-      currentPanel === "files"
+      currentPanel === "files" ||
+      // User closed the Files panel earlier this conversation — do not reopen for
+      // later generated files (manual open still works).
+      wasFilesPanelAutoOpenDismissed()
     ) {
       return;
     }
@@ -215,5 +219,6 @@ export function useAutoOpenSidePanel({
     panelData,
     isPanelOverlay,
     wasAutoOpenDismissedForFileId,
+    wasFilesPanelAutoOpenDismissed,
   ]);
 }

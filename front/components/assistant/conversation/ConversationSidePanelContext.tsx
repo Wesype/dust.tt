@@ -262,6 +262,9 @@ interface ConversationSidePanelContextType {
   // In-memory only: Frame fileId the user last dismissed. Cleared on conversation change /
   // reload. Auto-open skips this file even if it was republished.
   wasAutoOpenDismissedForFileId: (fileId: string) => boolean;
+  // In-memory only: user closed the Files panel this conversation session. Cleared on
+  // conversation change / reload. Suppresses auto-open for any later generated files.
+  wasFilesPanelAutoOpenDismissed: () => boolean;
 }
 
 // Past a few levels, going back one panel at a time stops matching what the user remembers, so
@@ -351,16 +354,26 @@ export function ConversationSidePanelProvider({
   // Last interactive-content fileId the user closed. Session-scoped (lost on reload /
   // conversation switch); blocks auto-open for that Frame.
   const dismissedAutoOpenFileIdRef = React.useRef<string | null>(null);
+  // User closed the Files panel this conversation session. Session-scoped; blocks
+  // auto-open of the explorer for any later generated files.
+  const dismissedFilesPanelAutoOpenRef = React.useRef(false);
 
-  const rememberDismissedAutoOpenFile = useCallback(() => {
+  const rememberDismissedAutoOpen = useCallback(() => {
     const closing = currentParamsRef.current;
     if (closing?.type === INTERACTIVE_CONTENT_SIDE_PANEL_TYPE) {
       dismissedAutoOpenFileIdRef.current = closing.fileId;
+    }
+    if (closing?.type === FILES_SIDE_PANEL_TYPE) {
+      dismissedFilesPanelAutoOpenRef.current = true;
     }
   }, []);
 
   const wasAutoOpenDismissedForFileId = useCallback((fileId: string) => {
     return dismissedAutoOpenFileIdRef.current === fileId;
+  }, []);
+
+  const wasFilesPanelAutoOpenDismissed = useCallback(() => {
+    return dismissedFilesPanelAutoOpenRef.current;
   }, []);
 
   // This should be called once the closing animation is done (onTransitionEnd)
@@ -376,7 +389,7 @@ export function ConversationSidePanelProvider({
 
   // Collapse without touching the history.
   const collapsePanel = useCallback(() => {
-    rememberDismissedAutoOpenFile();
+    rememberDismissedAutoOpen();
     currentParamsRef.current = null;
     if (panelRef && panelRef.current) {
       // Only flag a real collapse: on an already collapsed panel no transition runs, so
@@ -389,7 +402,7 @@ export function ConversationSidePanelProvider({
       // in case there is no ref found (agent builder preview), close the panel directly
       onPanelClosed();
     }
-  }, [panelRef, onPanelClosed, rememberDismissedAutoOpenFile]);
+  }, [panelRef, onPanelClosed, rememberDismissedAutoOpen]);
 
   // Show a panel without touching the history: write the hash and expand. Re-expanding
   // imperatively covers a close→reopen race where `currentPanel` keeps the same value and the
@@ -413,7 +426,7 @@ export function ConversationSidePanelProvider({
   );
 
   const closePanel = useCallback(() => {
-    rememberDismissedAutoOpenFile();
+    rememberDismissedAutoOpen();
     const history = panelHistoryRef.current;
     const previous = history[history.length - 1];
     if (previous) {
@@ -422,7 +435,7 @@ export function ConversationSidePanelProvider({
       return;
     }
     collapsePanel();
-  }, [showPanel, collapsePanel, rememberDismissedAutoOpenFile]);
+  }, [showPanel, collapsePanel, rememberDismissedAutoOpen]);
 
   const removeFromPanelHistory = useCallback(
     (type: ConversationSidePanelType) => {
@@ -518,9 +531,10 @@ export function ConversationSidePanelProvider({
       setFullScreenHash(undefined);
       panelHistoryRef.current = [];
       collapsePanel();
-      // collapsePanel records a dismiss for the leaving Frame; drop it — dismiss
+      // collapsePanel records a dismiss for the leaving panel; drop it — dismiss
       // is session-scoped to the conversation the user closed the panel in.
       dismissedAutoOpenFileIdRef.current = null;
+      dismissedFilesPanelAutoOpenRef.current = false;
     }
   }, [activeConversationId, collapsePanel, setFullScreenHash]);
 
@@ -570,6 +584,7 @@ export function ConversationSidePanelProvider({
       virtuosoMsg,
       data,
       wasAutoOpenDismissedForFileId,
+      wasFilesPanelAutoOpenDismissed,
     }),
     [
       currentPanel,
@@ -584,6 +599,7 @@ export function ConversationSidePanelProvider({
       virtuosoMsg,
       data,
       wasAutoOpenDismissedForFileId,
+      wasFilesPanelAutoOpenDismissed,
     ]
   );
 

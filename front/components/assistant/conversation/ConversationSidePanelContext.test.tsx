@@ -252,6 +252,30 @@ describe("ConversationSidePanelProvider auto-open dismiss", () => {
       false
     );
   });
+
+  it("remembers Files panel dismiss until the conversation changes", () => {
+    const { result, rerender } = renderSidePanel();
+    act(() => result.current.openPanel({ type: "files" }));
+    expect(result.current.wasFilesPanelAutoOpenDismissed()).toBe(false);
+
+    act(() => result.current.closePanel());
+    expect(result.current.wasFilesPanelAutoOpenDismissed()).toBe(true);
+
+    activeConversation.id = "conv_2";
+    rerender();
+    expect(result.current.wasFilesPanelAutoOpenDismissed()).toBe(false);
+  });
+
+  it("does not treat navigating away from Files as a dismiss", () => {
+    const { result } = renderSidePanel();
+    act(() => result.current.openPanel({ type: "files" }));
+    act(() => result.current.openPanel({ type: "credits" }));
+    expect(result.current.wasFilesPanelAutoOpenDismissed()).toBe(false);
+
+    act(() => result.current.closePanel());
+    expect(result.current.currentPanel).toBe("files");
+    expect(result.current.wasFilesPanelAutoOpenDismissed()).toBe(false);
+  });
 });
 
 describe("ConversationSidePanelProvider and the URL hash", () => {
