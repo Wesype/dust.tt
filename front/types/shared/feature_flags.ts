@@ -19,7 +19,7 @@ export const WHITELISTABLE_FEATURES_CONFIG = {
   },
   inference_hooks: {
     description:
-      "Evaluate model inputs and outputs with workspace inference hook policies",
+      "Evaluate model inputs and outputs with workspace inference hooks",
     stage: "dust_only",
     owner: "frankaloia",
   },

@@ -3,8 +3,8 @@ import { evaluateInferenceHookAtCheckpoint } from "@app/lib/inference_hook/check
 import { loadInferenceHookInputFromCheckpoint } from "@app/lib/inference_hook/checkpoint_input";
 import { getInferenceHook } from "@app/lib/inference_hook/registry";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
-import { InferenceHookConsumerFactory } from "@app/tests/utils/InferenceHookConsumerFactory";
 import { InferenceHookInputFactory } from "@app/tests/utils/InferenceHookInputFactory";
+import { InferenceHookProviderFactory } from "@app/tests/utils/InferenceHookProviderFactory";
 import { Err, Ok } from "@app/types/shared/result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,9 +34,9 @@ describe("evaluateInferenceHookAtCheckpoint", () => {
   it("evaluates the input loaded for the checkpoint", async () => {
     const { authenticator: auth } = await createResourceTest({ role: "admin" });
     const input = await InferenceHookInputFactory.afterModelCall(auth);
-    const consumer = InferenceHookConsumerFactory.deny("Flagged");
+    const provider = InferenceHookProviderFactory.deny("Flagged");
     vi.mocked(getInferenceHook).mockReturnValue({
-      consumer,
+      provider,
       timeoutMs: 1_000,
     });
     vi.mocked(loadInferenceHookInputFromCheckpoint).mockResolvedValue(
@@ -52,17 +52,17 @@ describe("evaluateInferenceHookAtCheckpoint", () => {
       auth,
       checkpoint
     );
-    expect(consumer.inputs).toEqual([input]);
+    expect(provider.inputs).toEqual([input]);
     expect(result.isOk() && result.value).toEqual({
       action: "deny",
       reason: "Flagged",
     });
   });
 
-  it("returns an error when the consumer exceeds its timeout", async () => {
+  it("returns an error when the provider exceeds its timeout", async () => {
     const { authenticator: auth } = await createResourceTest({ role: "admin" });
     vi.mocked(getInferenceHook).mockReturnValue({
-      consumer: InferenceHookConsumerFactory.hanging(),
+      provider: InferenceHookProviderFactory.hanging(),
       timeoutMs: 10,
     });
     vi.mocked(loadInferenceHookInputFromCheckpoint).mockResolvedValue(
@@ -79,9 +79,9 @@ describe("evaluateInferenceHookAtCheckpoint", () => {
 
   it("returns an error without evaluating when the input cannot be loaded", async () => {
     const { authenticator: auth } = await createResourceTest({ role: "admin" });
-    const consumer = InferenceHookConsumerFactory.allow();
+    const provider = InferenceHookProviderFactory.allow();
     vi.mocked(getInferenceHook).mockReturnValue({
-      consumer,
+      provider,
       timeoutMs: 1_000,
     });
     vi.mocked(loadInferenceHookInputFromCheckpoint).mockResolvedValue(
@@ -94,7 +94,7 @@ describe("evaluateInferenceHookAtCheckpoint", () => {
     });
 
     expect(result.isErr()).toBe(true);
-    expect(consumer.inputs).toEqual([]);
+    expect(provider.inputs).toEqual([]);
   });
 
   it("returns an error for an unknown hook", async () => {

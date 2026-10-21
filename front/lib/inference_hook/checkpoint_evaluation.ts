@@ -3,7 +3,7 @@ import type {
   InferenceHookExecutionRef,
   InferenceHookVerdict,
 } from "@app/lib/inference_hook";
-import { evaluateInferenceHookConsumer } from "@app/lib/inference_hook";
+import { evaluateInferenceHookProvider } from "@app/lib/inference_hook";
 import { loadInferenceHookInputFromCheckpoint } from "@app/lib/inference_hook/checkpoint_input";
 import { getInferenceHook } from "@app/lib/inference_hook/registry";
 import type { Result } from "@app/types/shared/result";
@@ -12,7 +12,7 @@ import { Err } from "@app/types/shared/result";
 /**
  * @cc [owner:frankaloia,label:product] inference-hook-evaluates-checkpoint
  * A monitored hook MUST evaluate the input loaded for `checkpoint`, under its own `timeoutMs`.
- * A timeout or consumer failure MUST be returned as an error, never as a verdict.
+ * A timeout or provider failure MUST be returned as an error, never as a verdict.
  */
 export async function evaluateInferenceHookAtCheckpoint(
   auth: Authenticator,
@@ -28,8 +28,8 @@ export async function evaluateInferenceHookAtCheckpoint(
     return inputRes;
   }
 
-  return evaluateInferenceHookConsumer(
-    hook.consumer,
+  return evaluateInferenceHookProvider(
+    hook.provider,
     inputRes.value,
     AbortSignal.timeout(hook.timeoutMs)
   );

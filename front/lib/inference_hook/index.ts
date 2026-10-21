@@ -66,12 +66,12 @@ export type InferenceHookInput =
   | AfterModelCallHookInput;
 
 /**
- * @cc [owner:frankaloia,label:concurrency;product] inference-hook-consumer-cancellation
- * Consumers MUST treat `input` as immutable and stop their provider work when `signal` is aborted.
+ * @cc [owner:frankaloia,label:concurrency;product] inference-hook-provider-cancellation
+ * Providers MUST treat `input` as immutable and stop their work when `signal` is aborted.
  * They MUST normalize provider decisions to `InferenceHookVerdict`; provider failures MUST reject
- * so the runner can apply the policy's `onError` behavior.
+ * so the runner can apply the hook's `onError` behavior.
  */
-export interface InferenceHookConsumer {
+export interface InferenceHookProvider {
   evaluate(
     input: InferenceHookInput,
     options: { signal: AbortSignal }
@@ -81,7 +81,7 @@ export interface InferenceHookConsumer {
 export type InferenceHookOnError = "allow" | "deny";
 
 export type InferenceHook = {
-  consumer: InferenceHookConsumer;
+  provider: InferenceHookProvider;
   timeoutMs: number;
 };
 
@@ -96,13 +96,13 @@ export type InferenceHookCheckpointResult =
 /**
  * @cc [owner:frankaloia,label:product;performance] disabled-inference-hooks-have-no-effects
  * When `featureFlags` excludes `inference_hooks` or no hooks are configured, the checkpoint MUST
- * return an `allow` verdict without invoking consumers.
+ * return an `allow` verdict without invoking providers.
  */
 /**
  * @cc [owner:frankaloia,label:concurrency;product] inference-hook-cancellation-wins
- * When hooks are active and `signal` is aborted before evaluation or while consumers run, the
- * checkpoint MUST return `cancelled` instead of a verdict. Its abort MUST abort in-flight consumers,
- * and queued consumers MUST NOT start.
+ * When hooks are active and `signal` is aborted before evaluation or while providers run, the
+ * checkpoint MUST return `cancelled` instead of a verdict. Its abort MUST abort in-flight providers,
+ * and queued providers MUST NOT start.
  */
 /**
  * @cc [owner:frankaloia,label:product] inference-hook-input-matches-model-step
@@ -154,12 +154,12 @@ export function makeInferenceHookDeniedError(
 
 /**
  * @cc [owner:frankaloia,label:product;performance] inference-hook-deadline
- * Consumers MUST run concurrently, up to `INFERENCE_HOOK_CONCURRENCY` at a time.
- * Each consumer's `timeoutMs` timer MUST start when the checkpoint starts, including while it is
- * queued. Once that timer fires, the runner MUST stop waiting for the consumer even if it ignores
+ * Providers MUST run concurrently, up to `INFERENCE_HOOK_CONCURRENCY` at a time.
+ * Each provider's `timeoutMs` timer MUST start when the checkpoint starts, including while it is
+ * queued. Once that timer fires, the runner MUST stop waiting for the provider even if it ignores
  * its signal, and MUST NOT start it if it is still queued. A timeout is an error. An
- * explicit denial ends the evaluation of the other consumers. An explicit denial, or an error from
- * any consumer configured with `onError: "deny"`, MUST deny the checkpoint.
+ * explicit denial ends the evaluation of the other providers. An explicit denial, or an error from
+ * any provider configured with `onError: "deny"`, MUST deny the checkpoint.
  */
 async function evaluateInferenceHooks(
   hooks: readonly EnforcedInferenceHook[],
@@ -179,8 +179,8 @@ async function evaluateInferenceHooks(
   const results = await concurrentExecutor(
     runs,
     async ({ hook, signal }) => {
-      const result = await evaluateInferenceHookConsumer(
-        hook.consumer,
+      const result = await evaluateInferenceHookProvider(
+        hook.provider,
         input,
         signal
       );
@@ -207,8 +207,8 @@ async function evaluateInferenceHooks(
   return { action: "allow" };
 }
 
-export async function evaluateInferenceHookConsumer(
-  consumer: InferenceHookConsumer,
+export async function evaluateInferenceHookProvider(
+  provider: InferenceHookProvider,
   input: InferenceHookInput,
   signal: AbortSignal
 ): Promise<Result<InferenceHookVerdict, Error>> {
@@ -225,12 +225,12 @@ export async function evaluateInferenceHookConsumer(
       signal.addEventListener("abort", onAbort, { once: true });
     }
   );
-  // Catches its own rejection: a consumer settling after the abort must not reject unhandled.
+  // Catches its own rejection: a provider settling after the abort must not reject unhandled.
   const evaluation = (async (): Promise<
     Result<InferenceHookVerdict, Error>
   > => {
     try {
-      return new Ok(await consumer.evaluate(input, { signal }));
+      return new Ok(await provider.evaluate(input, { signal }));
     } catch (error) {
       return new Err(normalizeError(error));
     }

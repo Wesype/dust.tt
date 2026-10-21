@@ -19,7 +19,7 @@ const INFERENCE_HOOK_WORKFLOW_LAUNCH_CONCURRENCY = 8;
  * @cc [owner:frankaloia,label:product;performance] inference-hook-workflows-do-not-affect-run
  * When `featureFlags` excludes `inference_hooks` or `hookIds` is empty, no workflow MUST be
  * started. Otherwise one workflow MUST be started per hook for `checkpoint`. The caller MUST NOT
- * wait for consumer results, and launch failures MUST be logged without throwing.
+ * wait for provider results, and launch failures MUST be logged without throwing.
  */
 export async function launchInferenceHookWorkflows({
   authType,

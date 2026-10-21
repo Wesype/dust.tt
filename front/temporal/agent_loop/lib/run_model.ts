@@ -388,7 +388,7 @@ export async function runModel(
     forceDisableToolUse?: boolean;
     // TODO(inference-hooks tasks#11317): We will read this from a table and not pass via a function parameter.
     enforcedInferenceHooks?: readonly EnforcedInferenceHook[];
-    // TODO(inference-hooks tasks#11317): Resolve from persisted policies instead.
+    // TODO(inference-hooks tasks#11317): Read from the inference_hooks table instead.
     monitoredInferenceHookIds?: readonly string[];
   }
 ): Promise<{

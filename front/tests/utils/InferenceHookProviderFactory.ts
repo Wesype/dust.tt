@@ -1,22 +1,22 @@
 import type {
   EnforcedInferenceHook,
-  InferenceHookConsumer,
+  InferenceHookProvider,
   InferenceHookInput,
   InferenceHookOnError,
   InferenceHookVerdict,
 } from "@app/lib/inference_hook";
 
-export interface FakeInferenceHookConsumer extends InferenceHookConsumer {
+export interface FakeInferenceHookProvider extends InferenceHookProvider {
   readonly inputs: InferenceHookInput[];
   readonly signals: AbortSignal[];
 }
 
-function createFakeInferenceHookConsumer(
+function createFakeInferenceHookProvider(
   evaluate: (
     input: InferenceHookInput,
     options: { signal: AbortSignal }
   ) => Promise<InferenceHookVerdict>
-): FakeInferenceHookConsumer {
+): FakeInferenceHookProvider {
   const inputs: InferenceHookInput[] = [];
   const signals: AbortSignal[] = [];
 
@@ -31,24 +31,24 @@ function createFakeInferenceHookConsumer(
   };
 }
 
-export class InferenceHookConsumerFactory {
+export class InferenceHookProviderFactory {
   static custom(
     evaluate: (
       input: InferenceHookInput,
       options: { signal: AbortSignal }
     ) => Promise<InferenceHookVerdict>
-  ): FakeInferenceHookConsumer {
-    return createFakeInferenceHookConsumer(evaluate);
+  ): FakeInferenceHookProvider {
+    return createFakeInferenceHookProvider(evaluate);
   }
 
-  static allow(): FakeInferenceHookConsumer {
-    return createFakeInferenceHookConsumer(async () => ({ action: "allow" }));
+  static allow(): FakeInferenceHookProvider {
+    return createFakeInferenceHookProvider(async () => ({ action: "allow" }));
   }
 
   static deny(
-    reason = "Denied by the fake inference hook consumer"
-  ): FakeInferenceHookConsumer {
-    return createFakeInferenceHookConsumer(async () => ({
+    reason = "Denied by the fake inference hook provider"
+  ): FakeInferenceHookProvider {
+    return createFakeInferenceHookProvider(async () => ({
       action: "deny",
       reason,
     }));
@@ -60,13 +60,13 @@ export class InferenceHookConsumerFactory {
   }: {
     delayMs: number;
     verdict?: InferenceHookVerdict;
-  }): FakeInferenceHookConsumer {
-    return createFakeInferenceHookConsumer(
+  }): FakeInferenceHookProvider {
+    return createFakeInferenceHookProvider(
       (_input, { signal }) =>
         new Promise((resolve, reject) => {
           const onAbort = () => {
             clearTimeout(timer);
-            reject(new Error("Fake inference hook consumer aborted"));
+            reject(new Error("Fake inference hook provider aborted"));
           };
           const timer = setTimeout(() => {
             signal.removeEventListener("abort", onAbort);
@@ -79,20 +79,20 @@ export class InferenceHookConsumerFactory {
   }
 
   // Ignores its abort signal and never settles, like a faulty provider adapter.
-  static hanging(): FakeInferenceHookConsumer {
-    return createFakeInferenceHookConsumer(() => new Promise(() => {}));
+  static hanging(): FakeInferenceHookProvider {
+    return createFakeInferenceHookProvider(() => new Promise(() => {}));
   }
 
   static failing(
-    error = new Error("Fake inference hook consumer failed")
-  ): FakeInferenceHookConsumer {
-    return createFakeInferenceHookConsumer(async () => {
+    error = new Error("Fake inference hook provider failed")
+  ): FakeInferenceHookProvider {
+    return createFakeInferenceHookProvider(async () => {
       throw error;
     });
   }
 
   static enforced(
-    consumer: InferenceHookConsumer,
+    provider: InferenceHookProvider,
     {
       timeoutMs = 1_000,
       onError = "deny",
@@ -101,6 +101,6 @@ export class InferenceHookConsumerFactory {
       onError?: InferenceHookOnError;
     } = {}
   ): EnforcedInferenceHook {
-    return { consumer, timeoutMs, onError };
+    return { provider, timeoutMs, onError };
   }
 }

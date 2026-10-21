@@ -3,8 +3,8 @@ import {
   runInferenceHooks,
 } from "@app/lib/inference_hook";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
-import { InferenceHookConsumerFactory } from "@app/tests/utils/InferenceHookConsumerFactory";
 import { InferenceHookInputFactory } from "@app/tests/utils/InferenceHookInputFactory";
+import { InferenceHookProviderFactory } from "@app/tests/utils/InferenceHookProviderFactory";
 import { describe, expect, it, vi } from "vitest";
 
 const notCancelled = new AbortController().signal;
@@ -14,52 +14,52 @@ describe("runInferenceHooks", () => {
     const { authenticator } = await createResourceTest({ role: "admin" });
     const input =
       await InferenceHookInputFactory.beforeModelCall(authenticator);
-    const consumer = InferenceHookConsumerFactory.allow();
+    const provider = InferenceHookProviderFactory.allow();
 
     const result = await runInferenceHooks({
       featureFlags: [],
-      hooks: [InferenceHookConsumerFactory.enforced(consumer)],
+      hooks: [InferenceHookProviderFactory.enforced(provider)],
       input,
       signal: notCancelled,
     });
 
     expect(result).toEqual({ action: "allow" });
-    expect(consumer.inputs).toHaveLength(0);
+    expect(provider.inputs).toHaveLength(0);
   });
 
-  it("returns an explicit denial from any consumer", async () => {
+  it("returns an explicit denial from any provider", async () => {
     const { authenticator } = await createResourceTest({ role: "admin" });
     const input = await InferenceHookInputFactory.afterModelCall(authenticator);
-    const allowConsumer = InferenceHookConsumerFactory.allow();
-    const denyConsumer = InferenceHookConsumerFactory.deny("Policy denied");
+    const allowProvider = InferenceHookProviderFactory.allow();
+    const denyProvider = InferenceHookProviderFactory.deny("Policy denied");
 
     const result = await runInferenceHooks({
       featureFlags: ["inference_hooks"],
       hooks: [
-        InferenceHookConsumerFactory.enforced(allowConsumer),
-        InferenceHookConsumerFactory.enforced(denyConsumer),
+        InferenceHookProviderFactory.enforced(allowProvider),
+        InferenceHookProviderFactory.enforced(denyProvider),
       ],
       input,
       signal: notCancelled,
     });
 
     expect(result).toEqual({ action: "deny", reason: "Policy denied" });
-    expect(allowConsumer.inputs).toEqual([input]);
-    expect(denyConsumer.inputs).toEqual([input]);
+    expect(allowProvider.inputs).toEqual([input]);
+    expect(denyProvider.inputs).toEqual([input]);
   });
 
-  it("returns a denial without waiting for the other consumers", async () => {
+  it("returns a denial without waiting for the other providers", async () => {
     const { authenticator } = await createResourceTest({ role: "admin" });
     const input =
       await InferenceHookInputFactory.beforeModelCall(authenticator);
-    const pending = InferenceHookConsumerFactory.slow({ delayMs: 60_000 });
+    const pending = InferenceHookProviderFactory.slow({ delayMs: 60_000 });
 
     const result = await runInferenceHooks({
       featureFlags: ["inference_hooks"],
       hooks: [
-        InferenceHookConsumerFactory.enforced(pending, { timeoutMs: 60_000 }),
-        InferenceHookConsumerFactory.enforced(
-          InferenceHookConsumerFactory.deny("Policy denied")
+        InferenceHookProviderFactory.enforced(pending, { timeoutMs: 60_000 }),
+        InferenceHookProviderFactory.enforced(
+          InferenceHookProviderFactory.deny("Policy denied")
         ),
       ],
       input,
@@ -70,19 +70,19 @@ describe("runInferenceHooks", () => {
     expect(pending.signals[0].aborted).toBe(true);
   });
 
-  it("starts all consumers concurrently", async () => {
+  it("starts all providers concurrently", async () => {
     const { authenticator } = await createResourceTest({ role: "admin" });
     const input =
       await InferenceHookInputFactory.beforeModelCall(authenticator);
-    let releaseConsumers = () => {};
+    let releaseProviders = () => {};
     const waitForRelease = new Promise<void>((resolve) => {
-      releaseConsumers = resolve;
+      releaseProviders = resolve;
     });
-    const first = InferenceHookConsumerFactory.custom(async () => {
+    const first = InferenceHookProviderFactory.custom(async () => {
       await waitForRelease;
       return { action: "allow" };
     });
-    const second = InferenceHookConsumerFactory.custom(async () => {
+    const second = InferenceHookProviderFactory.custom(async () => {
       await waitForRelease;
       return { action: "allow" };
     });
@@ -90,8 +90,8 @@ describe("runInferenceHooks", () => {
     const run = runInferenceHooks({
       featureFlags: ["inference_hooks"],
       hooks: [
-        InferenceHookConsumerFactory.enforced(first),
-        InferenceHookConsumerFactory.enforced(second),
+        InferenceHookProviderFactory.enforced(first),
+        InferenceHookProviderFactory.enforced(second),
       ],
       input,
       signal: notCancelled,
@@ -101,12 +101,12 @@ describe("runInferenceHooks", () => {
       expect(first.inputs).toEqual([input]);
       expect(second.inputs).toEqual([input]);
     });
-    releaseConsumers();
+    releaseProviders();
 
     await expect(run).resolves.toEqual({ action: "allow" });
   });
 
-  it("applies each consumer's onError policy to provider failures", async () => {
+  it("applies each provider's onError policy to its failures", async () => {
     const { authenticator } = await createResourceTest({ role: "admin" });
     const input =
       await InferenceHookInputFactory.beforeModelCall(authenticator);
@@ -115,8 +115,8 @@ describe("runInferenceHooks", () => {
       runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.enforced(
-            InferenceHookConsumerFactory.failing(),
+          InferenceHookProviderFactory.enforced(
+            InferenceHookProviderFactory.failing(),
             { onError: "allow" }
           ),
         ],
@@ -129,8 +129,8 @@ describe("runInferenceHooks", () => {
       runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.enforced(
-            InferenceHookConsumerFactory.failing(),
+          InferenceHookProviderFactory.enforced(
+            InferenceHookProviderFactory.failing(),
             { onError: "deny" }
           ),
         ],
@@ -143,7 +143,7 @@ describe("runInferenceHooks", () => {
     });
   });
 
-  it("applies each consumer's onError policy when it times out", async () => {
+  it("applies each provider's onError policy when it times out", async () => {
     const { authenticator } = await createResourceTest({ role: "admin" });
     const input =
       await InferenceHookInputFactory.beforeModelCall(authenticator);
@@ -152,8 +152,8 @@ describe("runInferenceHooks", () => {
       runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.enforced(
-            InferenceHookConsumerFactory.slow({ delayMs: 100 }),
+          InferenceHookProviderFactory.enforced(
+            InferenceHookProviderFactory.slow({ delayMs: 100 }),
             { timeoutMs: 1, onError: "allow" }
           ),
         ],
@@ -166,8 +166,8 @@ describe("runInferenceHooks", () => {
       runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.enforced(
-            InferenceHookConsumerFactory.slow({ delayMs: 100 }),
+          InferenceHookProviderFactory.enforced(
+            InferenceHookProviderFactory.slow({ delayMs: 100 }),
             { timeoutMs: 1, onError: "deny" }
           ),
         ],
@@ -180,7 +180,7 @@ describe("runInferenceHooks", () => {
     });
   });
 
-  it("respects each consumer's own timeoutMs", async () => {
+  it("respects each provider's own timeoutMs", async () => {
     const { authenticator } = await createResourceTest({ role: "admin" });
     const input =
       await InferenceHookInputFactory.beforeModelCall(authenticator);
@@ -189,12 +189,12 @@ describe("runInferenceHooks", () => {
       runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.enforced(
-            InferenceHookConsumerFactory.hanging(),
+          InferenceHookProviderFactory.enforced(
+            InferenceHookProviderFactory.hanging(),
             { timeoutMs: 10, onError: "allow" }
           ),
-          InferenceHookConsumerFactory.enforced(
-            InferenceHookConsumerFactory.slow({
+          InferenceHookProviderFactory.enforced(
+            InferenceHookProviderFactory.slow({
               delayMs: 50,
               verdict: { action: "deny", reason: "Long hook denied" },
             }),
@@ -210,12 +210,12 @@ describe("runInferenceHooks", () => {
       runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.enforced(
-            InferenceHookConsumerFactory.slow({ delayMs: 50 }),
+          InferenceHookProviderFactory.enforced(
+            InferenceHookProviderFactory.slow({ delayMs: 50 }),
             { timeoutMs: 10, onError: "deny" }
           ),
-          InferenceHookConsumerFactory.enforced(
-            InferenceHookConsumerFactory.allow(),
+          InferenceHookProviderFactory.enforced(
+            InferenceHookProviderFactory.allow(),
             { timeoutMs: 500, onError: "allow" }
           ),
         ],
@@ -228,7 +228,7 @@ describe("runInferenceHooks", () => {
     });
   });
 
-  it("stops waiting at the timeout for a consumer that ignores its signal", async () => {
+  it("stops waiting at the timeout for a provider that ignores its signal", async () => {
     const { authenticator } = await createResourceTest({ role: "admin" });
     const input =
       await InferenceHookInputFactory.beforeModelCall(authenticator);
@@ -237,8 +237,8 @@ describe("runInferenceHooks", () => {
       runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.enforced(
-            InferenceHookConsumerFactory.hanging(),
+          InferenceHookProviderFactory.enforced(
+            InferenceHookProviderFactory.hanging(),
             { timeoutMs: 10, onError: "allow" }
           ),
         ],
@@ -251,8 +251,8 @@ describe("runInferenceHooks", () => {
       runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.enforced(
-            InferenceHookConsumerFactory.hanging(),
+          InferenceHookProviderFactory.enforced(
+            InferenceHookProviderFactory.hanging(),
             { timeoutMs: 10, onError: "deny" }
           ),
         ],
@@ -265,22 +265,22 @@ describe("runInferenceHooks", () => {
     });
   });
 
-  it("does not start a queued consumer whose timeout has passed", async () => {
+  it("does not start a queued provider whose timeout has passed", async () => {
     const { authenticator } = await createResourceTest({ role: "admin" });
     const input =
       await InferenceHookInputFactory.beforeModelCall(authenticator);
-    const queued = InferenceHookConsumerFactory.allow();
+    const queued = InferenceHookProviderFactory.allow();
 
     const result = await runInferenceHooks({
       featureFlags: ["inference_hooks"],
       hooks: [
         ...Array.from({ length: 8 }, () =>
-          InferenceHookConsumerFactory.enforced(
-            InferenceHookConsumerFactory.hanging(),
+          InferenceHookProviderFactory.enforced(
+            InferenceHookProviderFactory.hanging(),
             { timeoutMs: 20, onError: "allow" }
           )
         ),
-        InferenceHookConsumerFactory.enforced(queued, {
+        InferenceHookProviderFactory.enforced(queued, {
           timeoutMs: 5,
           onError: "deny",
         }),
@@ -300,25 +300,25 @@ describe("runInferenceHooks", () => {
     const { authenticator } = await createResourceTest({ role: "admin" });
     const input =
       await InferenceHookInputFactory.beforeModelCall(authenticator);
-    const consumer = InferenceHookConsumerFactory.deny();
+    const provider = InferenceHookProviderFactory.deny();
     const controller = new AbortController();
     controller.abort();
 
     const result = await runInferenceHooks({
       featureFlags: ["inference_hooks"],
-      hooks: [InferenceHookConsumerFactory.enforced(consumer)],
+      hooks: [InferenceHookProviderFactory.enforced(provider)],
       input,
       signal: controller.signal,
     });
 
     expect(result).toEqual({ action: "cancelled" });
-    expect(consumer.inputs).toHaveLength(0);
+    expect(provider.inputs).toHaveLength(0);
   });
 
-  it("aborts consumers and returns cancelled when cancelled during evaluation", async () => {
+  it("aborts providers and returns cancelled when cancelled during evaluation", async () => {
     const { authenticator } = await createResourceTest({ role: "admin" });
     const input = await InferenceHookInputFactory.afterModelCall(authenticator);
-    const consumer = InferenceHookConsumerFactory.slow({
+    const provider = InferenceHookProviderFactory.slow({
       delayMs: 60_000,
       verdict: { action: "deny", reason: "Blocked by policy" },
     });
@@ -328,14 +328,14 @@ describe("runInferenceHooks", () => {
     const result = await runInferenceHooks({
       featureFlags: ["inference_hooks"],
       hooks: [
-        InferenceHookConsumerFactory.enforced(consumer, { timeoutMs: 60_000 }),
+        InferenceHookProviderFactory.enforced(provider, { timeoutMs: 60_000 }),
       ],
       input,
       signal: controller.signal,
     });
 
     expect(result).toEqual({ action: "cancelled" });
-    expect(consumer.signals[0].aborted).toBe(true);
+    expect(provider.signals[0].aborted).toBe(true);
   });
 });
 

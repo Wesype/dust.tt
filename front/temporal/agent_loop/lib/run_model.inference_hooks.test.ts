@@ -7,7 +7,7 @@ import { getOutputFromLLMStream } from "@app/temporal/agent_loop/lib/get_output_
 import { runModel } from "@app/temporal/agent_loop/lib/run_model";
 import { launchInferenceHookWorkflows } from "@app/temporal/inference_hooks/client";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
-import { InferenceHookConsumerFactory } from "@app/tests/utils/InferenceHookConsumerFactory";
+import { InferenceHookProviderFactory } from "@app/tests/utils/InferenceHookProviderFactory";
 import { InferenceHookRunModelFactory } from "@app/tests/utils/InferenceHookRunModelFactory";
 import { Ok } from "@app/types/shared/result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -67,7 +67,7 @@ describe("runModel inference hooks", () => {
     const { auth, contextProvider } =
       await InferenceHookRunModelFactory.create();
     await FeatureFlagFactory.basic(auth, "inference_hooks");
-    const consumer = InferenceHookConsumerFactory.deny("Blocked before model");
+    const provider = InferenceHookProviderFactory.deny("Blocked before model");
 
     const result = await runModel(auth, {
       contextProvider,
@@ -76,12 +76,12 @@ describe("runModel inference hooks", () => {
       functionCallStepContentIds: {},
       durationRecorder: DurationRecorder.create(),
       activityTimeoutDeadlineMs: Date.now() + 60_000,
-      enforcedInferenceHooks: [InferenceHookConsumerFactory.enforced(consumer)],
+      enforcedInferenceHooks: [InferenceHookProviderFactory.enforced(provider)],
     });
 
     expect(result).toBeNull();
     expect(getOutputFromLLMStream).not.toHaveBeenCalled();
-    expect(consumer.inputs.map((input) => input.lifecycleEvent)).toEqual([
+    expect(provider.inputs.map((input) => input.lifecycleEvent)).toEqual([
       "before_model_call",
     ]);
   });
@@ -90,7 +90,7 @@ describe("runModel inference hooks", () => {
     const { auth, contextProvider } =
       await InferenceHookRunModelFactory.create();
     await FeatureFlagFactory.basic(auth, "inference_hooks");
-    const consumer = InferenceHookConsumerFactory.custom(
+    const provider = InferenceHookProviderFactory.custom(
       async (_input, { signal }) => {
         shutdownMock.controller.abort("DUST_WORKER_SHUTDOWN_ABORT");
         return new Promise((_resolve, reject) => {
@@ -108,7 +108,7 @@ describe("runModel inference hooks", () => {
         durationRecorder: DurationRecorder.create(),
         activityTimeoutDeadlineMs: Date.now() + 60_000,
         enforcedInferenceHooks: [
-          InferenceHookConsumerFactory.enforced(consumer),
+          InferenceHookProviderFactory.enforced(provider),
         ],
       })
     ).rejects.toMatchObject({ type: "ModelInterruption", nonRetryable: false });
@@ -119,7 +119,7 @@ describe("runModel inference hooks", () => {
     const { auth, agentMessage, contextProvider } =
       await InferenceHookRunModelFactory.create();
     await FeatureFlagFactory.basic(auth, "inference_hooks");
-    const consumer = InferenceHookConsumerFactory.custom(async (input) => {
+    const provider = InferenceHookProviderFactory.custom(async (input) => {
       if (input.lifecycleEvent === "after_model_call") {
         shutdownMock.controller.abort("DUST_WORKER_SHUTDOWN_ABORT");
       }
@@ -146,7 +146,7 @@ describe("runModel inference hooks", () => {
         durationRecorder: DurationRecorder.create(),
         activityTimeoutDeadlineMs: Date.now() + 60_000,
         enforcedInferenceHooks: [
-          InferenceHookConsumerFactory.enforced(consumer),
+          InferenceHookProviderFactory.enforced(provider),
         ],
       })
     ).rejects.toMatchObject({ type: "ModelInterruption", nonRetryable: false });
@@ -163,7 +163,7 @@ describe("runModel inference hooks", () => {
     const { auth, agentMessage, contextProvider } =
       await InferenceHookRunModelFactory.create();
     await FeatureFlagFactory.basic(auth, "inference_hooks");
-    const consumer = InferenceHookConsumerFactory.custom(async (input) =>
+    const provider = InferenceHookProviderFactory.custom(async (input) =>
       input.lifecycleEvent === "before_model_call"
         ? { action: "allow" }
         : { action: "deny", reason: "Blocked after model" }
@@ -196,7 +196,7 @@ describe("runModel inference hooks", () => {
       functionCallStepContentIds: {},
       durationRecorder: DurationRecorder.create(),
       activityTimeoutDeadlineMs: Date.now() + 60_000,
-      enforcedInferenceHooks: [InferenceHookConsumerFactory.enforced(consumer)],
+      enforcedInferenceHooks: [InferenceHookProviderFactory.enforced(provider)],
     });
 
     const stepContents =
@@ -215,7 +215,7 @@ describe("runModel inference hooks", () => {
 
     expect(result).toBeNull();
     expect(getOutputFromLLMStream).toHaveBeenCalledTimes(1);
-    expect(consumer.inputs.map((input) => input.lifecycleEvent)).toEqual([
+    expect(provider.inputs.map((input) => input.lifecycleEvent)).toEqual([
       "before_model_call",
       "after_model_call",
     ]);
@@ -295,8 +295,8 @@ describe("runModel inference hooks", () => {
       durationRecorder: DurationRecorder.create(),
       activityTimeoutDeadlineMs: Date.now() + 60_000,
       enforcedInferenceHooks: [
-        InferenceHookConsumerFactory.enforced(
-          InferenceHookConsumerFactory.deny()
+        InferenceHookProviderFactory.enforced(
+          InferenceHookProviderFactory.deny()
         ),
       ],
       monitoredInferenceHookIds: ["hook_a"],
