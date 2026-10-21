@@ -2,7 +2,7 @@ import { usePokeDfsChildren, usePokeDfsObject } from "@app/hooks/usePokeDfs";
 import { formatTimestampToFriendlyDate } from "@app/lib/client/friendly_date";
 import type { DfsObjectId } from "@app/types/dfs";
 import type { LightWorkspaceType } from "@app/types/user";
-import { File02, Folder, Spinner, Tree } from "@dust-tt/sparkle";
+import { File02, Folder, LinkWrapper, Spinner, Tree } from "@dust-tt/sparkle";
 import { useState } from "react";
 
 // A folder of the chain from the tenant root down to an object.
@@ -141,6 +141,31 @@ function DfsFolderChildren({
   );
 }
 
+interface DfsSubjectLinkProps {
+  owner: LightWorkspaceType;
+  subject: string;
+}
+
+// `g:<groupSId>` links to the group's Poke page, `u:<userSId>` to the workspace's memberships (Poke
+// has no page for a single user). Other subjects (e.g. `superuser`) are shown as is.
+function DfsSubjectLink({ owner, subject }: DfsSubjectLinkProps) {
+  const [kind, id] = [subject.slice(0, 2), subject.slice(2)];
+  const href =
+    kind === "g:"
+      ? `/poke/${owner.sId}/groups/${id}`
+      : kind === "u:"
+        ? `/poke/${owner.sId}/memberships`
+        : null;
+  if (!href || id === "") {
+    return <>{subject}</>;
+  }
+  return (
+    <LinkWrapper href={href} className="underline">
+      {subject}
+    </LinkWrapper>
+  );
+}
+
 function formatMode(mode: number): string {
   return `${mode & 0o4 ? "r" : ""}${mode & 0o2 ? "w" : ""}` || "-";
 }
@@ -209,7 +234,8 @@ function DfsObjectDetails({ owner, selection }: DfsObjectDetailsProps) {
           <ul className="font-mono">
             {object.effectiveGrants.map((grant) => (
               <li key={grant.subject}>
-                ALLOW {grant.subject} {formatMode(grant.mode)}
+                ALLOW <DfsSubjectLink owner={owner} subject={grant.subject} />{" "}
+                {formatMode(grant.mode)}
                 {grant.fromId !== object.id &&
                   ` (inherited from ${pathById.get(grant.fromId) ?? grant.fromId})`}
               </li>
