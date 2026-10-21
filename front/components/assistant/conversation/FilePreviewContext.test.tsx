@@ -52,6 +52,7 @@ function withSidePanel(
           virtuosoMsg: null,
           data: undefined,
           wasAutoOpenDismissedForFileId: () => false,
+          wasFilesPanelAutoOpenDismissed: () => false,
         }}
       >
         {children}
