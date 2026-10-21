@@ -3687,6 +3687,7 @@ const InternalAllowedIconSchema = FlexibleEnumSchema<
   | "CursorLogo"
   | "DatabricksLogo"
   | "DriveLogo"
+  | "DropboxLogo"
   | "FathomLogo"
   | "FigmaLogo"
   | "FirefliesLogo"
