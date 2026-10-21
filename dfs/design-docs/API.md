@@ -645,26 +645,47 @@ ObjectLock {
 }
 ```
 
-Lock IDs are secret, scoped to tenant/object, and independent of session identity. They use 16 bytes
-on the wire and 32 lowercase hex characters in TypeScript. Invalid IDs give `INVALID_INPUT`.
+Lock IDs are secret, scoped to tenant/object, and independent of session identity. Their 74 UUIDv7
+payload bits are independently cryptographically random, without a shared ordering counter. They use
+16 bytes on the wire and 32 lowercase hex characters in TypeScript. Invalid IDs give `INVALID_INPUT`.
 
 Acquire/refresh require `r+w`: missing objects give `NOT_FOUND`, missing permissions `FORBIDDEN`.
 Acquiring an active lock gives `WOULD_BLOCK`. Refresh preserves the matching unexpired ID; otherwise
 `LOCK_LOST`. Unlock clears only the matching ID, succeeds if absent/mismatched, and needs no object
 permission. Moves preserve locks; removal clears them. Locks do not change attributes or versions.
 
-Refresh about every 20 seconds. Expiry releases the lock without waiting for cleanup.
+The server grants a 60-second TTL. Refresh sets expiry to `max(current_expiry, now + 60s)`.
+The holder may refresh or mutate with its token only while `now < expires_at`.
+Competing acquisition and mutations without a token must wait until `now >= expires_at + 5s`.
+During this grace period, expired holders receive `LOCK_LOST` and competing callers receive
+`WOULD_BLOCK`. A successful unlocked mutation clears the expired token and its index atomically.
+A slower replica must never revive that invalidated token.
+
+Clients schedule renewal every 20 seconds, leaving room for transient failures and retries. This
+interval is a client convention, not a server timer or requirement. Front's `acquireLock` and the
+mount client's `acquire_lock` return managed leases that renew the same token automatically. Their
+`apply` methods attach the token. For operations requiring multiple locks, callers compose the
+front lease's `proof` or mount lease's `proof()` values through the existing client Apply API.
+Proofs are copies; changing a returned proof cannot change renewal or release of the held token.
+Callers must release every lease when finished. Ordinary low-level `lock` calls remain manual.
+Losing a lease never triggers automatic acquisition of a new token.
+
+The 5-second grace assumes at most 5 seconds of clock disagreement between replicas during the
+lease, including clock adjustments. Default GKE time synchronization does not provide a documented
+hard skew bound, so this is an operational assumption, not a platform guarantee. Arbitrary clock
+jumps can cause premature expiry or delayed takeover. TTL is measured from the server timestamp
+sample, not response delivery; transaction and network delays consume the remaining lifetime.
+Expiry and takeover do not depend on cleanup.
 
 `Apply.locks` supplies at most one `ObjectLock` per object; duplicates give `INVALID_INPUT`.
 After authorization, each operation checks locks in its write transaction: an active lock without
 an `ObjectLock` gives `WOULD_BLOCK`; a supplied `ObjectLock` without a matching active lock gives
-`LOCK_LOST`. No lock and no supplied `ObjectLock` allows mutation. Checks cover batching targets:
+`LOCK_LOST`. A stored lock also blocks callers without a token during the 5-second grace.
+No lock and no supplied `ObjectLock` allows mutation. Checks cover batching targets:
 Create's parent/new object; Update/Write's object; Move's object/both parents; Remove's object/parent.
 Directory locks are not recursive. An operation returning `WOULD_BLOCK` or `LOCK_LOST` makes no
 changes; other operations continue.
 Retry only blocked operations, never successful operations or unknown write outcomes.
-
-Lock RPCs and Apply with nonempty `locks` currently return `UNSUPPORTED`.
 
 ## Filesystem mutations
 
@@ -678,7 +699,7 @@ Requires a **session key**.
 ```text
 ApplyRequest {
   operations: Operation[]        // Nonempty; subject to the 4 MiB RPC request limit.
-  locks: ObjectLock[]            // Held locks; currently UNSUPPORTED if nonempty.
+  locks: ObjectLock[]            // Held locks.
 }
 
 Operation = create(CreateOperation)

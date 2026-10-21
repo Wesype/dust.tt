@@ -69,7 +69,7 @@ service Dfs {
   rpc Read(ReadRequest) returns (ReadData);
   rpc ReadFiles(ReadFilesRequest) returns (FilesBatch);
 
-  // Exclusive locks; returns UNSUPPORTED until storage support is implemented.
+  // Exclusive object locks.
   rpc Lock(LockRequest) returns (LockState);
   rpc Unlock(ObjectLock) returns (Empty);
 
@@ -371,11 +371,11 @@ message FileResult {
 // authenticated tenant. After authorization, an active lock MUST return WOULD_BLOCK without waiting
 // or changing state. Each acquisition MUST generate a fresh UUIDv7 lock_id with cryptographically
 // random bits, scoped to tenant and object, expiring at server time plus one minute, independent
-// of sessions. Expired locks MUST stop conflicting independently of cleanup.
+// of sessions. Competing acquisition MUST wait until expires_at + 5 seconds, independently of cleanup.
 
 // @cc [owner:spolu,label:api;security] dfs-lock-refresh
 // Lock with lock_id MUST extend only the matching unexpired lock, preserving its ID and using the
-// same expiry bound as acquisition. It MUST NOT reacquire.
+// maximum of the current expiry and server time plus 60 seconds. It MUST NOT reacquire.
 // Acquisition and refresh MUST require read and write permission; missing objects MUST return
 // NOT_FOUND and missing permissions FORBIDDEN. After authorization, an absent, expired, or
 // mismatched ID MUST return LOCK_LOST. Malformed IDs MUST return INVALID_INPUT.
@@ -421,7 +421,9 @@ message ObjectLock {
 // Remove's object and parent. Locks MUST NOT extend recursively to descendants.
 // An active lock with no supplied ObjectLock MUST return per-operation WOULD_BLOCK. A supplied
 // ObjectLock without a matching active lock MUST return per-operation LOCK_LOST, even if unlocked.
-// Without an active lock or supplied ObjectLock, mutation MAY proceed. Session authentication and
+// Without a supplied ObjectLock, a stored lock MUST block mutation until expires_at + 5 seconds.
+// A mutation admitted after this grace MUST atomically clear the expired token and its expiry index.
+// Without a stored lock or supplied ObjectLock, mutation MAY proceed. Session authentication and
 // permission checks MUST still apply; lock IDs MUST NOT bypass either.
 // Lock checks MUST use non-snapshot FDB reads, never a cache. Malformed lock IDs or duplicate
 // object IDs in locks MUST fail the request with INVALID_INPUT; unused entries MAY be ignored.

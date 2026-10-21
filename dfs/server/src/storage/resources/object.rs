@@ -25,6 +25,7 @@ use crate::{
 
 mod apply;
 mod hints;
+pub mod locks;
 mod modes;
 mod shared;
 mod stat;
@@ -52,6 +53,9 @@ const GRANT_MODE_MASK: u32 = GRANT_READ_MODE | GRANT_WRITE_MODE;
 #[derive(Debug)]
 pub enum Error {
     TimestampGeneration,
+    InvalidLockId,
+    WouldBlock,
+    LockLost,
     AlreadyExists,
     MissingMetadata,
     InvalidXattrName,
@@ -77,6 +81,9 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidLockId => f.write_str("invalid lock ID"),
+            Self::WouldBlock => f.write_str("object locked"),
+            Self::LockLost => f.write_str("lock lost"),
             Self::TimestampGeneration => f.write_str("object timestamp generation failed"),
             Self::AlreadyExists => f.write_str("object already exists"),
             Self::MissingMetadata => f.write_str("object metadata missing"),
