@@ -8,7 +8,6 @@ import {
 } from "@app/lib/actions/mcp_internal_actions/constants";
 import { DEFAULT_REMOTE_MCP_SERVERS } from "@app/lib/actions/mcp_internal_actions/remote_servers";
 import {
-  isDataSourceFilesystemFindInputType,
   isGenerateImageInputType,
   isSearchInputTypeWithTags,
 } from "@app/lib/actions/mcp_internal_actions/types";
@@ -185,7 +184,7 @@ function getDynamicToolDisplayLabels({
     case "data_sources_file_system":
       if (
         toolName === "find" &&
-        isDataSourceFilesystemFindInputType(inputs) &&
+        validateToolInputs(internalMCPServerName, toolName, inputs) &&
         inputs.query
       ) {
         const q = truncateQuery(inputs.query);

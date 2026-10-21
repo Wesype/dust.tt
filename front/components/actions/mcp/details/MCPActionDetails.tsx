@@ -67,8 +67,6 @@ import {
   isTextContent,
 } from "@app/lib/actions/mcp_internal_actions/output_schemas";
 import {
-  isDataSourceFilesystemFindInputType,
-  isDataSourceFilesystemListInputType,
   isIncludeInputType,
   isSearchInputTypeWithTags,
 } from "@app/lib/actions/mcp_internal_actions/types";
@@ -251,9 +249,19 @@ function MCPActionDetailsInner({
             }
             actionOutput={output}
             query={
-              isDataSourceFilesystemFindInputType(params)
+              toolName === FILESYSTEM_FIND_TOOL_NAME &&
+              validateToolInputs(
+                "data_sources_file_system",
+                FILESYSTEM_FIND_TOOL_NAME,
+                params
+              )
                 ? makeQueryTextForFind(t, params)
-                : isDataSourceFilesystemListInputType(params)
+                : toolName === FILESYSTEM_LIST_TOOL_NAME &&
+                    validateToolInputs(
+                      "data_sources_file_system",
+                      FILESYSTEM_LIST_TOOL_NAME,
+                      params
+                    )
                   ? makeQueryTextForList(t, params)
                   : null
             }
