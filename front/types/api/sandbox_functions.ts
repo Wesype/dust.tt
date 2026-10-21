@@ -210,8 +210,21 @@ export function isSandboxFunctionInvocationTerminalEvent(
   );
 }
 
+/**
+ * Set when the invocation was started from a conversation sandbox (`dsbx frame call`).
+ * Blocking tool events (approval, personal auth, …) publish to the agent message channel
+ * instead of the invocation SSE so conversation UI can surface them.
+ */
+export type SandboxFunctionConversationCaller = {
+  conversationId: string;
+  agentMessageId: string;
+  configurationId: string;
+  parentActionId?: string;
+};
+
 export type SandboxFunctionInvocationContext = {
   timezone?: string;
+  conversationCaller?: SandboxFunctionConversationCaller;
 };
 
 export type PostSandboxFunctionInvocationRequestBody = {

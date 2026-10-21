@@ -206,7 +206,12 @@ type BlockedToolExecutionVariant =
     };
 
 export type AgentLoopBlockedToolExecution = AgentLoopToolExecution &
-  BlockedToolExecutionVariant;
+  BlockedToolExecutionVariant & {
+    // Set when a Frame function tool was invoked via `dsbx frame call` from this conversation:
+    // the card attaches to the agent message, but validate/resolve use the sandbox-function APIs.
+    sandboxFunctionId?: string;
+    invocationId?: string;
+  };
 
 export type SandboxFunctionBlockedToolExecution = SandboxFunctionToolExecution &
   BlockedToolExecutionVariant;
@@ -214,6 +219,18 @@ export type SandboxFunctionBlockedToolExecution = SandboxFunctionToolExecution &
 export type BlockedToolExecution =
   | AgentLoopBlockedToolExecution
   | SandboxFunctionBlockedToolExecution;
+
+export function isSandboxFunctionBackedBlockedAction(
+  blockedAction: AgentLoopBlockedToolExecution
+): blockedAction is AgentLoopBlockedToolExecution & {
+  sandboxFunctionId: string;
+  invocationId: string;
+} {
+  return (
+    typeof blockedAction.sandboxFunctionId === "string" &&
+    typeof blockedAction.invocationId === "string"
+  );
+}
 
 export function getMCPApprovalStateFromUserApprovalState(
   userApprovalState: ActionApprovalStateType

@@ -65,6 +65,7 @@ import {
 } from "@app/hooks/useNotification";
 import { useRetryMessage } from "@app/hooks/useRetryMessage";
 import { isFileWritingInternalTool } from "@app/lib/actions/file_writing_tools";
+import { sandboxFunctionEventScopeFields } from "@app/lib/actions/mcp_internal_actions/events";
 import { isImageProgressOutput } from "@app/lib/actions/mcp_internal_actions/output_schemas";
 import { OpenUserAnalyticsEvent } from "@app/lib/analytics/events";
 import { CONTEXT_WINDOW_DOC_URL } from "@app/lib/api/assistant/errors";
@@ -426,6 +427,7 @@ export function AgentMessage({
                 argumentsRequiringApproval:
                   eventPayload.data.argumentsRequiringApproval,
                 approvalArgsLabel: eventPayload.data.approvalArgsLabel,
+                ...sandboxFunctionEventScopeFields(eventPayload.data),
               },
             });
             break;
@@ -450,6 +452,7 @@ export function AgentMessage({
                 metadata: eventPayload.data.metadata,
                 stake: eventPayload.data.stake,
                 userId: eventPayload.data.userId,
+                ...sandboxFunctionEventScopeFields(eventPayload.data),
               },
             });
             break;
