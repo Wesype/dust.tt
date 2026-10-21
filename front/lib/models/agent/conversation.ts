@@ -325,6 +325,7 @@ export class UserMessageModel extends WorkspaceAwareModel<UserMessageModel> {
   declare userContextLastTriggerRunAt: Date | null;
   declare userContextApiKeyId: ForeignKey<KeyModel["id"]> | null;
   declare userContextAuthMethod: string | null;
+  declare userContextHostSelection: string | null;
 
   declare userId: ForeignKey<UserModel["id"]> | null;
   // Denormalized from messages for conversation-scoped fetches (plain column, no FK — the value
@@ -401,6 +402,10 @@ UserMessageModel.init(
     },
     userContextAuthMethod: {
       type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    userContextHostSelection: {
+      type: DataTypes.STRING(256),
       allowNull: true,
     },
     agenticMessageType: {

@@ -164,6 +164,8 @@ export type UserMessageContext = {
   apiKeyId?: number | null;
   authMethod?: string | null;
   excludedRetrievalTags?: string[] | null;
+  // What the user had selected in the app hosting Dust when sending, e.g. "Sheet1!C5:D6" in Excel.
+  hostSelection?: string | null;
 };
 
 export type AgenticMessageData = {

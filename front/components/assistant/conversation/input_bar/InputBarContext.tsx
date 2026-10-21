@@ -73,7 +73,7 @@ export type PendingInputText = {
 
 /**
  * What the user has selected in the app that hosts the input bar, e.g. cells in Excel. The input
- * bar shows it with the attachments; it is not sent with the message.
+ * bar shows it with the attachments, and its `label` is sent with the message as `hostSelection`.
  */
 export type InputBarHostSelection = {
   label: string;

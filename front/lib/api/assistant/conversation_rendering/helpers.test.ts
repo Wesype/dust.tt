@@ -204,6 +204,20 @@ Hello!`);
     expect(text).toContain("- Source: email");
   });
 
+  it("adds the host selection to the message metadata, right below the source", async () => {
+    const { conversation, userMessage } = await buildMessage({
+      content: "Sum these",
+      context: { origin: "extension", hostSelection: "Sheet1!C5:D6" },
+    });
+
+    const res = renderUserMessage(conversation, userMessage);
+    const text = (res.content[0] as TextContent).text;
+
+    expect(text).toContain(
+      "- Source: extension\n- Selection when sent: Sheet1!C5:D6"
+    );
+  });
+
   it("includes only conversation metadata when no user metadata is available", async () => {
     const { conversation, userMessage } = await buildMessage({
       content: "Just text",

@@ -3,19 +3,17 @@ import type { InputBarHostSelection } from "@app/components/assistant/conversati
 import { MicrosoftExcelLogo } from "@dust-tt/sparkle";
 import { useEffect, useMemo, useState } from "react";
 
-// Returns the address of the selected cells without the sheet name, e.g. "C11" or "A1:B4". Returns
-// null when the selection is not one range, e.g. a chart, a shape or several ranges: Office.js then
-// fails to give the selected range.
+// Returns the address of the selected cells with the sheet name, e.g. "Sheet1!C11" or
+// "'My sheet'!A1:B4". Returns null when the selection is not one range, e.g. a chart, a shape or
+// several ranges: Office.js then fails to give the selected range.
 async function getSelectedAddress(): Promise<string | null> {
   try {
-    const address = await Excel.run(async (context) => {
+    return await Excel.run(async (context) => {
       const range = context.workbook.getSelectedRange();
       range.load("address");
       await context.sync();
       return range.address;
     });
-    // `address` is "Sheet1!C11", or "'My sheet'!C11" when the sheet name needs quotes.
-    return address.slice(address.lastIndexOf("!") + 1);
   } catch {
     return null;
   }

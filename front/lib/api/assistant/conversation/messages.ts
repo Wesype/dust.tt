@@ -243,6 +243,7 @@ export async function createUserMessage(
         : null,
       userContextApiKeyId: context.apiKeyId ?? null,
       userContextAuthMethod: context.authMethod ?? null,
+      userContextHostSelection: context.hostSelection ?? null,
       agenticMessageType,
       agenticOriginMessageId,
       requestedModelId: requestedModel?.modelId ?? null,

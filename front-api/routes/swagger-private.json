@@ -8693,6 +8693,11 @@
                         "items": {
                           "type": "string"
                         }
+                      },
+                      "hostSelection": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "description": "What the user had selected in the app hosting Dust when sending the message, e.g. `Sheet1!C5:D6` in Excel. Stored with the message and shown to the agent in that message's metadata."
                       }
                     }
                   },
@@ -9327,6 +9332,11 @@
                             "items": {
                               "type": "string"
                             }
+                          },
+                          "hostSelection": {
+                            "type": "string",
+                            "maxLength": 256,
+                            "description": "What the user had selected in the app hosting Dust when sending the message, e.g. `Sheet1!C5:D6` in Excel. Stored with the message and shown to the agent in that message's metadata."
                           }
                         }
                       }
@@ -13641,6 +13651,11 @@
             "items": {
               "type": "string"
             }
+          },
+          "hostSelection": {
+            "type": "string",
+            "nullable": true,
+            "description": "What the user had selected in the app hosting Dust when sending the message, e.g. `Sheet1!C5:D6` in Excel. Stored with the message and shown to the agent in that message's metadata."
           }
         }
       },
@@ -15333,6 +15348,11 @@
             "items": {
               "type": "string"
             }
+          },
+          "hostSelection": {
+            "type": "string",
+            "nullable": true,
+            "description": "What the user had selected in the app hosting Dust when sending the message, e.g. `Sheet1!C5:D6` in Excel. Stored with the message and shown to the agent in that message's metadata."
           },
           "agenticMessageData": {
             "type": "object",

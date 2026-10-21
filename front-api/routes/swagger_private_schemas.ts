@@ -1524,6 +1524,10 @@
  *           description: Data source tags to exclude from retrieval for this run, as opaque `key:value` strings.
  *           items:
  *             type: string
+ *         hostSelection:
+ *           type: string
+ *           nullable: true
+ *           description: What the user had selected in the app hosting Dust when sending the message, e.g. `Sheet1!C5:D6` in Excel. Stored with the message and shown to the agent in that message's metadata.
  *     PrivateReaction:
  *       type: object
  *       description: A reaction on a message.
