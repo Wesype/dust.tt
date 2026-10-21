@@ -1,4 +1,7 @@
-import { FrameSharingRow } from "@app/components/assistant/conversation/interactive_content/frame/FrameSharingRow";
+import {
+  FrameSharingList,
+  FrameSharingRow,
+} from "@app/components/assistant/conversation/interactive_content/frame/FrameSharingRow";
 import {
   Section,
   SectionEmptyState,
@@ -71,13 +74,13 @@ export function FrameSharingViewers({
       ) : (
         <>
           <ListGroup className="border-0">
-            <ul aria-label={t`Recent viewers`}>
+            <FrameSharingList label={t`Recent viewers`}>
               {viewers.slice(0, INITIAL_VIEWERS_COUNT).map((viewer) => (
                 <li key={viewer.email}>
                   <ViewerRow viewer={viewer} />
                 </li>
               ))}
-            </ul>
+            </FrameSharingList>
           </ListGroup>
           {viewers.length > INITIAL_VIEWERS_COUNT && (
             <Dialog>

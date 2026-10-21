@@ -1,4 +1,7 @@
-import { FrameSharingRow } from "@app/components/assistant/conversation/interactive_content/frame/FrameSharingRow";
+import {
+  FrameSharingList,
+  FrameSharingRow,
+} from "@app/components/assistant/conversation/interactive_content/frame/FrameSharingRow";
 import { Section } from "@app/components/assistant/conversation/interactive_content/frame/ShareFrameSection";
 import { useAwaitableDialog } from "@app/hooks/useAwaitableDialog";
 import { compareStrings } from "@app/lib/i18n/format";
@@ -254,7 +257,7 @@ export function FrameSharingGrants({
         </div>
       ) : grants.length === 0 ? null : (
         <ListGroup className="border-0">
-          <ul aria-label={t`People with access`}>
+          <FrameSharingList label={t`People with access`}>
             {grants.map((grant) => (
               <li key={grant.sId}>
                 <GrantRow
@@ -268,7 +271,7 @@ export function FrameSharingGrants({
                 />
               </li>
             ))}
-          </ul>
+          </FrameSharingList>
         </ListGroup>
       )}
     </div>

@@ -56,3 +56,22 @@ export function FrameSharingRow({
     </ListItem>
   );
 }
+
+interface FrameSharingListProps {
+  label: string;
+  children: ReactNode;
+}
+
+// Caps the list at about three and a half rows so the popover height stays bounded. The list is
+// focusable so keyboard users can scroll rows that contain no focusable element.
+export function FrameSharingList({ label, children }: FrameSharingListProps) {
+  return (
+    <ul
+      aria-label={label}
+      tabIndex={0}
+      className="max-h-48 overflow-y-auto focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-highlight-300"
+    >
+      {children}
+    </ul>
+  );
+}
