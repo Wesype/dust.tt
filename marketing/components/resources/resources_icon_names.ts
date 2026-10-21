@@ -232,6 +232,7 @@ export const INTERNAL_ALLOWED_ICONS = [
   "MicrosoftOutlookLogo",
   "MicrosoftTeamsLogo",
   "MiroLogo",
+  "MobbinLogo",
   "MondayLogo",
   "N8NLogo",
   "NaptaLogo",

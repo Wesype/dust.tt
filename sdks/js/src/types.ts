@@ -3716,6 +3716,7 @@ const InternalAllowedIconSchema = FlexibleEnumSchema<
   | "MicrosoftOutlookLogo"
   | "MicrosoftTeamsLogo"
   | "MiroLogo"
+  | "MobbinLogo"
   | "ModjoLogo"
   | "MondayLogo"
   | "N8NLogo"

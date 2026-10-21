@@ -8393,6 +8393,37 @@ export const DEFAULT_REMOTE_MCP_SERVERS: DefaultRemoteMCPServerConfig[] = [
       },
     },
   },
+  {
+    id: 10060,
+    name: "Mobbin",
+    description:
+      "Mobbin tools to search real-world UI design references: app screens, multi-step user flows, and website sections.",
+    url: "https://api.mobbin.com/mcp",
+    icon: "MobbinLogo",
+    documentationUrl: "https://docs.mobbin.com/mcp",
+    connectionInstructions:
+      "Mobbin uses OAuth with dynamic client registration. Sign in with your Mobbin account to connect.",
+    authMethod: "oauth-dynamic",
+    toolStakes: {
+      search_screens: "never_ask",
+      search_flows: "never_ask",
+      search_sections: "never_ask",
+    },
+    toolDisplayLabels: {
+      search_screens: {
+        running: "Searching screens on Mobbin",
+        done: "Searched screens on Mobbin",
+      },
+      search_flows: {
+        running: "Searching flows on Mobbin",
+        done: "Searched flows on Mobbin",
+      },
+      search_sections: {
+        running: "Searching sections on Mobbin",
+        done: "Searched sections on Mobbin",
+      },
+    },
+  },
 ];
 
 export const getDefaultRemoteMCPServerByURL = (
