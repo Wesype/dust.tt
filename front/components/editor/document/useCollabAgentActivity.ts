@@ -14,9 +14,10 @@ const EDITING_SHOWN_MS = AGENT_EDIT_SHOWN_MS;
 
 /**
  * @cc [owner:PopDaph,label:product] collab-agent-activity-shown
- * The activity MUST be the last read or edit the session announced on `provider`, for
- * `READING_SHOWN_MS` after a read and `EDITING_SHOWN_MS` after an edit, then none. Any other
- * activity MUST change nothing. A new provider MUST start with none.
+ * The activity MUST be the last read or edit the session announced on `provider` for an agent
+ * without `commentId`, for `READING_SHOWN_MS` after a read and `EDITING_SHOWN_MS` after an edit,
+ * then none. Any other activity, and any activity of an agent with a `commentId`, MUST change
+ * nothing. A new provider MUST start with none.
  */
 export function useCollabAgentActivity(
   provider: HocuspocusProvider | null
@@ -33,7 +34,7 @@ export function useCollabAgentActivity(
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
     const unsubscribe = onAgentActivity(provider, ({ agent, activity }) => {
-      if (!isDocumentActivity(activity)) {
+      if (agent.commentId || !isDocumentActivity(activity)) {
         return;
       }
       clearTimeout(timer);
