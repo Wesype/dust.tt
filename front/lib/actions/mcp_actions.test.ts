@@ -684,6 +684,7 @@ describe("tryCallMCPTool", () => {
       costCredits: null,
       resolvedModel: null,
       modelResolutionMethod: null,
+      fallbackModelId: null,
     };
     const userMessage: UserMessageType = {
       id: -1,

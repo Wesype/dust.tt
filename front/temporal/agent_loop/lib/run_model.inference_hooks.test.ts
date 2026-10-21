@@ -1,6 +1,7 @@
 import { isFreeUsageBlocked } from "@app/lib/api/llm/free_usage";
 import { getLlmCredentials } from "@app/lib/api/provider_credentials";
 import { DurationRecorder } from "@app/lib/duration_recorder";
+import { AgentMessageModel } from "@app/lib/models/agent/conversation";
 import { AgentMCPActionResource } from "@app/lib/resources/agent_mcp_action_resource";
 import { AgentStepContentResource } from "@app/lib/resources/agent_step_content_resource";
 import { getOutputFromLLMStream } from "@app/temporal/agent_loop/lib/get_output_from_llm";
@@ -303,5 +304,52 @@ describe("runModel inference hooks", () => {
     });
 
     expect(launchInferenceHookWorkflows).not.toHaveBeenCalled();
+  });
+});
+
+describe("runModel server-side fallback", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    shutdownMock.controller = new AbortController();
+    vi.mocked(getLlmCredentials).mockResolvedValue({});
+    vi.mocked(isFreeUsageBlocked).mockResolvedValue(false);
+  });
+
+  it("stores the served model on the agent message when another model answered", async () => {
+    const { auth, agentMessage, contextProvider } =
+      await InferenceHookRunModelFactory.create();
+    await FeatureFlagFactory.basic(auth, "inference_hooks");
+    // Deny after the model call to stop the run right after the output is handled.
+    const consumer = InferenceHookConsumerFactory.custom(async (input) =>
+      input.lifecycleEvent === "before_model_call"
+        ? { action: "allow" }
+        : { action: "deny", reason: "Stop here" }
+    );
+    vi.mocked(getOutputFromLLMStream).mockResolvedValue(
+      new Ok({
+        output: { actions: [], generation: "Hello", contents: [] },
+        dustRunId: "dust_run_1",
+        nativeChainOfThought: "",
+        servedModel: "claude-opus-4-8",
+      })
+    );
+
+    await runModel(auth, {
+      contextProvider,
+      runIds: [],
+      step: 0,
+      functionCallStepContentIds: {},
+      durationRecorder: DurationRecorder.create(),
+      activityTimeoutDeadlineMs: Date.now() + 60_000,
+      enforcedInferenceHooks: [InferenceHookConsumerFactory.enforced(consumer)],
+    });
+
+    const row = await AgentMessageModel.findOne({
+      where: {
+        id: agentMessage.agentMessageId,
+        workspaceId: auth.getNonNullableWorkspace().id,
+      },
+    });
+    expect(row?.fallbackModelId).toBe("claude-opus-4-8");
   });
 });

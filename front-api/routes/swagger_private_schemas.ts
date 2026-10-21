@@ -577,6 +577,10 @@
  *           nullable: true
  *           enum: [agent, user, auto, auto_fast, auto_complex, fair_use_downgrade]
  *           description: How resolvedModel was chosen - agent (configured model), user (per-message picker), auto/auto_fast/auto_complex (routed through a model stream), or fair_use_downgrade (premium allowance spent, ran the Standard stream instead). Null (legacy).
+ *         fallbackModelId:
+ *           type: string
+ *           nullable: true
+ *           description: Model that answered instead of the requested one after a provider-side fallback. Null when the requested model answered.
  *     PrivateLightAgentMessage:
  *       type: object
  *       description: A lighter agent message used in paginated message list responses.
@@ -707,6 +711,10 @@
  *           nullable: true
  *           enum: [agent, user, auto, auto_fast, auto_complex, fair_use_downgrade]
  *           description: How resolvedModel was chosen - agent (configured model), user (per-message picker), auto/auto_fast/auto_complex (routed through a model stream), or fair_use_downgrade (premium allowance spent, ran the Standard stream instead). Null (legacy).
+ *         fallbackModelId:
+ *           type: string
+ *           nullable: true
+ *           description: Model that answered instead of the requested one after a provider-side fallback. Null when the requested model answered.
  *         activitySteps:
  *           type: array
  *           items:

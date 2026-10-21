@@ -948,6 +948,7 @@ async function renderSingleAgentMessage(
     subAgentCostCredits,
     resolvedModel: resolvedModelFromAgentMessageRow(agentMessage),
     modelResolutionMethod: agentMessage.modelResolutionMethod,
+    fallbackModelId: agentMessage.fallbackModelId,
   } satisfies AgentMessageType;
 
   if (viewType === "full") {

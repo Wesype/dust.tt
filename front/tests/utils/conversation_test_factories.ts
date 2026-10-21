@@ -216,6 +216,7 @@ export function mockAgentMessage(
     activitySteps: [],
     resolvedModel: null,
     modelResolutionMethod: null,
+    fallbackModelId: null,
     actions: (params.actions ?? []).map(mockAction),
     feedback: (params.feedback ?? []).map((f) => ({
       thumbDirection: f.direction,
@@ -285,6 +286,7 @@ export function mockFullAgentMessage(
     modelInteractionDurationMs: null,
     resolvedModel: null,
     modelResolutionMethod: null,
+    fallbackModelId: null,
     richMentions: [],
     completionDurationMs: null,
     reactions: [],

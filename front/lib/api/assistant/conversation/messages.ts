@@ -661,6 +661,7 @@ export const createAgentMessages = async (
             costCredits: null,
             resolvedModel: resolvedModelFromAgentMessageRow(agentMessageRow),
             modelResolutionMethod: agentMessageRow.modelResolutionMethod,
+            fallbackModelId: agentMessageRow.fallbackModelId,
           };
         }
       }

@@ -564,6 +564,7 @@ export class ConversationFactory {
       costCredits: null,
       resolvedModel: null,
       modelResolutionMethod: null,
+      fallbackModelId: null,
     };
 
     if (!mcpAction) {

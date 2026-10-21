@@ -75,7 +75,10 @@ import { eventSourceManager } from "@app/lib/client/event_source_manager";
 import { clientFetch } from "@app/lib/egress/client";
 import type { DustError } from "@app/lib/error";
 import { FILE_ID_PATTERN } from "@app/lib/files";
-import { getSupportedModelConfig } from "@app/lib/llms/model_configurations";
+import {
+  getModelConfigByModelId,
+  getSupportedModelConfig,
+} from "@app/lib/llms/model_configurations";
 import { getFilePreviewDirectivePaths } from "@app/lib/markdown/file_preview";
 import { extractFromString } from "@app/lib/mentions/format";
 import { LinkWrapper } from "@app/lib/platform";
@@ -221,6 +224,25 @@ function PremiumDowngradeChip() {
             View your Premium model usage in Analytics
           </LinkWrapper>
           .
+        </Trans>
+      </p>
+    </MessageInfoChip>
+  );
+}
+
+interface ModelFallbackChipProps {
+  modelName: string;
+}
+
+function ModelFallbackChip({ modelName }: ModelFallbackChipProps) {
+  const { t } = useLingui();
+
+  return (
+    <MessageInfoChip label={t`Answered by ${modelName}`}>
+      <p>
+        <Trans>
+          The requested model declined to answer this message, so Dust used{" "}
+          {modelName} instead.
         </Trans>
       </p>
     </MessageInfoChip>
@@ -1151,6 +1173,11 @@ export function AgentMessage({
   const isFairUseDowngrade =
     agentMessage.modelResolutionMethod === "fair_use_downgrade";
 
+  const fallbackModelName = agentMessage.fallbackModelId
+    ? (getModelConfigByModelId(agentMessage.fallbackModelId)?.displayName ??
+      agentMessage.fallbackModelId)
+    : null;
+
   const renderName = useCallback(() => {
     const agentName = agentConfiguration.name;
     const parentAgentName = parentAgent?.name;
@@ -1269,7 +1296,9 @@ export function AgentMessage({
             name={agentConfiguration.name}
             timestamp={timestamp}
             infoChip={
-              isFairUseDowngrade ? (
+              fallbackModelName ? (
+                <ModelFallbackChip modelName={fallbackModelName} />
+              ) : isFairUseDowngrade ? (
                 <PremiumDowngradeChip />
               ) : agentMessage.prunedContext ? (
                 <PrunedContextChip />

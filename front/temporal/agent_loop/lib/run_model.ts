@@ -1087,8 +1087,16 @@ export async function runModel(
     }
   }
 
-  const { dustRunId, nativeChainOfThought, output, stopReason } =
+  const { dustRunId, nativeChainOfThought, output, stopReason, servedModel } =
     getOutputFromActionResponse.value;
+
+  // Another model answered this call: record it so the message shows it.
+  if (servedModel !== undefined) {
+    await updateAgentMessageDBAndMemory(auth, {
+      agentMessage,
+      update: { type: "fallbackModel", fallbackModelId: servedModel },
+    });
+  }
 
   // Create a new object to avoid mutation
   const updatedFunctionCallStepContentIds = { ...functionCallStepContentIds };
