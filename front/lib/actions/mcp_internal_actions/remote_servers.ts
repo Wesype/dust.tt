@@ -1,10 +1,13 @@
 import type { InternalAllowedIconType } from "@app/components/resources/resources_icons";
+import type { AuthorizationInfo } from "@app/lib/actions/mcp_metadata_extraction";
 import type { ToolDisplayLabels } from "@app/lib/api/mcp";
 import type {
   HostDerivedOAuthConfig,
   MCPOAuthUseCase,
+  OAuthProvider,
 } from "@app/types/oauth/lib";
 import type { WhitelistableFeature } from "@app/types/shared/feature_flags";
+import { assertNever } from "@app/types/shared/utils/assert_never";
 
 export type DefaultRemoteMCPServerConfig = {
   id: number;
@@ -14,7 +17,16 @@ export type DefaultRemoteMCPServerConfig = {
   icon: InternalAllowedIconType;
   documentationUrl?: string;
   connectionInstructions?: string;
-  authMethod: "bearer" | "oauth-dynamic" | "oauth-static" | null;
+  authMethod:
+    | "bearer"
+    | "oauth-dynamic"
+    | "oauth-static"
+    | "oauth-static-dust-app"
+    | null;
+  // Static OAuth through Dust's own OAuth app: the provider registered in Dust that holds the
+  // app's credentials in Dust's environment. Required when `authMethod` is
+  // "oauth-static-dust-app", unset otherwise.
+  oauthProvider?: OAuthProvider;
   supportedOAuthUseCases?: MCPOAuthUseCase[];
   scope?: string;
   // Overrides the `client_uri` sent at Dynamic Client Registration, for servers that allowlist
@@ -8247,3 +8259,41 @@ export const getDefaultRemoteMCPServerByName = (
     DEFAULT_REMOTE_MCP_SERVERS.find((server) => server.name === name) || null
   );
 };
+
+/**
+ * @cc [owner:LeandreLeBizec,label:mcp] preset-authorization-by-auth-method
+ * The returned authorization MUST follow the preset's `authMethod`:
+ * - "oauth-dynamic": provider `mcp`, with the preset's `scope`;
+ * - "oauth-static": provider `mcp_static`;
+ * - "oauth-static-dust-app": provider `oauthProvider`, or `null` when `oauthProvider` is missing;
+ * - "bearer" or `null`: `null`.
+ * `supported_use_cases` MUST be the preset's `supportedOAuthUseCases`, or empty when unset.
+ */
+export function getDefaultRemoteMCPServerAuthorization(
+  config: DefaultRemoteMCPServerConfig
+): AuthorizationInfo | null {
+  const supportedUseCases = config.supportedOAuthUseCases ?? [];
+
+  switch (config.authMethod) {
+    case "oauth-dynamic":
+      return {
+        provider: "mcp",
+        supported_use_cases: supportedUseCases,
+        scope: config.scope,
+      };
+    case "oauth-static":
+      return { provider: "mcp_static", supported_use_cases: supportedUseCases };
+    case "oauth-static-dust-app":
+      return config.oauthProvider
+        ? {
+            provider: config.oauthProvider,
+            supported_use_cases: supportedUseCases,
+          }
+        : null;
+    case "bearer":
+    case null:
+      return null;
+    default:
+      return assertNever(config.authMethod);
+  }
+}
