@@ -156,6 +156,10 @@ msgid "Invite workspace members by email"
 msgstr "Workspace-Mitglieder per E-Mail einladen"
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
+msgid "Invitations are sent to email addresses only. People at an added domain can open the link after verifying their email."
+msgstr "Einladungen werden nur an E-Mail-Adressen gesendet. Personen einer hinzugefügten Domain können den Link öffnen, nachdem sie ihre E-Mail-Adresse bestätigt haben."
+
+#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
 msgid "Add comma separated emails"
 msgstr "Kommagetrennte E-Mail-Adressen hinzufügen"
 
@@ -166,10 +170,6 @@ msgstr "Hinzufügen"
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
 msgid "Invite"
 msgstr "Einladen"
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "Invitations are sent to email addresses only. People at an added domain can open the link after verifying their email."
-msgstr "Einladungen werden nur an E-Mail-Adressen gesendet. Personen einer hinzugefügten Domain können den Link öffnen, nachdem sie ihre E-Mail-Adresse bestätigt haben."
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
 msgid "Loading access rules"
@@ -186,32 +186,16 @@ msgid "Retry"
 msgstr "Erneut versuchen"
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "No people or domains have been added yet."
-msgstr "Es wurden noch keine Personen oder Domains hinzugefügt."
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "No one has been invited yet."
-msgstr "Es wurde noch niemand eingeladen."
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
 msgid "People with access"
 msgstr "Personen mit Zugriff"
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "Added by {grantedBy} {grantedAgo}"
-msgstr "Hinzugefügt von {grantedBy} {grantedAgo}"
+msgid "Added by {grantedBy}"
+msgstr "Hinzugefügt von {grantedBy}"
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "Added {grantedAgo}"
-msgstr "Hinzugefügt {grantedAgo}"
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "Invited by {grantedBy} {grantedAgo}"
-msgstr "Eingeladen von {grantedBy} {grantedAgo}"
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "Invited {grantedAgo}"
-msgstr "Eingeladen {grantedAgo}"
+msgid "Invited by {grantedBy}"
+msgstr "Eingeladen von {grantedBy}"
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
 msgid "External viewers cannot access this frame."
@@ -242,8 +226,8 @@ msgid "Could not load viewers."
 msgstr "Die Betrachter konnten nicht geladen werden."
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingViewers.tsx
-msgid "No views recorded yet."
-msgstr "Noch keine Aufrufe erfasst."
+msgid "No views yet."
+msgstr "Noch keine Aufrufe."
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingViewers.tsx
 msgid "Recent viewers"
@@ -394,20 +378,20 @@ msgid "Viewers will only be able to access files you can verify. Fix or remove t
 msgstr "Betrachter können nur auf Dateien zugreifen, die Sie überprüfen können. Korrigieren oder entfernen Sie diese Verweise vor dem Teilen: {blockedRefs}"
 
 #: front/components/assistant/conversation/interactive_content/frame/ShareFramePopover.tsx
-msgid "Who has access"
-msgstr "Wer hat Zugriff"
-
-#: front/components/assistant/conversation/interactive_content/frame/ShareFramePopover.tsx
-msgid "Updating sharing settings"
-msgstr "Freigabeeinstellungen werden aktualisiert"
-
-#: front/components/assistant/conversation/interactive_content/frame/ShareFramePopover.tsx
 msgid "Copied!"
 msgstr "Kopiert!"
 
 #: front/components/assistant/conversation/interactive_content/frame/ShareFramePopover.tsx
 msgid "Copy link"
 msgstr "Link kopieren"
+
+#: front/components/assistant/conversation/interactive_content/frame/ShareFramePopover.tsx
+msgid "Who has access"
+msgstr "Wer hat Zugriff"
+
+#: front/components/assistant/conversation/interactive_content/frame/ShareFramePopover.tsx
+msgid "Updating sharing settings"
+msgstr "Freigabeeinstellungen werden aktualisiert"
 
 #: front/components/assistant/conversation/interactive_content/frame/shareFrameScopeOptions.ts
 msgid "Invite only"

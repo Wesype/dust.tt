@@ -39,7 +39,7 @@ export function FrameSharingRow({
         <span className="whitespace-normal break-all text-sm font-medium text-foreground">
           {label}
         </span>
-        <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+        <div className="flex flex-col gap-0.5 text-xs text-muted-foreground empty:hidden">
           {children}
         </div>
       </div>

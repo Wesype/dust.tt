@@ -20,6 +20,7 @@ import {
   ContentMessage,
   Icon,
   Label,
+  Link01,
   ListGroup,
   ListItem,
   PopoverContent,
@@ -78,7 +79,7 @@ export function ShareFramePopover({
         sideOffset={8}
         collisionPadding={8}
         preventAutoFocusOnClose={false}
-        className="flex w-80 max-h-(--radix-popover-content-available-height) flex-col overflow-hidden p-2"
+        className="flex w-80 max-h-(--radix-popover-content-available-height) flex-col overflow-hidden p-3"
       >
         <span id={titleId} className="sr-only">
           <Trans>Share this frame</Trans>
@@ -241,7 +242,6 @@ function ShareFramePopoverContent({
               availableScopeOptions={availableScopeOptions}
               isUpdatingScope={isUpdatingScope}
               onScopeChange={handleScopeChange}
-              shareURL={shareURL}
             />
 
             {showGrants && (
@@ -258,6 +258,7 @@ function ShareFramePopoverContent({
                 }}
               />
             )}
+            <CopyLinkButton shareURL={shareURL} />
             <FrameSharingViewers
               viewers={sharing?.viewers}
               isLoading={isGrantsLoading}
@@ -273,13 +274,34 @@ function ShareFramePopoverContent({
   );
 }
 
+interface CopyLinkButtonProps {
+  shareURL: string;
+}
+
+function CopyLinkButton({ shareURL }: CopyLinkButtonProps) {
+  const { t } = useLingui();
+  const [isCopied, copyToClipboard] = useCopyToClipboard();
+
+  return (
+    <Button
+      variant="primary"
+      icon={isCopied ? Check : Link01}
+      label={isCopied ? t`Copied!` : t`Copy link`}
+      disabled={!shareURL}
+      className="w-full"
+      onClick={async () => {
+        await copyToClipboard(shareURL);
+      }}
+    />
+  );
+}
+
 interface AccessScopeSectionProps {
   titleId: string;
   currentScope: FileShareScope;
   availableScopeOptions: ReturnType<typeof getAvailableScopeOptions>;
   isUpdatingScope: boolean;
   onScopeChange: (scope: FileShareScope) => void;
-  shareURL: string;
 }
 
 function AccessScopeSection({
@@ -288,10 +310,8 @@ function AccessScopeSection({
   availableScopeOptions,
   isUpdatingScope,
   onScopeChange,
-  shareURL,
 }: AccessScopeSectionProps) {
   const { t } = useLingui();
-  const [isCopied, copyToClipboard] = useCopyToClipboard();
 
   return (
     <Section
@@ -309,17 +329,6 @@ function AccessScopeSection({
             </span>
           )}
         </span>
-      }
-      action={
-        <Button
-          variant="ghost-secondary"
-          size="xs"
-          label={isCopied ? t`Copied!` : t`Copy link`}
-          disabled={!shareURL}
-          onClick={async () => {
-            await copyToClipboard(shareURL);
-          }}
-        />
       }
     >
       <ListGroup className="overflow-hidden rounded-xl border-x dark:border-border-form">

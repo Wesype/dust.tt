@@ -1,5 +1,8 @@
 import { FrameSharingRow } from "@app/components/assistant/conversation/interactive_content/frame/FrameSharingRow";
-import { Section } from "@app/components/assistant/conversation/interactive_content/frame/ShareFrameSection";
+import {
+  Section,
+  SectionEmptyState,
+} from "@app/components/assistant/conversation/interactive_content/frame/ShareFrameSection";
 import { getActiveLocale } from "@app/lib/i18n/active_locale";
 import { formatDateTime, formatTimeDistance } from "@app/lib/i18n/format";
 import type { FileViewerType } from "@app/types/file_viewers";
@@ -12,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  Eye,
   Input,
   ListGroup,
   SearchMd,
@@ -45,7 +49,7 @@ export function FrameSharingViewers({
   const viewerCount = viewers?.length ?? 0;
 
   return (
-    <Section label={t`Viewers`} description={t(VIEWERS_DESCRIPTION)}>
+    <Section label={t`Viewers`}>
       {isLoading ? (
         <div role="status" className="flex items-center gap-2 py-2">
           <div aria-hidden="true">
@@ -63,9 +67,7 @@ export function FrameSharingViewers({
           <Button label={t`Retry`} variant="outline" onClick={onRetry} />
         </div>
       ) : viewers.length === 0 ? (
-        <p className="p-2 text-sm text-muted-foreground">
-          <Trans>No views recorded yet.</Trans>
-        </p>
+        <SectionEmptyState icon={Eye} label={t`No views yet.`} />
       ) : (
         <>
           <ListGroup className="border-0">

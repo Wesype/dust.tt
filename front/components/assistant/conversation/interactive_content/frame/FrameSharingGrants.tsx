@@ -1,8 +1,7 @@
 import { FrameSharingRow } from "@app/components/assistant/conversation/interactive_content/frame/FrameSharingRow";
 import { Section } from "@app/components/assistant/conversation/interactive_content/frame/ShareFrameSection";
 import { useAwaitableDialog } from "@app/hooks/useAwaitableDialog";
-import { getActiveLocale } from "@app/lib/i18n/active_locale";
-import { compareStrings, formatTimeDistance } from "@app/lib/i18n/format";
+import { compareStrings } from "@app/lib/i18n/format";
 import { MAX_EMAILS_OR_DOMAINS_PER_INVITE } from "@app/types/files";
 import type {
   FileSharingGrantType,
@@ -186,7 +185,14 @@ export function FrameSharingGrants({
   return (
     <div className="flex flex-col gap-4">
       <AwaitableDialog />
-      <Section label={inviteLabel}>
+      <Section
+        label={inviteLabel}
+        description={
+          canGrantDomains
+            ? t`Invitations are sent to email addresses only. People at an added domain can open the link after verifying their email.`
+            : undefined
+        }
+      >
         <form
           className="flex flex-col gap-2"
           onSubmit={handleSubmit(async ({ recipients }) => {
@@ -203,7 +209,7 @@ export function FrameSharingGrants({
                 aria-label={inviteLabel}
                 placeholder={
                   canGrantDomains
-                    ? "alice@example.com, example.com"
+                    ? "alice@acme.com, acme.com"
                     : t`Add comma separated emails`
                 }
                 {...register("recipients")}
@@ -214,7 +220,7 @@ export function FrameSharingGrants({
               />
             </div>
             <Button
-              variant="primary"
+              variant="outline"
               label={canGrantDomains ? t`Add` : t`Invite`}
               type="submit"
               isLoading={isSubmitting}
@@ -222,20 +228,8 @@ export function FrameSharingGrants({
             />
           </div>
           {errors.recipients && (
-            <p
-              id={errorId}
-              role="alert"
-              className="text-xs text-foreground px-2"
-            >
+            <p id={errorId} role="alert" className="text-xs text-foreground">
               {errors.recipients.message}
-            </p>
-          )}
-          {canGrantDomains && !errors.recipients && (
-            <p className="text-xs text-muted-foreground px-2">
-              <Trans>
-                Invitations are sent to email addresses only. People at an added
-                domain can open the link after verifying their email.
-              </Trans>
             </p>
           )}
         </form>
@@ -258,32 +252,24 @@ export function FrameSharingGrants({
           </p>
           <Button label={t`Retry`} variant="outline" onClick={onRetry} />
         </div>
-      ) : grants.length === 0 ? (
-        <p className="px-2 text-sm text-muted-foreground">
-          {canGrantDomains
-            ? t`No people or domains have been added yet.`
-            : t`No one has been invited yet.`}
-        </p>
-      ) : (
-        <Section label={t`People with access`}>
-          <ListGroup className="border-0">
-            <ul>
-              {grants.map((grant) => (
-                <li key={grant.sId}>
-                  <GrantRow
-                    grant={grant}
-                    isRevoking={revokingId === grant.sId}
-                    onRevoke={
-                      canRevoke && revokingId === null
-                        ? () => revoke(grant)
-                        : undefined
-                    }
-                  />
-                </li>
-              ))}
-            </ul>
-          </ListGroup>
-        </Section>
+      ) : grants.length === 0 ? null : (
+        <ListGroup className="border-0">
+          <ul aria-label={t`People with access`}>
+            {grants.map((grant) => (
+              <li key={grant.sId}>
+                <GrantRow
+                  grant={grant}
+                  isRevoking={revokingId === grant.sId}
+                  onRevoke={
+                    canRevoke && revokingId === null
+                      ? () => revoke(grant)
+                      : undefined
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+        </ListGroup>
       )}
     </div>
   );
@@ -299,21 +285,7 @@ function GrantRow({ grant, isRevoking, onRevoke }: GrantRowProps) {
   const { t } = useLingui();
   const isDomain = grant.target.kind === "domain";
   const label = isDomain ? `@${grant.target.value}` : grant.target.value;
-  const now = new Date();
   const grantedBy = grant.grantedBy?.fullName ?? grant.grantedBy?.email;
-  const grantedAgo = formatTimeDistance(
-    new Date(grant.grantedAt),
-    now,
-    undefined,
-    getActiveLocale()
-  );
-  const grantedLabel = isDomain
-    ? grantedBy
-      ? t`Added by ${grantedBy} ${grantedAgo}`
-      : t`Added ${grantedAgo}`
-    : grantedBy
-      ? t`Invited by ${grantedBy} ${grantedAgo}`
-      : t`Invited ${grantedAgo}`;
 
   return (
     <FrameSharingRow
@@ -322,7 +294,11 @@ function GrantRow({ grant, isRevoking, onRevoke }: GrantRowProps) {
       onRemove={onRevoke}
       isRemoving={isRevoking}
     >
-      <span>{grantedLabel}</span>
+      {grantedBy && (
+        <span>
+          {isDomain ? t`Added by ${grantedBy}` : t`Invited by ${grantedBy}`}
+        </span>
+      )}
       {grant.blockedByPolicy && (
         <span>
           {isDomain
