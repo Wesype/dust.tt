@@ -90,4 +90,9 @@ describe("DEFAULT_REMOTE_MCP_SERVERS", () => {
       });
     }
   });
+
+  it("has unique ids", () => {
+    const ids = DEFAULT_REMOTE_MCP_SERVERS.map((config) => config.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
 });
