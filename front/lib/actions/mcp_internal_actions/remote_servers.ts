@@ -7600,7 +7600,7 @@ export const DEFAULT_REMOTE_MCP_SERVERS: DefaultRemoteMCPServerConfig[] = [
     },
   },
   {
-    id: 10049,
+    id: 10061,
     name: "Grafana",
     description:
       "Grafana Cloud tools for metrics, logs, traces, dashboards, and incidents.",
