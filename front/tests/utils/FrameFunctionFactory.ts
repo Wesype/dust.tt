@@ -77,7 +77,13 @@ export async function createTestConversationFrameFile(
   {
     conversationId,
     folderName = "Frame",
-  }: { conversationId: string; folderName?: string }
+    activePublicationId,
+  }: {
+    conversationId: string;
+    folderName?: string;
+    /** Marks the Frame as published at this publication (pointers only, no stored bundle). */
+    activePublicationId?: string;
+  }
 ): Promise<FileResource> {
   return FileFactory.create(auth, null, {
     contentType: frameV2ContentType,
@@ -85,7 +91,12 @@ export async function createTestConversationFrameFile(
     fileSize: 100,
     status: "created",
     useCase: "conversation",
-    useCaseMetadata: { conversationId },
+    // A published Frame's two pointers, as activating that publication leaves them.
+    useCaseMetadata: {
+      conversationId,
+      activePublicationId,
+      latestPublicationId: activePublicationId,
+    },
     mountFilePath: `${getConversationFilesBasePath({
       workspaceId: auth.getNonNullableWorkspace().sId,
       conversationId,
@@ -110,10 +121,7 @@ export async function createTestLiveConversationFrame(
   });
   const frame = await createTestConversationFrameFile(auth, {
     conversationId: conversation.sId,
-  });
-  await frame.setActiveFramePublication({
-    publicationId: activePublicationId,
-    description: "Track tasks.",
+    activePublicationId,
   });
   return { conversation, frame };
 }

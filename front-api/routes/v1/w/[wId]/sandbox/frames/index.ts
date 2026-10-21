@@ -21,6 +21,8 @@ import { z } from "zod";
 import frameById from "./[frameId]";
 import call from "./call";
 import callById from "./call_by_id";
+import draftMode from "./draft-mode";
+import makeLive from "./make-live";
 import share from "./share";
 
 const FramePublishRequestSchema = z.object({
@@ -46,6 +48,8 @@ const app = sandboxApp();
 app.use("*", sandboxAuth({ allowedTokenKinds: ["action"] }));
 app.route("/call", call);
 app.route("/:frameId/call", callById);
+app.route("/draft-mode", draftMode);
+app.route("/make-live", makeLive);
 app.route("/share", share);
 
 /**
