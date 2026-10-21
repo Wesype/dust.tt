@@ -1,4 +1,5 @@
 import {
+  deriveFrameScheduleId,
   FRAME_DATABASE_NAME_REGEX,
   FRAME_DEFAULT_UI_ENTRY_POINT,
   FrameManifestSchema,
@@ -6,6 +7,7 @@ import {
   isSafeFrameRelativePath,
   MAX_FRAME_DATABASE_COUNT,
   MAX_FRAME_FUNCTION_DESCRIPTION_LENGTH,
+  MAX_FRAME_FUNCTION_NAME_LENGTH,
   MAX_FRAME_NAME_LENGTH,
   parseFrameManifest,
   validateFrameV2Name,
@@ -197,11 +199,14 @@ describe("FrameManifestSchema", () => {
 
   describe("schedules", () => {
     const SCHEDULE = {
-      id: "daily-refresh",
       cron: "0 9 * * 1-5",
       timezone: "Europe/Paris",
       input: { source: "crm", limit: 50 },
     };
+    const SCHEDULE_ID = deriveFrameScheduleId({
+      functionName: FUNCTION.name,
+      ...SCHEDULE,
+    });
 
     function parseWithSchedules(
       schedules: unknown[],
@@ -213,7 +218,7 @@ describe("FrameManifestSchema", () => {
       });
     }
 
-    it("parses a schedule on a durable function", () => {
+    it("parses a schedule on a durable function and derives its id", () => {
       const parsed = parseWithSchedules([SCHEDULE], {
         ...FUNCTION,
         executionMode: "durable",
@@ -221,7 +226,97 @@ describe("FrameManifestSchema", () => {
 
       expect(parsed.success).toBe(true);
       if (parsed.success) {
-        expect(parsed.data.functions[0].schedules).toEqual([SCHEDULE]);
+        expect(parsed.data.functions[0].schedules).toEqual([
+          { ...SCHEDULE, id: SCHEDULE_ID },
+        ]);
+        expect(SCHEDULE_ID).toMatch(/^add-task-[0-9a-f]{8}$/);
+      }
+    });
+
+    it("derives the same id for the same declaration and a new one for any change", () => {
+      const same = deriveFrameScheduleId({
+        functionName: FUNCTION.name,
+        ...SCHEDULE,
+        input: { limit: 50, source: "crm" },
+      });
+      expect(same).toBe(SCHEDULE_ID);
+
+      for (const changed of [
+        { ...SCHEDULE, cron: "0 10 * * 1-5" },
+        { ...SCHEDULE, timezone: "UTC" },
+        { ...SCHEDULE, input: { source: "billing", limit: 50 } },
+      ]) {
+        expect(
+          deriveFrameScheduleId({ functionName: FUNCTION.name, ...changed })
+        ).not.toBe(SCHEDULE_ID);
+      }
+      expect(
+        deriveFrameScheduleId({ functionName: "list-tasks", ...SCHEDULE })
+      ).not.toBe(SCHEDULE_ID);
+    });
+
+    it("keeps derived ids within the id length limit", () => {
+      const id = deriveFrameScheduleId({
+        functionName: "a".repeat(MAX_FRAME_FUNCTION_NAME_LENGTH),
+        ...SCHEDULE,
+      });
+
+      expect(id).toHaveLength(MAX_FRAME_SCHEDULE_ID_LENGTH);
+      expect(id).toMatch(/-[0-9a-f]{8}$/);
+    });
+
+    it("keeps functions apart even when their names agree on the visible prefix", () => {
+      const prefix = "a".repeat(MAX_FRAME_SCHEDULE_ID_LENGTH);
+      const first = deriveFrameScheduleId({
+        functionName: `${prefix}-one`,
+        ...SCHEDULE,
+      });
+      const second = deriveFrameScheduleId({
+        functionName: `${prefix}-two`,
+        ...SCHEDULE,
+      });
+
+      expect(first.slice(0, -9)).toBe(second.slice(0, -9));
+      expect(first).not.toBe(second);
+    });
+
+    it("ignores an id written in the manifest", () => {
+      const parsed = parseWithSchedules([{ ...SCHEDULE, id: "custom" }]);
+
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.functions[0].schedules[0].id).toBe(SCHEDULE_ID);
+      }
+    });
+
+    it("allows several schedules on one function", () => {
+      const parsed = parseWithSchedules([
+        SCHEDULE,
+        { ...SCHEDULE, cron: "0 18 * * *" },
+        { ...SCHEDULE, input: { source: "billing" } },
+      ]);
+
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        const ids = parsed.data.functions[0].schedules.map((s) => s.id);
+        expect(new Set(ids).size).toBe(3);
+      }
+    });
+
+    it("rejects the same schedule declared twice on a function", () => {
+      const parsed = parseWithSchedules([
+        SCHEDULE,
+        { ...SCHEDULE, input: { limit: 50, source: "crm" } },
+      ]);
+
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues[0]).toMatchObject({
+          message: expect.stringContaining(
+            "Function 'add-task' declares the same schedule twice"
+          ),
+          path: ["functions", 0, "schedules", 1],
+        });
       }
     });
 
@@ -246,41 +341,10 @@ describe("FrameManifestSchema", () => {
       expect(parsed.success).toBe(false);
       if (!parsed.success) {
         expect(parsed.error.issues[0]?.message).toContain(
-          `Schedule 'daily-refresh' targets function 'add-task'`
+          "Function 'add-task' declares schedules, so it must declare"
         );
       }
     });
-
-    it("rejects duplicate schedule ids across functions", () => {
-      const parsed = FrameManifestSchema.safeParse({
-        ...MANIFEST,
-        functions: [
-          { ...FUNCTION, schedules: [SCHEDULE] },
-          {
-            ...FUNCTION,
-            name: "list-tasks",
-            entryPoint: "functions/list_tasks.ts",
-            schedules: [SCHEDULE],
-          },
-        ],
-      });
-
-      expect(parsed.success).toBe(false);
-      if (!parsed.success) {
-        expect(parsed.error.issues[0]).toMatchObject({
-          message:
-            "Schedule id 'daily-refresh' must be unique within the Frame.",
-          path: ["functions", 1, "schedules", 0, "id"],
-        });
-      }
-    });
-
-    it.each(["Daily Refresh", "a".repeat(MAX_FRAME_SCHEDULE_ID_LENGTH + 1)])(
-      "rejects schedule id %j",
-      (id) => {
-        expect(parseWithSchedules([{ ...SCHEDULE, id }]).success).toBe(false);
-      }
-    );
 
     it("rejects an invalid cron at the schedule's cron path", () => {
       const parsed = parseWithSchedules([{ ...SCHEDULE, cron: "@daily" }]);
@@ -288,9 +352,7 @@ describe("FrameManifestSchema", () => {
       expect(parsed.success).toBe(false);
       if (!parsed.success) {
         expect(parsed.error.issues[0]).toMatchObject({
-          message: expect.stringContaining(
-            "Schedule 'daily-refresh' cron '@daily' is invalid"
-          ),
+          message: expect.stringContaining("Schedule cron '@daily' is invalid"),
           path: ["functions", 0, "schedules", 0, "cron"],
         });
       }
@@ -341,7 +403,9 @@ describe("FrameManifestSchema", () => {
 
       expect(parsed.isOk()).toBe(true);
       if (parsed.isOk()) {
-        expect(parsed.value.functions[0].schedules).toEqual([SCHEDULE]);
+        expect(parsed.value.functions[0].schedules).toEqual([
+          { ...SCHEDULE, id: SCHEDULE_ID },
+        ]);
       }
     });
   });

@@ -127,6 +127,28 @@ describe("framesSkill.fetchInstructions", () => {
     ).resolves.toBe(false);
   });
 
+  it("teaches function schedules only when the schedules flag is on", async () => {
+    const { authenticator: auth } = await createResourceTest({});
+    await FeatureFlagFactory.basic(auth, "frames_v2_functions");
+
+    const withoutSchedules = await framesSkill.fetchInstructions(auth, {
+      spaceIds: [],
+    });
+    expect(withoutSchedules).not.toContain(
+      "## Run a durable function on a schedule"
+    );
+    expect(withoutSchedules).not.toContain('"schedules"');
+
+    await FeatureFlagFactory.basic(auth, "frames_v2_schedules");
+
+    const withSchedules = await framesSkill.fetchInstructions(auth, {
+      spaceIds: [],
+    });
+    expect(withSchedules).toContain("## Run a durable function on a schedule");
+    expect(withSchedules).toContain('"cron": "0 * * * *"');
+    expect(withSchedules).toContain("do not run yet");
+  });
+
   it("teaches client-only Frames without Frame functions", async () => {
     const { authenticator: auth } = await createResourceTest({});
 

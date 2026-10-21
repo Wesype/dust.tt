@@ -450,6 +450,45 @@ call that runs longer than the share page waits fails, yet may still complete on
 retry a failed call automatically: a retry can run it twice.
 `;
 
+// TODO(2026-10-20 FRAME_SCHEDULES): drop the "do not run yet" bullet once tasks#11380 ships.
+const SCHEDULES_AUTHORING = `\
+## Run a durable function on a schedule
+
+A durable function can declare schedules in its manifest entry. Each schedule invokes the
+function with one static JSON \`input\`, on a cron, in an IANA timezone, with no model or
+conversation involved:
+
+\`\`\`json
+{
+  "name": "refresh",
+  "description": "Refresh cached CRM data.",
+  "entryPoint": "functions/refresh.ts",
+  "executionMode": "durable",
+  "schedules": [
+    { "cron": "0 * * * *", "timezone": "Europe/Paris", "input": { "source": "crm" } },
+    { "cron": "0 6 * * 1", "timezone": "Europe/Paris", "input": { "source": "billing" } }
+  ]
+}
+\`\`\`
+
+- A schedule is identified by its function, cron, timezone and input; it has no name. A function
+  may declare several schedules as long as they differ in one of those, and declaring the same one
+  twice is refused. Changing a schedule's cron or input replaces it rather than editing it, so its
+  run history starts over.
+- \`cron\` is a standard five-field expression (minute hour day-of-month month day-of-week) that
+  fires at most once per hour: the minute field is a single value, so \`0 * * * *\` is the fastest
+  allowed. No \`@daily\` macros, no \`#\` or \`L\`.
+- \`timezone\` is an IANA name in its database capitalization, such as \`UTC\` or
+  \`America/New_York\`.
+- \`input\` must match the function's \`input\` schema; publishing validates it and fails with the
+  function and schedule named. Compute time-relative values (for example "last 7 days") inside the
+  function rather than freezing them into the input.
+- Only \`durable\` functions can declare schedules.
+- Schedules are declared and stored with the publication but do not run yet. Tell the user when a
+  manifest declares one so they do not expect refreshed data until scheduling ships.
+
+`;
+
 const MIGRATING_LEGACY_FRAME = `\
 ## Migrating a legacy Frame
 
@@ -514,11 +553,13 @@ export const buildFramesV2Instructions = ({
   hasFunctions,
   hasPublicFunctions,
   hasDrafts,
+  hasSchedules,
   isPod,
 }: {
   hasFunctions: boolean;
   hasPublicFunctions: boolean;
   hasDrafts: boolean;
+  hasSchedules: boolean;
   isPod: boolean;
 }) => {
   const publishOutcome = hasDrafts
@@ -695,7 +736,9 @@ ${
   hasFunctions
     ? `${FUNCTIONS_SOURCE_LAYOUT}\n${FUNCTIONS_AUTHORING}`
     : CLIENT_ONLY_SOURCE_LAYOUT
-}${hasPublicFunctions ? `\n${PUBLIC_FUNCTIONS_AUTHORING}` : ""}
+}${hasPublicFunctions ? `\n${PUBLIC_FUNCTIONS_AUTHORING}` : ""}${
+    hasFunctions && hasSchedules ? `\n${SCHEDULES_AUTHORING}` : ""
+  }
 ## Check the Frame UI
 
 For a v2 Frame, run the attached linter on its folder before publishing:

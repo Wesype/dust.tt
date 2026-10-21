@@ -1,4 +1,7 @@
-import { FrameManifestSchema } from "@app/types/api/frame_manifest";
+import {
+  deriveFrameScheduleId,
+  FrameManifestSchema,
+} from "@app/types/api/frame_manifest";
 import {
   FramePublicationDescriptorSchema,
   isSameFramePublicationContent,
@@ -125,6 +128,60 @@ describe("FramePublicationDescriptorSchema", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe("publication schedules", () => {
+  const declaration = {
+    cron: "0 9 * * 1-5",
+    timezone: "Europe/Paris",
+    input: { title: "Daily refresh", tags: ["crm", null, 3] },
+  };
+  const schedule = {
+    ...declaration,
+    id: deriveFrameScheduleId({ functionName: "add-task", ...declaration }),
+  };
+  const publicationWithSchedule = {
+    ...publication,
+    manifest: {
+      ...publication.manifest,
+      functions: [
+        { ...publication.manifest.functions[0], schedules: [schedule] },
+      ],
+    },
+  };
+
+  it("survives descriptor serialization and deserialization", () => {
+    const stored = Buffer.from(
+      JSON.stringify(
+        FramePublicationDescriptorSchema.parse(publicationWithSchedule)
+      )
+    );
+
+    const parsed = parseFramePublicationDescriptor(stored);
+
+    expect(parsed.isOk()).toBe(true);
+    if (parsed.isOk()) {
+      expect(parsed.value).toEqual(publicationWithSchedule);
+      expect(parsed.value.manifest.functions[0]?.schedules).toEqual([schedule]);
+    }
+  });
+
+  it("makes publications with different schedules different content", () => {
+    const base = FramePublicationDescriptorSchema.parse(publication);
+
+    expect(
+      isSameFramePublicationContent(
+        base,
+        FramePublicationDescriptorSchema.parse(publicationWithSchedule)
+      )
+    ).toBe(false);
+    expect(
+      isSameFramePublicationContent(
+        FramePublicationDescriptorSchema.parse(publicationWithSchedule),
+        FramePublicationDescriptorSchema.parse(publicationWithSchedule)
+      )
+    ).toBe(true);
   });
 });
 

@@ -9,6 +9,7 @@ import { isPodConversation } from "@app/types/assistant/conversation";
 import {
   isFramesV2DraftsEnabled,
   isFramesV2FunctionsEnabled,
+  isFramesV2SchedulesEnabled,
 } from "@app/types/shared/feature_flags";
 
 /**
@@ -50,6 +51,7 @@ export const framesSkill = {
         plan: auth.plan(),
       }),
       hasDrafts: isFramesV2DraftsEnabled(flags),
+      hasSchedules: isFramesV2SchedulesEnabled(flags),
       isPod: conversation ? isPodConversation(conversation) : false,
     });
   },

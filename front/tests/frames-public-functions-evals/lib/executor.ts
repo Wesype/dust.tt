@@ -36,6 +36,7 @@ export async function executeFramesAuthoring(
     hasFunctions: true,
     hasPublicFunctions: true,
     hasDrafts: false,
+    hasSchedules: false,
     isPod: false,
   });
 

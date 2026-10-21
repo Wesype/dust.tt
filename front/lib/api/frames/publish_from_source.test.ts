@@ -849,7 +849,6 @@ describe("publishFrameV2FromSource", () => {
             entryPoint: "functions/run.ts",
             schedules: [
               {
-                id: "hourly",
                 cron: "0 * * * *",
                 timezone: "UTC",
                 input: {},

@@ -23,6 +23,7 @@ const FRAMES_INSTRUCTIONS = buildFramesV2Instructions({
   hasFunctions: false,
   hasPublicFunctions: false,
   hasDrafts: false,
+  hasSchedules: false,
   isPod: false,
 });
 

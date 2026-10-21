@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   cronFiresAtMostHourly,
   isValidIanaTimezone,
@@ -16,6 +18,7 @@ import { hasControlCharacters } from "@app/types/file_system";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
 import { normalizeError } from "@app/types/shared/utils/error_utils";
+import { stableStringify } from "@app/types/shared/utils/stable_stringify";
 import { z } from "zod";
 import { fromError } from "zod-validation-error";
 
@@ -102,21 +105,43 @@ const FrameRelativePathSchema = z
       "Path must be relative to the Frame folder, using forward slashes and no '.', '..' or empty segments.",
   });
 
-// Author-controlled and stable; the Temporal schedule id is derived from it.
+const FRAME_SCHEDULE_ID_HASH_LENGTH = 8;
 export const MAX_FRAME_SCHEDULE_ID_LENGTH = 64;
-export const FRAME_SCHEDULE_ID_REGEX = SANDBOX_FUNCTION_SLUG_REGEX;
 
-export const FrameScheduleManifestSchema = z
+/**
+ * @cc [owner:smb2268,label:product] schedule-id-is-derived-from-its-declaration
+ * A schedule's id MUST be computed from its function name, cron, timezone and input, all four
+ * hashed, and never declared in the manifest or stored on its own. Identical declarations MUST
+ * yield the same id and a change to any of the four a different one, so reconciliation treats an
+ * edited schedule as a new schedule and `(frameId, scheduleId)` identifies a schedule Frame-wide.
+ * The id MUST be at most `MAX_FRAME_SCHEDULE_ID_LENGTH` characters.
+ */
+export function deriveFrameScheduleId({
+  functionName,
+  cron,
+  timezone,
+  input,
+}: {
+  functionName: string;
+  cron: string;
+  timezone: string;
+  input: unknown;
+}): string {
+  // The name is hashed too: the readable prefix is truncated, so it alone cannot keep two long
+  // function names apart.
+  const digest = createHash("sha256")
+    .update(
+      JSON.stringify([functionName, cron, timezone, stableStringify(input)])
+    )
+    .digest("hex")
+    .slice(0, FRAME_SCHEDULE_ID_HASH_LENGTH);
+  const prefixLength =
+    MAX_FRAME_SCHEDULE_ID_LENGTH - FRAME_SCHEDULE_ID_HASH_LENGTH - 1;
+  return `${functionName.slice(0, prefixLength)}-${digest}`;
+}
+
+const FrameScheduleSourceManifestSchema = z
   .object({
-    id: z
-      .string()
-      .max(MAX_FRAME_SCHEDULE_ID_LENGTH, {
-        message: `Schedule id cannot exceed ${MAX_FRAME_SCHEDULE_ID_LENGTH} characters.`,
-      })
-      .regex(FRAME_SCHEDULE_ID_REGEX, {
-        message:
-          "Schedule id must be lowercase alphanumeric with single hyphen separators.",
-      }),
     cron: z.string(),
     timezone: z.string(),
     // The manifest is parsed from JSON, so the value is JSON by construction; its shape is checked
@@ -130,7 +155,7 @@ export const FrameScheduleManifestSchema = z
     if (!timezoneIsValid) {
       context.addIssue({
         code: "custom",
-        message: `Schedule '${schedule.id}' timezone '${schedule.timezone}' is not an IANA timezone (e.g. "Europe/Paris").`,
+        message: `Schedule timezone '${schedule.timezone}' is not an IANA timezone (e.g. "Europe/Paris").`,
         path: ["timezone"],
       });
     }
@@ -143,13 +168,11 @@ export const FrameScheduleManifestSchema = z
     if (cron.isErr()) {
       context.addIssue({
         code: "custom",
-        message: `Schedule '${schedule.id}' cron '${schedule.cron}' is invalid: ${cron.error}`,
+        message: `Schedule cron '${schedule.cron}' is invalid: ${cron.error}`,
         path: ["cron"],
       });
     }
   });
-
-export type FrameScheduleManifest = z.infer<typeof FrameScheduleManifestSchema>;
 
 export const FrameFunctionManifestSchema = z.object({
   name: z
@@ -167,15 +190,16 @@ export const FrameFunctionManifestSchema = z.object({
   defaultStake: z
     .enum(SANDBOX_FUNCTION_STAKES)
     .default(DEFAULT_SANDBOX_FUNCTION_STAKE),
-  schedules: z.array(FrameScheduleManifestSchema).default([]),
+  schedules: z.array(FrameScheduleSourceManifestSchema).default([]),
 });
 
-export type FrameFunctionManifest = z.infer<typeof FrameFunctionManifestSchema>;
+type FrameFunctionSourceManifest = z.infer<typeof FrameFunctionManifestSchema>;
 
 /**
- * @cc [owner:smb2268,label:product] schedule-ids-unique-per-frame
- * Schedule ids MUST be unique across every function of a Frame: reconciliation identifies a
- * schedule by `(frameId, scheduleId)` alone.
+ * @cc [owner:smb2268,label:product] schedule-declarations-unique-per-frame
+ * Two schedules of a Frame MUST NOT derive the same id: a function declaring the same cron,
+ * timezone and input twice MUST fail to parse. Any other combination of schedules, on one
+ * function or across functions, is allowed.
  */
 /**
  * @cc [owner:smb2268,label:product] schedules-require-durable-functions
@@ -187,35 +211,42 @@ export type FrameFunctionManifest = z.infer<typeof FrameFunctionManifestSchema>;
  * cron MUST fail to parse.
  */
 function refineFrameScheduleDeclarations(
-  functions: FrameFunctionManifest[],
+  functions: FrameFunctionSourceManifest[],
   context: z.RefinementCtx
 ): void {
-  const scheduleIds = new Set<string>();
+  // Same derivation the transform stores on each schedule.
+  const seenIds = new Set<string>();
   functions.forEach((fn, functionIndex) => {
     fn.schedules.forEach((schedule, scheduleIndex) => {
       const path = ["functions", functionIndex, "schedules", scheduleIndex];
       if (fn.executionMode !== "durable") {
         context.addIssue({
           code: "custom",
-          message: `Schedule '${schedule.id}' targets function '${fn.name}', which must declare "executionMode": "durable" to run on a schedule.`,
+          message: `Function '${fn.name}' declares schedules, so it must declare "executionMode": "durable".`,
           path,
         });
       }
       if (!cronFiresAtMostHourly(schedule.cron)) {
         context.addIssue({
           code: "custom",
-          message: `Schedule '${schedule.id}' cron '${schedule.cron}' fires more than once per hour; the minute field must be a single value, e.g. "0 * * * *".`,
+          message: `Schedule cron '${schedule.cron}' fires more than once per hour; the minute field must be a single value, e.g. "0 * * * *".`,
           path: [...path, "cron"],
         });
       }
-      if (scheduleIds.has(schedule.id)) {
+      const id = deriveFrameScheduleId({
+        functionName: fn.name,
+        cron: schedule.cron,
+        timezone: schedule.timezone,
+        input: schedule.input,
+      });
+      if (seenIds.has(id)) {
         context.addIssue({
           code: "custom",
-          message: `Schedule id '${schedule.id}' must be unique within the Frame.`,
-          path: [...path, "id"],
+          message: `Function '${fn.name}' declares the same schedule twice (cron '${schedule.cron}', timezone '${schedule.timezone}', same input).`,
+          path,
         });
       }
-      scheduleIds.add(schedule.id);
+      seenIds.add(id);
     });
   });
 }
@@ -272,10 +303,24 @@ export const FrameManifestSchema = FrameSourceManifestSchema.transform(
   (manifest) => ({
     ...manifest,
     uiEntryPoint: manifest.uiEntryPoint ?? FRAME_DEFAULT_UI_ENTRY_POINT,
+    functions: manifest.functions.map((fn) => ({
+      ...fn,
+      schedules: fn.schedules.map((schedule) => ({
+        ...schedule,
+        id: deriveFrameScheduleId({
+          functionName: fn.name,
+          cron: schedule.cron,
+          timezone: schedule.timezone,
+          input: schedule.input,
+        }),
+      })),
+    })),
   })
 );
 
 export type FrameManifest = z.infer<typeof FrameManifestSchema>;
+export type FrameFunctionManifest = FrameManifest["functions"][number];
+export type FrameScheduleManifest = FrameFunctionManifest["schedules"][number];
 
 export function parseFrameManifest(
   buffer: Buffer
