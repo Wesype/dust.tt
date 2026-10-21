@@ -320,7 +320,7 @@ describe("runModel server-side fallback", () => {
       await InferenceHookRunModelFactory.create();
     await FeatureFlagFactory.basic(auth, "inference_hooks");
     // Deny after the model call to stop the run right after the output is handled.
-    const consumer = InferenceHookConsumerFactory.custom(async (input) =>
+    const provider = InferenceHookProviderFactory.custom(async (input) =>
       input.lifecycleEvent === "before_model_call"
         ? { action: "allow" }
         : { action: "deny", reason: "Stop here" }
@@ -341,7 +341,7 @@ describe("runModel server-side fallback", () => {
       functionCallStepContentIds: {},
       durationRecorder: DurationRecorder.create(),
       activityTimeoutDeadlineMs: Date.now() + 60_000,
-      enforcedInferenceHooks: [InferenceHookConsumerFactory.enforced(consumer)],
+      enforcedInferenceHooks: [InferenceHookProviderFactory.enforced(provider)],
     });
 
     const row = await AgentMessageModel.findOne({
