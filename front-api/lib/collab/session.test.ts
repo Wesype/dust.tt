@@ -8,6 +8,7 @@ import { toSessionName } from "@app/types/collab";
 import { Ok } from "@app/types/shared/result";
 import {
   collabAccess,
+  EPOCH,
   loadSource,
   SOURCE,
   typeInto,
@@ -197,6 +198,9 @@ describe("readSessionSource, writeSessionSource and editSessionSource", () => {
       return new Ok({
         content: content.value,
         lastSave: { revision: "1", source: THREAD_SOURCE },
+        epoch: EPOCH,
+        hasUnsavedEdits: false,
+        shouldStoreState: false,
       });
     });
     const hocuspocus = createCollabHocuspocus();
@@ -238,6 +242,9 @@ describe("readSessionSource, writeSessionSource and editSessionSource", () => {
       return new Ok({
         content: content.value,
         lastSave: { revision: "1", source: THREAD_SOURCE },
+        epoch: EPOCH,
+        hasUnsavedEdits: false,
+        shouldStoreState: false,
       });
     });
     const hocuspocus = createCollabHocuspocus();

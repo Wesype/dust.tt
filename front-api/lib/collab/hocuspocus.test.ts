@@ -17,6 +17,11 @@ import {
   yDocCommentedTexts,
   yDocToDfm,
 } from "@app/lib/api/collab/ydoc";
+import {
+  fetchYDocState,
+  YDOC_STATE_TIMEOUT_MS,
+} from "@app/lib/api/collab/ydoc_state";
+import { runOnRedisCollab } from "@app/lib/api/redis";
 import { Authenticator } from "@app/lib/auth";
 import { onAgentActivity, onAgentEdit } from "@app/lib/client/collab/agents";
 import type { CommentChannel } from "@app/lib/client/collab/comments";
@@ -26,7 +31,7 @@ import { CollabAgentFactory } from "@app/tests/utils/CollabAgentFactory";
 import { commentAnchorOf } from "@app/tests/utils/comment_anchors";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import type { AgentEditMessage, InsertedIdRange } from "@app/types/collab";
-import { toSessionName } from "@app/types/collab";
+import { BODY_FRAGMENT_NAME, toSessionName } from "@app/types/collab";
 import { COLLAB_SOURCE_WRITE_WAIT_MS } from "@app/types/collab_internal";
 import { Err, Ok } from "@app/types/shared/result";
 import {
@@ -34,6 +39,7 @@ import {
   COMMENTS,
   collabAccess,
   DOCUMENT_NAME,
+  EPOCH,
   loadSource,
   SOURCE,
   typeInto,
@@ -52,7 +58,7 @@ import {
   writeSessionSource,
 } from "@front-api/lib/collab/session";
 import { HocuspocusProvider } from "@hocuspocus/provider";
-import type { WebSocketLike } from "@hocuspocus/server";
+import type { Document, WebSocketLike } from "@hocuspocus/server";
 import { Connection } from "@hocuspocus/server";
 import type { Peer } from "crossws";
 import crossws from "crossws/adapters/node";
@@ -491,6 +497,218 @@ describe("createCollabHocuspocus", () => {
     expect(sent).toHaveBeenCalledWith(saveState(true));
   });
 
+  it("stores the Yjs state after each save, continuing from the revision written", async () => {
+    const hocuspocus = createCollabHocuspocus();
+    const writer = await collabAccess(true);
+    vi.useFakeTimers();
+
+    const connection = await hocuspocus.openDirectConnection(
+      DOCUMENT_NAME,
+      writer
+    );
+    const document = loadedDocument(hocuspocus, DOCUMENT_NAME);
+    await connection.transact((doc) => typeInto(doc, "Stored."));
+    await connection.disconnect();
+    await getSession(document)?.pendingStateStore;
+
+    const stored = await fetchYDocState(DOCUMENT_NAME);
+    if (stored.isErr() || !stored.value) {
+      throw new Error("No state was stored.");
+    }
+    expect(stored.value.revision).toBe("2");
+    expect(stored.value.epoch).toBe(EPOCH);
+    expect(stored.value.comments).toEqual(COMMENTS);
+    expect(
+      stored.value.doc.getXmlFragment(BODY_FRAGMENT_NAME).toString()
+    ).toContain("Stored.");
+  });
+
+  it("stores the Yjs state when a save fails, continuing from the last revision saved", async () => {
+    const { name, document } = await withFailingSaves();
+    await getSession(document)?.pendingStateStore;
+
+    const stored = await fetchYDocState(name);
+
+    expect(stored.isOk() && stored.value?.revision).toBe("1");
+    expect(
+      stored.isOk() &&
+        stored.value?.doc.getXmlFragment(BODY_FRAGMENT_NAME).toString()
+    ).toContain("Edit.");
+  });
+
+  it("saves without waiting for Redis, and waits for it on shutdown", async () => {
+    const hocuspocus = createCollabHocuspocus();
+    const writer = await collabAccess(true);
+    let answerRedis = () => {};
+    const redisAnswered = new Promise<void>((resolve) => {
+      answerRedis = resolve;
+    });
+    const slowRedis = async () => {
+      await redisAnswered;
+      return null;
+    };
+    // One state written for the edit's store, one for the shutdown's.
+    vi.mocked(runOnRedisCollab)
+      .mockImplementationOnce(slowRedis)
+      .mockImplementationOnce(slowRedis);
+    // The shutdown's bound on Redis never fires: a stop waiting for it would never end.
+    vi.useFakeTimers();
+
+    const editing = await hocuspocus.openDirectConnection(
+      DOCUMENT_NAME,
+      writer
+    );
+    await editing.transact((doc) => typeInto(doc, "Edit."));
+    await editing.disconnect();
+    expect(saveCollabSession).toHaveBeenCalledTimes(1);
+
+    let stopped = false;
+    const stop = async () => {
+      await saveAllSessions(hocuspocus);
+      stopped = true;
+    };
+    const stopping = stop();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(saveCollabSession).toHaveBeenCalledTimes(2);
+    expect(stopped).toBe(false);
+
+    answerRedis();
+    await stopping;
+    expect(runOnRedisCollab).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops once YDOC_STATE_TIMEOUT_MS has passed when Redis never answers", async () => {
+    const hocuspocus = createCollabHocuspocus();
+    const writer = await collabAccess(true);
+    vi.mocked(runOnRedisCollab).mockReturnValueOnce(new Promise(() => {}));
+    vi.useFakeTimers();
+
+    const editing = await hocuspocus.openDirectConnection(
+      DOCUMENT_NAME,
+      writer
+    );
+    await editing.transact((doc) => typeInto(doc, "Edit."));
+    await editing.disconnect();
+
+    let stopped = false;
+    const stop = async () => {
+      await saveAllSessions(hocuspocus);
+      stopped = true;
+    };
+    const stopping = stop();
+    await vi.advanceTimersByTimeAsync(YDOC_STATE_TIMEOUT_MS - 1);
+    expect(stopped).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await stopping;
+    expect(stopped).toBe(true);
+  });
+
+  it("keeps one state write pending per document, then writes the latest state", async () => {
+    const hocuspocus = createCollabHocuspocus();
+    const writer = await collabAccess(true);
+    const answer = vi.mocked(runOnRedisCollab).getMockImplementation();
+    if (!answer) {
+      throw new Error("Redis is not mocked.");
+    }
+    let answerRedis = () => {};
+    const redisAnswered = new Promise<void>((resolve) => {
+      answerRedis = resolve;
+    });
+    vi.mocked(runOnRedisCollab).mockImplementationOnce(async (opts, run) => {
+      await redisAnswered;
+      return answer(opts, run);
+    });
+    vi.useFakeTimers();
+
+    for (const text of ["First.", "Second.", "Third."]) {
+      const connection = await hocuspocus.openDirectConnection(
+        DOCUMENT_NAME,
+        writer
+      );
+      await connection.transact((doc) => typeInto(doc, text));
+      await connection.disconnect();
+    }
+    expect(saveCollabSession).toHaveBeenCalledTimes(3);
+    expect(runOnRedisCollab).toHaveBeenCalledTimes(1);
+
+    answerRedis();
+    await getSession(loadedDocument(hocuspocus, DOCUMENT_NAME))
+      ?.pendingStateStore;
+
+    expect(runOnRedisCollab).toHaveBeenCalledTimes(2);
+    const stored = await fetchYDocState(DOCUMENT_NAME);
+    expect(stored.isOk() && stored.value?.revision).toBe("4");
+    expect(
+      stored.isOk() &&
+        stored.value?.doc.getXmlFragment(BODY_FRAGMENT_NAME).toString()
+    ).toContain("Third.");
+  });
+
+  it("stores the loaded document once loaded when the load asks it", async () => {
+    vi.mocked(loadCollabSession).mockImplementation(async () => {
+      const loaded = await loadSource();
+      return new Ok({ ...loaded.value, shouldStoreState: true });
+    });
+    const hocuspocus = createCollabHocuspocus();
+    const writer = await collabAccess(true);
+
+    await hocuspocus.openDirectConnection(DOCUMENT_NAME, writer);
+    await getSession(loadedDocument(hocuspocus, DOCUMENT_NAME))
+      ?.pendingStateStore;
+
+    const stored = await fetchYDocState(DOCUMENT_NAME);
+    expect(stored.isOk() && stored.value?.epoch).toBe(EPOCH);
+    expect(stored.isOk() && stored.value?.revision).toBe("1");
+    expect(
+      stored.isOk() &&
+        stored.value?.doc.getXmlFragment(BODY_FRAGMENT_NAME).toString()
+    ).toContain("Hello.");
+  });
+
+  it("tells each connection the document's epoch once connected", async () => {
+    const hocuspocus = createCollabHocuspocus();
+    const writer = await collabAccess(true);
+    await hocuspocus.openDirectConnection(DOCUMENT_NAME, writer);
+
+    const sent = await connectBrowser(
+      hocuspocus,
+      loadedDocument(hocuspocus, DOCUMENT_NAME),
+      writer
+    );
+
+    expect(sent).toHaveBeenCalledWith(
+      JSON.stringify({ type: "epoch", epoch: EPOCH })
+    );
+  });
+
+  it("saves the edits a load returned the file lacks, through the first writer to connect", async () => {
+    vi.mocked(loadCollabSession).mockImplementation(async () => {
+      const loaded = await loadSource();
+      typeInto(loaded.value.content.doc, "Not saved.");
+      return new Ok({ ...loaded.value, hasUnsavedEdits: true });
+    });
+    const hocuspocus = createCollabHocuspocus();
+    const writer = await collabAccess(true);
+    const laterWriter = await collabAccess(true);
+    const reader = await collabAccess(false);
+    vi.useFakeTimers();
+
+    await hocuspocus.openDirectConnection(DOCUMENT_NAME, reader);
+    const document = loadedDocument(hocuspocus, DOCUMENT_NAME);
+    await connectBrowser(hocuspocus, document, reader);
+    await vi.advanceTimersByTimeAsync(hocuspocus.configuration.maxDebounce);
+    expect(saveCollabSession).not.toHaveBeenCalled();
+
+    await connectBrowser(hocuspocus, document, writer);
+    await connectBrowser(hocuspocus, document, laterWriter);
+    await vi.advanceTimersByTimeAsync(hocuspocus.configuration.maxDebounce);
+    expect(saveCollabSession).toHaveBeenCalledTimes(1);
+    const [through, saved] = vi.mocked(saveCollabSession).mock.calls[0];
+    expect(through).toBe(writer);
+    const savedSource = yDocToDfm(saved);
+    expect(savedSource.isOk() && savedSource.value).toContain("Not saved.");
+  });
+
   it("saves through the last writer when a reader disconnects", async () => {
     const hocuspocus = createCollabHocuspocus();
     const writer = await collabAccess(true);
@@ -550,6 +768,42 @@ describe("createCollabHocuspocus", () => {
     expect(stores).toHaveBeenCalledTimes(storesAfterEdit);
   });
 });
+
+function loadedDocument(
+  hocuspocus: ReturnType<typeof createCollabHocuspocus>,
+  name: string
+) {
+  const document = hocuspocus.documents.get(name);
+  if (!document) {
+    throw new Error("The document did not load.");
+  }
+  return document;
+}
+
+/** Connects a browser to `document` as `context` would, returning what it is sent. */
+async function connectBrowser(
+  hocuspocus: ReturnType<typeof createCollabHocuspocus>,
+  document: Document,
+  context: CollabAccess
+) {
+  const request = new Request("http://localhost/api/collab");
+  const socket = { send: vi.fn(), close: vi.fn(), readyState: 1 };
+  const browser = new Connection(socket, request, document, "s1", context);
+  const sent = vi.spyOn(browser, "sendStateless");
+  await hocuspocus.hooks("connected", {
+    connection: browser,
+    context,
+    documentName: document.name,
+    instance: hocuspocus,
+    request,
+    requestHeaders: request.headers,
+    requestParameters: new URLSearchParams(),
+    socketId: "s1",
+    connectionConfig: { readOnly: !context.canWrite, isAuthenticated: true },
+    providerVersion: null,
+  });
+  return sent;
+}
 
 function saveState(failed: boolean, conflictCopy: string | null = null) {
   return JSON.stringify({ type: "save_state", failed, conflictCopy });
@@ -656,9 +910,17 @@ describe("comment threads in a live session", () => {
       if (live.isErr()) {
         throw new Error(live.error);
       }
+      const content = { doc: live.value.doc, comments: [THREAD] };
+      const source = yDocToDfm(content);
+      if (source.isErr()) {
+        throw new Error(source.error);
+      }
       return new Ok({
-        content: { doc: live.value.doc, comments: [THREAD] },
-        lastSave: { revision: "1", source: "" },
+        content,
+        lastSave: { revision: "1", source: source.value },
+        epoch: EPOCH,
+        hasUnsavedEdits: false,
+        shouldStoreState: false,
       });
     });
     vi.mocked(applyCommentRequest).mockImplementation(

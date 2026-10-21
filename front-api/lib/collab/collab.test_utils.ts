@@ -15,6 +15,7 @@ import * as Y from "yjs";
 export const DOCUMENT_NAME = "w1:user-u1/notes.md";
 export const SOURCE = "# Notes\n\nHello.\n";
 export const COMMENTS: DfmComment[] = [];
+export const EPOCH = "epoch-1";
 
 // TODO(co-edition): open a written file through `openCollabAccess` instead, and share `typeInto` with
 // session_file.test.ts.
@@ -53,6 +54,9 @@ export async function loadSource() {
   return new Ok({
     content: { doc: live.value.doc, comments: COMMENTS },
     lastSave: { revision: "1", source: content.value },
+    epoch: EPOCH,
+    hasUnsavedEdits: false,
+    shouldStoreState: false,
   });
 }
 

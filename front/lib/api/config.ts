@@ -540,6 +540,9 @@ const config = {
   getRedisCacheUri: (): string => {
     return EnvironmentConfig.getEnvVariable("REDIS_CACHE_URI");
   },
+  getRedisCollabUri: (): string => {
+    return EnvironmentConfig.getEnvVariable("REDIS_COLLAB_URI");
+  },
   getContentfulSpaceId: (): string | undefined => {
     return EnvironmentConfig.getOptionalEnvVariable("CONTENTFUL_SPACE_ID");
   },

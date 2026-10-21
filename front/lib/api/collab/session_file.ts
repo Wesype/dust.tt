@@ -2,6 +2,7 @@ import path from "node:path";
 import type { CollabAccess } from "@app/lib/api/collab/access";
 import type { SessionContent } from "@app/lib/api/collab/ydoc";
 import { dfmToYDoc, yDocToDfm } from "@app/lib/api/collab/ydoc";
+import { fetchYDocState, newYDocEpoch } from "@app/lib/api/collab/ydoc_state";
 import { readStoredText } from "@app/lib/api/documents/comment_signatures";
 import { DustFileSystem } from "@app/lib/api/file_system/dust_file_system";
 import {
@@ -15,6 +16,8 @@ import {
 } from "@app/lib/api/files/revisions";
 import { decodeBuffer } from "@app/lib/api/files/utils";
 import { streamToBoundedBuffer } from "@app/lib/utils/streams";
+import logger from "@app/logger/logger";
+import { toSessionName } from "@app/types/collab";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
 
@@ -24,18 +27,49 @@ export interface CollabSave {
   source: string;
 }
 
+export interface LoadedCollabSession {
+  content: SessionContent;
+  lastSave: CollabSave;
+  epoch: string;
+  hasUnsavedEdits: boolean;
+  shouldStoreState: boolean;
+}
+
+function readSessionText(
+  text: string
+): Result<{ content: SessionContent; source: string }, string> {
+  const content = dfmToYDoc(text);
+  if (content.isErr()) {
+    return content;
+  }
+  const source = yDocToDfm(content.value);
+  return source.isErr()
+    ? source
+    : new Ok({ content: content.value, source: source.value });
+}
+
 /**
  * @cc [owner:tdraier,label:product;concurrency] collab-session-load
  * The save returned MUST carry the revision of the bytes read, when storage has one, and
- * as source what `yDocToDfm` gives for the loaded document, so a load alone never counts as a
- * change.
+ * as source what `yDocToDfm` gives for the document those bytes load, so a load alone never counts
+ * as a change, or the text read when the editor cannot load them and the stored state is returned.
+ */
+/**
+ * @cc [owner:tdraier,label:product;concurrency] collab-session-load-state
+ * When `yDocToDfm` accepts the Yjs state stored for the file (`fetchYDocState`) and that state
+ * continues from the revision read, or gives the source of the returned save, the load MUST return
+ * that state's document, threads and epoch, so its Yjs ids survive a reload, even when the editor
+ * cannot load the bytes read, with `hasUnsavedEdits` when `yDocToDfm` gives it another source than
+ * the returned save's. Otherwise the document MUST be built from the bytes read, with a new epoch
+ * and no unsaved edits. `shouldStoreState` MUST be set when storage has a revision, the fetch did
+ * not fail, and no state was stored at that revision. A state that cannot be fetched MUST only be
+ * logged: the load then goes on from the bytes read. The load MUST NOT store anything.
  */
 export async function loadCollabSession({
   dustFs,
   canonicalPath,
-}: CollabAccess): Promise<
-  Result<{ content: SessionContent; lastSave: CollabSave }, string>
-> {
+  workspaceId,
+}: CollabAccess): Promise<Result<LoadedCollabSession, string>> {
   const read = await readStoredText(dustFs, canonicalPath);
   if (read.isErr()) {
     return new Err(read.error.message);
@@ -44,17 +78,58 @@ export async function loadCollabSession({
     return new Err("File not found.");
   }
 
-  const content = dfmToYDoc(read.value.text);
-  if (content.isErr()) {
-    return content;
+  const { text, revision } = read.value;
+  const fromFile = readSessionText(text);
+  if (revision === undefined) {
+    return fromFile.isErr()
+      ? fromFile
+      : new Ok({
+          content: fromFile.value.content,
+          lastSave: { revision, source: fromFile.value.source },
+          epoch: newYDocEpoch(),
+          hasUnsavedEdits: false,
+          shouldStoreState: false,
+        });
   }
-  const source = yDocToDfm(content.value);
-  if (source.isErr()) {
-    return source;
+
+  const documentName = toSessionName(workspaceId, canonicalPath);
+  const stored = await fetchYDocState(documentName);
+  if (stored.isErr()) {
+    logger.warn(
+      { err: stored.error, documentName, workspaceId },
+      "Collab document state not fetched"
+    );
+  } else if (stored.value) {
+    const storedSource = yDocToDfm(stored.value);
+    // A file the editor cannot load stands as its text, as a save conflict keeps it: the state
+    // then holds the session's edits over it.
+    const source = fromFile.isOk() ? fromFile.value.source : text;
+    // The state's own revision is older when the process stopped between the file's save and its.
+    if (
+      storedSource.isOk() &&
+      (stored.value.revision === revision || storedSource.value === source)
+    ) {
+      const { doc, comments, epoch } = stored.value;
+      return new Ok({
+        content: { doc, comments },
+        lastSave: { revision, source },
+        epoch,
+        hasUnsavedEdits: storedSource.value !== source,
+        shouldStoreState: stored.value.revision !== revision,
+      });
+    }
   }
+  if (fromFile.isErr()) {
+    return fromFile;
+  }
+
   return new Ok({
-    content: content.value,
-    lastSave: { revision: read.value.revision, source: source.value },
+    content: fromFile.value.content,
+    lastSave: { revision, source: fromFile.value.source },
+    epoch: newYDocEpoch(),
+    hasUnsavedEdits: false,
+    // A state that could not be fetched may hold edits the file lacks: storing would replace it.
+    shouldStoreState: stored.isOk(),
   });
 }
 

@@ -227,3 +227,14 @@ export const saveStateMessageSchema = saveStateSchema.extend({
 });
 
 export type SaveStateMessage = z.infer<typeof saveStateMessageSchema>;
+
+/**
+ * The Yjs history of the server's document, sent to each editor once connected. It changes only
+ * when the server builds the document from its file again, giving its text new Yjs ids.
+ */
+export const epochMessageSchema = z.object({
+  type: z.literal("epoch"),
+  epoch: z.string().min(1),
+});
+
+export type EpochMessage = z.infer<typeof epochMessageSchema>;

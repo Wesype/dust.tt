@@ -4,12 +4,15 @@ import {
   loadCollabSession,
   saveCollabSession,
 } from "@app/lib/api/collab/session_file";
+import { fetchYDocState, storeYDocState } from "@app/lib/api/collab/ydoc_state";
+import { readStoredText } from "@app/lib/api/documents/comment_signatures";
 import { DustFileSystem } from "@app/lib/api/file_system/dust_file_system";
 import {
   WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES,
   WriteCanonicalFileContentError,
   writeCanonicalFileContent,
 } from "@app/lib/api/files/file_system_ops";
+import { runOnRedisCollab } from "@app/lib/api/redis";
 import { writeConversationFile } from "@app/tests/utils/conversation_files";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import { fileStorageMock } from "@app/tests/utils/mocks/file_storage";
@@ -35,6 +38,13 @@ vi.mock("@app/lib/api/files/file_system_ops", async (importActual) => {
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+function typeInto(content: { doc: Y.Doc }, text: string) {
+  const paragraph = new Y.XmlElement("paragraph");
+  paragraph.insert(0, [new Y.XmlText(text)]);
+  const body = content.doc.getXmlFragment(BODY_FRAGMENT_NAME);
+  body.insert(body.length, [paragraph]);
+}
 
 describe("live document names", () => {
   it("round trip a workspace and a path containing the separator", () => {
@@ -170,13 +180,6 @@ describe("saveCollabSession", () => {
     }
     vi.mocked(writeCanonicalFileContent).mockClear();
     return { auth, file: file.value, ...loaded.value };
-  }
-
-  function typeInto(content: { doc: Y.Doc }, text: string) {
-    const paragraph = new Y.XmlElement("paragraph");
-    paragraph.insert(0, [new Y.XmlText(text)]);
-    const body = content.doc.getXmlFragment(BODY_FRAGMENT_NAME);
-    body.insert(body.length, [paragraph]);
   }
 
   it("does not write a document that has not changed", async () => {
@@ -379,5 +382,187 @@ describe("saveCollabSession", () => {
       expect(kept.isErr()).toBe(true);
       expect(fileStorageMock.saveFileCalls).toHaveLength(writesBefore);
     });
+  });
+});
+
+describe("loadCollabSession with the stored Yjs state", () => {
+  // A conversation's file: the storage there keeps revisions, unlike a user's own files.
+  async function openConversationFile(text: string) {
+    const { authenticator: auth } = await createResourceTest({});
+    const path = await writeConversationFile(auth, "notes.md", text);
+    const file = await openCollabAccess(auth, path);
+    if (file.isErr()) {
+      throw new Error(file.error.message);
+    }
+    return file.value;
+  }
+
+  type ConversationFile = Awaited<ReturnType<typeof openConversationFile>>;
+
+  async function load(file: ConversationFile) {
+    const loaded = await loadCollabSession(file);
+    if (loaded.isErr()) {
+      throw new Error(loaded.error);
+    }
+    return loaded.value;
+  }
+
+  /** Stores a load's document as the session does once loaded. */
+  async function storeLoaded(
+    file: ConversationFile,
+    { epoch, lastSave, content }: Awaited<ReturnType<typeof load>>
+  ) {
+    if (lastSave.revision === undefined) {
+      throw new Error("A conversation's file has revisions.");
+    }
+    const stored = await storeYDocState(
+      toSessionName(file.workspaceId, file.canonicalPath),
+      { epoch, revision: lastSave.revision, ...content }
+    );
+    expect(stored.isOk()).toBe(true);
+  }
+
+  async function rewrite(file: ConversationFile, text: string) {
+    const written = await file.dustFs.write(
+      file.canonicalPath,
+      text,
+      "text/markdown"
+    );
+    if (written.isErr()) {
+      throw written.error;
+    }
+  }
+
+  const bodyOf = (doc: Y.Doc) =>
+    doc.getXmlFragment(BODY_FRAGMENT_NAME).toString();
+
+  it("keeps the Yjs ids and the epoch from one load to the next while the file is unchanged", async () => {
+    const file = await openConversationFile("# Notes\n\nHello.\n");
+    const first = await load(file);
+    await storeLoaded(file, first);
+
+    const second = await load(file);
+
+    expect(second.epoch).toBe(first.epoch);
+    expect(Y.encodeStateVector(second.content.doc)).toEqual(
+      Y.encodeStateVector(first.content.doc)
+    );
+    expect(second.hasUnsavedEdits).toBe(false);
+    expect(second.shouldStoreState).toBe(false);
+  });
+
+  it("reuses the stored state when the file has its content under a newer revision", async () => {
+    const text = "# Notes\n\nHello.\n";
+    const file = await openConversationFile(text);
+    const first = await load(file);
+    await storeLoaded(file, first);
+    // As a save the process stopped before storing the state after.
+    await rewrite(file, text);
+
+    const second = await load(file);
+
+    expect(second.lastSave.revision).not.toBe(first.lastSave.revision);
+    expect(second.epoch).toBe(first.epoch);
+    expect(Y.encodeStateVector(second.content.doc)).toEqual(
+      Y.encodeStateVector(first.content.doc)
+    );
+    expect(second.hasUnsavedEdits).toBe(false);
+    expect(second.shouldStoreState).toBe(true);
+  });
+
+  it("reloads the edits the file lacks, the last save staying the file's", async () => {
+    const file = await openConversationFile("# Notes\n");
+    const first = await load(file);
+    typeInto(first.content, "Not saved.");
+    await storeLoaded(file, first);
+
+    const second = await load(file);
+
+    expect(second.epoch).toBe(first.epoch);
+    expect(bodyOf(second.content.doc)).toContain("Not saved.");
+    expect(second.hasUnsavedEdits).toBe(true);
+    expect(second.lastSave).toEqual(first.lastSave);
+    expect(second.shouldStoreState).toBe(false);
+  });
+
+  it("reloads the stored state over a file the editor cannot load, as edits the file lacks", async () => {
+    const file = await openConversationFile("# Notes\n");
+    const first = await load(file);
+    const theirs = "# Notes\n\n<div>HTML the editor refuses</div>\n";
+    await rewrite(file, theirs);
+    const read = await readStoredText(file.dustFs, file.canonicalPath);
+    const revision = read.isOk() ? read.value?.revision : undefined;
+    if (revision === undefined) {
+      throw new Error("A conversation's file has revisions.");
+    }
+    // As a save failing after a conflict kept that file stores the session's state.
+    await storeYDocState(toSessionName(file.workspaceId, file.canonicalPath), {
+      epoch: first.epoch,
+      revision,
+      ...first.content,
+    });
+
+    const second = await load(file);
+
+    expect(second.epoch).toBe(first.epoch);
+    expect(second.lastSave).toEqual({ revision, source: theirs });
+    expect(second.hasUnsavedEdits).toBe(true);
+  });
+
+  it("builds the document from the file with a new epoch, asking to store it, once the file changed", async () => {
+    const file = await openConversationFile("# Notes\n");
+    const first = await load(file);
+    await storeLoaded(file, first);
+    await rewrite(file, "# Notes\n\nTheirs.\n");
+
+    const second = await load(file);
+
+    expect(second.epoch).not.toBe(first.epoch);
+    expect(bodyOf(second.content.doc)).toContain("Theirs.");
+    expect(second.hasUnsavedEdits).toBe(false);
+    expect(second.shouldStoreState).toBe(true);
+  });
+
+  it("stores nothing itself", async () => {
+    const file = await openConversationFile("# Notes\n\nHello.\n");
+
+    const loaded = await load(file);
+
+    expect(loaded.shouldStoreState).toBe(true);
+    const stored = await fetchYDocState(
+      toSessionName(file.workspaceId, file.canonicalPath)
+    );
+    expect(stored.isOk() && stored.value).toBeNull();
+  });
+
+  it("loads from the file when Redis fails, without asking to store its state", async () => {
+    const file = await openConversationFile("# Notes\n\nHello.\n");
+    vi.mocked(runOnRedisCollab).mockRejectedValueOnce(
+      new Error("Redis is down.")
+    );
+
+    const loaded = await load(file);
+
+    expect(bodyOf(loaded.content.doc)).toContain("Hello.");
+    expect(loaded.hasUnsavedEdits).toBe(false);
+    expect(loaded.shouldStoreState).toBe(false);
+  });
+
+  it("starts a new epoch at each load and asks no store on storage without revisions", async () => {
+    const { authenticator: auth } = await createResourceTest({});
+    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const file = await openCollabAccess(auth, path);
+    if (file.isErr()) {
+      throw new Error(file.error.message);
+    }
+
+    const first = await loadCollabSession(file.value);
+    const second = await loadCollabSession(file.value);
+
+    expect(first.isOk() && first.value.lastSave.revision).toBeUndefined();
+    expect(first.isOk() && second.isOk() && first.value.epoch).not.toBe(
+      second.isOk() && second.value.epoch
+    );
+    expect(first.isOk() && first.value.shouldStoreState).toBe(false);
   });
 });

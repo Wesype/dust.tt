@@ -8,8 +8,10 @@ import {
   anchorYDocComment,
   getYDocUnsavableBodyReason,
 } from "@app/lib/api/collab/ydoc";
+import { YDOC_STATE_TIMEOUT_MS } from "@app/lib/api/collab/ydoc_state";
 import {
   concurrentExecutor,
+  raceWithTimeout,
   setTimeoutAsync,
 } from "@app/lib/utils/async_utils";
 import logger from "@app/logger/logger";
@@ -26,10 +28,12 @@ import { normalizeError } from "@app/types/shared/utils/error_utils";
 import { safeParseJSON } from "@app/types/shared/utils/json_utils";
 import { authenticateConnection } from "@front-api/lib/collab/connection_access";
 import {
+  epochMessage,
   getSession,
   recordSaveResult,
   saveSession,
   saveStateMessage,
+  storeSessionState,
   toSaveState,
   serverMessage,
   startSession,
@@ -105,10 +109,17 @@ function logUnexpected(
  */
 /**
  * @cc [owner:tdraier,label:product;concurrency] collab-document-lifecycle
- * Every load MUST read the file: no Yjs state outlives its Hocuspocus document. A store MUST
- * save the document with the session's threads and last save, through the connection
- * that last changed it, and MUST fail when that connection cannot write or the save fails, so
- * Hocuspocus keeps the document instead of unloading it. Once its last WebSocket client leaves,
+ * Every load MUST go through `loadCollabSession`, and once loaded, the document MUST be stored with
+ * `storeSessionState` when the load asks it (`shouldStoreState`). Every connection MUST be sent the
+ * session's epoch once connected. A store MUST save the document with the session's threads and
+ * last save, through the connection that last changed it, and MUST fail when that connection
+ * cannot write or the save fails, so Hocuspocus keeps the document instead of unloading it. Once
+ * the save has finished, failed or not, the session's state MUST be stored with
+ * `storeSessionState`, which the store MUST NOT wait for; a store with no writer, or one that
+ * cannot write, stores none. When the
+ * load returned edits its file lacks (`hasUnsavedEdits`) and nobody changed the document since,
+ * the first connection that can write MUST become its writer once connected, and the document
+ * MUST be stored. Once its last WebSocket client leaves,
  * the document MUST stay loaded for `UNLOAD_GRACE_PERIOD_MS` after that departure, then unload
  * unless a connection is open or its last save failed. A direct connection that leaves
  * during that period does not extend it. A failed save MUST be retried after
@@ -176,10 +187,16 @@ export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
         document.destroy();
         refuse(documentName, loaded.error);
       }
-      const { content, lastSave } = loaded.value;
+      const { content, lastSave, epoch, hasUnsavedEdits, shouldStoreState } =
+        loaded.value;
       startSession(document, {
         comments: content.comments,
         lastSave,
+        epoch,
+        loadedEditsNeedWriter: hasUnsavedEdits,
+        loadedStateNeedsStore: shouldStoreState,
+        pendingStateStore: undefined,
+        stateStoreRequested: false,
         saveFailed: false,
         saveRetryTimer: undefined,
         saveRetries: 0,
@@ -192,10 +209,20 @@ export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
       return content.doc;
     },
 
+    // The document only holds the loaded state from here on.
+    async afterLoadDocument({ document }) {
+      const session = getSession(document);
+      if (session?.loadedStateNeedsStore) {
+        session.loadedStateNeedsStore = false;
+        storeSessionState(document);
+      }
+    },
+
     async onChange({ document, context, transactionOrigin }) {
       const session = getSession(document);
       if (session && transactionOrigin !== COMMENT_MARK_ORIGIN) {
         session.lastChangedBy = context;
+        session.loadedEditsNeedWriter = false;
       }
     },
 
@@ -236,6 +263,8 @@ export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
           "Collab save failed"
         );
         recordSaveResult(instance, document, "failed");
+        // A save never waits for Redis. The stored state then keeps the edits the file lacks.
+        storeSessionState(document);
         throw err;
       }
       if (saved.isErr()) {
@@ -254,10 +283,12 @@ export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
           "Collab save failed"
         );
         recordSaveResult(instance, document, "failed");
+        storeSessionState(document);
         throw new Error(saved.error.message);
       }
       session.lastSave = saved.value;
       recordSaveResult(instance, document, "saved");
+      storeSessionState(document);
     },
 
     async onDisconnect({ instance, document }) {
@@ -286,11 +317,30 @@ export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
     },
 
     // A connection joining while saves fail learns it here, the others when it changes.
-    async connected({ connection }) {
-      const session = getSession(connection.document);
-      const state = session && toSaveState(session);
-      if (state && !isDefaultSaveState(state)) {
+    async connected({ connection, context, documentName, instance }) {
+      const { document } = connection;
+      const session = getSession(document);
+      if (!session) {
+        return;
+      }
+      connection.sendStateless(epochMessage(session.epoch));
+      const state = toSaveState(session);
+      if (!isDefaultSaveState(state)) {
         connection.sendStateless(saveStateMessage(state));
+      }
+      if (session.loadedEditsNeedWriter && context.canWrite) {
+        session.loadedEditsNeedWriter = false;
+        session.lastChangedBy = context;
+        // Not awaited: Hocuspocus debounces the store and catches its failures, which
+        // `onStoreDocument` logs.
+        void instance.storeDocumentHooks(document, {
+          clientsCount: document.getConnectionsCount(),
+          document,
+          documentName,
+          instance,
+          lastContext: context,
+          lastTransactionOrigin: undefined,
+        });
       }
     },
 
@@ -461,7 +511,8 @@ export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
  * place of its pending debounced store, including documents still loading, which are waited for
  * first. From the call on, `writeSessionSource` and `editSessionSource` MUST answer `busy`, and the
  * writes, edits and comment commands already queued MUST finish before the saves. The returned
- * promise MUST resolve only once each save has finished or failed.
+ * promise MUST resolve only once each save has finished or failed, then each state write pending
+ * (`storeSessionState`) has been answered, or `YDOC_STATE_TIMEOUT_MS` has passed.
  */
 export async function saveAllSessions(
   hocuspocus: Hocuspocus<CollabAccess>
@@ -471,14 +522,13 @@ export async function saveAllSessions(
   for (const loading of [...hocuspocus.loadingDocuments.values()]) {
     await loading.catch(() => undefined);
   }
+  const documents = [...hocuspocus.documents.values()];
   // Their writes only reach the file through the saves below.
   await Promise.all(
-    [...hocuspocus.documents.values()].map(
-      (document) => getSession(document)?.pendingMutations
-    )
+    documents.map((document) => getSession(document)?.pendingMutations)
   );
   await concurrentExecutor(
-    [...hocuspocus.documents.values()],
+    documents,
     (document) =>
       hocuspocus.storeDocumentHooks(
         document,
@@ -495,4 +545,22 @@ export async function saveAllSessions(
       ),
     { concurrency: 8 }
   );
+  // After every save, so none waits for Redis, and bounded: a write Redis never answers would
+  // hold the stop.
+  const stored = await raceWithTimeout(
+    concurrentExecutor(
+      documents,
+      async (document) => {
+        await getSession(document)?.pendingStateStore;
+      },
+      { concurrency: 8 }
+    ),
+    YDOC_STATE_TIMEOUT_MS
+  );
+  if (stored === "timeout") {
+    logger.warn(
+      { documentsCount: documents.length },
+      "Collab document states not stored before stopping"
+    );
+  }
 }

@@ -6,6 +6,7 @@ import {
   saveCollabSession,
 } from "@app/lib/api/collab/session_file";
 import { replaceYDocContent, yDocToDfm } from "@app/lib/api/collab/ydoc";
+import { storeYDocState } from "@app/lib/api/collab/ydoc_state";
 import type { EditSourceFailure } from "@app/lib/api/documents/agent_edit_source";
 import {
   DfmAgentDocumentError,
@@ -25,9 +26,14 @@ import type {
   AgentEditMessage,
   AgentActivityMessage,
   CommentServerMessage,
+  EpochMessage,
   InsertedIdRange,
 } from "@app/types/collab";
-import { BODY_FRAGMENT_NAME, toSessionName } from "@app/types/collab";
+import {
+  BODY_FRAGMENT_NAME,
+  parseSessionName,
+  toSessionName,
+} from "@app/types/collab";
 import type {
   CollabSourceEdit,
   CollabSourceEditResult,
@@ -46,6 +52,11 @@ import type * as Y from "yjs";
 export interface CollabSession {
   comments: DfmComment[];
   lastSave: CollabSave;
+  epoch: string;
+  loadedEditsNeedWriter: boolean;
+  loadedStateNeedsStore: boolean;
+  pendingStateStore: Promise<void> | undefined;
+  stateStoreRequested: boolean;
   saveFailed: boolean;
   /** The save retried next while saves fail, and how many were retried since the last success. */
   saveRetryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -80,6 +91,9 @@ export const saveStateMessage = (state: SaveState) =>
 
 export const serverMessage = (message: CommentServerMessage) =>
   JSON.stringify(message);
+
+export const epochMessage = (epoch: string) =>
+  JSON.stringify({ type: "epoch", epoch } satisfies EpochMessage);
 
 const agentActivityMessage = (
   agent: CollabAgent,
@@ -645,5 +659,78 @@ export async function saveSession(
       );
       document.broadcastStateless(saveStateMessage(toSaveState(session)));
     }
+  }
+}
+
+/**
+ * @cc [owner:tdraier,label:product;concurrency] collab-session-state-store
+ * The document MUST be stored with `storeYDocState`, with the session's threads and epoch, as
+ * continuing from the revision of the session's last save, all read when its write starts. A
+ * session MUST have at most one write pending, so a Redis that does not answer holds one state
+ * per document: the stores asked while it is pending MUST start a single write once it has been
+ * answered. Nothing MUST be stored for a session whose last save has no revision. A failure MUST
+ * be logged and MUST NOT throw.
+ */
+export function storeSessionState(document: Document): void {
+  const session = getSession(document);
+  if (!session) {
+    return;
+  }
+  if (session.pendingStateStore) {
+    session.stateStoreRequested = true;
+    return;
+  }
+  session.pendingStateStore = storeStatesUntilCurrent(document);
+}
+
+const stateLogFields = (document: Document) => ({
+  documentName: document.name,
+  workspaceId: parseSessionName(document.name)?.workspaceId,
+});
+
+async function storeStatesUntilCurrent(document: Document): Promise<void> {
+  const session = getSession(document);
+  if (!session) {
+    return;
+  }
+  do {
+    session.stateStoreRequested = false;
+    await storeStateOnce(document, session);
+  } while (session.stateStoreRequested);
+  session.pendingStateStore = undefined;
+}
+
+async function storeStateOnce(
+  document: Document,
+  { lastSave, epoch, comments }: CollabSession
+): Promise<void> {
+  const { revision } = lastSave;
+  if (revision === undefined) {
+    return;
+  }
+  const fields = stateLogFields(document);
+  let stored: Awaited<ReturnType<typeof storeYDocState>>;
+  try {
+    stored = await storeYDocState(document.name, {
+      epoch,
+      revision,
+      doc: document,
+      comments,
+    });
+  } catch (err) {
+    // Yjs may throw encoding the document: the next write must still start.
+    logger.error(
+      { ...fields, err: normalizeError(err) },
+      "Collab document state store failed"
+    );
+    return;
+  }
+  if (stored.isErr()) {
+    logger.warn(
+      { ...fields, err: stored.error },
+      "Collab document state not stored"
+    );
+  } else if (stored.value === "too_large") {
+    logger.info(fields, "Collab document state too large to store");
   }
 }
