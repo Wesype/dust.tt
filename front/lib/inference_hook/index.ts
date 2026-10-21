@@ -1,7 +1,9 @@
 import type { ConversationWindowCheckpointIdentity } from "@app/lib/api/assistant/conversation_rendering/conversation_window_checkpoint";
 import { concurrentExecutor } from "@app/lib/utils/async_utils";
-import type { GenericErrorContent } from "@app/types/assistant/agent";
-import type { AgentLoopRuntimeData } from "@app/types/assistant/agent_run";
+import type {
+  AgentConfigurationBaseType,
+  GenericErrorContent,
+} from "@app/types/assistant/agent";
 import type {
   ModelConversationTypeMultiActions,
   NormalizedModelOutput,
@@ -48,8 +50,16 @@ export type InferenceHookExecutionRef = {
   checkpoint: InferenceHookCheckpointRef;
 };
 
+/**
+ * @cc [owner:frankaloia,label:security;product] hook-agent-configuration-excludes-instructions
+ * Enforced and monitored hooks MUST receive the same `agentConfiguration` fields, and those fields
+ * MUST NOT include the agent's instructions.
+ */
 type InferenceHookInputContext = {
-  agentConfiguration: AgentLoopRuntimeData["agentConfiguration"];
+  agentConfiguration: Pick<
+    AgentConfigurationBaseType,
+    "sId" | "name" | "description"
+  >;
   conversationWindow: ModelConversationTypeMultiActions;
 };
 

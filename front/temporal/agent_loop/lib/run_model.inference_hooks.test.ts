@@ -220,6 +220,10 @@ describe("runModel inference hooks", () => {
       "before_model_call",
       "after_model_call",
     ]);
+    for (const input of consumer.inputs) {
+      expect(input.agentConfiguration).not.toHaveProperty("instructions");
+      expect(input.agentConfiguration).not.toHaveProperty("instructionsHtml");
+    }
     expect(stepContents).toHaveLength(1);
     expect(stepContents[0].value).toMatchObject({
       type: "error",

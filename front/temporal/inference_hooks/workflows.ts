@@ -9,7 +9,6 @@ import { proxyActivities } from "@temporalio/workflow";
 const { evaluateInferenceHookActivity } = proxyActivities<typeof activities>({
   startToCloseTimeout: "5 minutes",
   retry: {
-    // Monitored hooks are best effort, and a missing checkpoint or unknown hook never recovers.
     maximumAttempts: 3,
   },
 });

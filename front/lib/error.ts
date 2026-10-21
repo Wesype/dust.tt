@@ -134,6 +134,8 @@ export type DustErrorCode =
   | "conversation_agent_running"
   | "conversation_locked"
   | "fork_source_message_not_found"
+  // Inference hook errors
+  | "inference_hook_checkpoint_unavailable"
   // Workspace errors (domain:workspace)
   | "api_key_name_required"
   | "usage_limit_out_of_range"

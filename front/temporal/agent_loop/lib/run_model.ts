@@ -939,7 +939,11 @@ export async function runModel(
   };
   const hookInputBase = {
     ...hookCheckpointIdentity,
-    agentConfiguration,
+    agentConfiguration: {
+      sId: agentConfiguration.sId,
+      name: agentConfiguration.name,
+      description: agentConfiguration.description,
+    },
     conversationWindow: modelConversationRes.value.modelConversation,
   };
   // The Stop request cancels the activity before the message is marked cancelled in the database.
