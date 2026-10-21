@@ -5,6 +5,7 @@ import {
 import {
   Section,
   SectionEmptyState,
+  SectionEmptyStateSkeleton,
 } from "@app/components/assistant/conversation/interactive_content/frame/ShareFrameSection";
 import { getActiveLocale } from "@app/lib/i18n/active_locale";
 import { formatDateTime, formatTimeDistance } from "@app/lib/i18n/format";
@@ -22,7 +23,6 @@ import {
   Input,
   ListGroup,
   SearchMd,
-  Spinner,
 } from "@dust-tt/sparkle";
 import { msg, plural } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
@@ -54,13 +54,8 @@ export function FrameSharingViewers({
   return (
     <Section label={t`Viewers`}>
       {isLoading ? (
-        <div role="status" className="flex items-center gap-2 py-2">
-          <div aria-hidden="true">
-            <Spinner size="sm" />
-          </div>
-          <span className="text-sm text-muted-foreground">
-            <Trans>Loading viewers…</Trans>
-          </span>
+        <div role="status" aria-label={t`Loading viewers…`}>
+          <SectionEmptyStateSkeleton />
         </div>
       ) : hasError || !viewers ? (
         <div role="alert" className="flex items-center justify-between gap-2">

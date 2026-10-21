@@ -23,6 +23,7 @@ import {
   Link01,
   ListGroup,
   ListItem,
+  LoadingBlock,
   PopoverContent,
   PopoverRoot,
   PopoverTrigger,
@@ -179,11 +180,7 @@ function ShareFramePopoverContent({
   return (
     <>
       <div className="min-h-0 overflow-y-auto">
-        {isFileShareLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Spinner size="sm" />
-          </div>
-        ) : isFileShareError || !fileShare ? (
+        {isFileShareError || (!isFileShareLoading && !fileShare) ? (
           <div
             role="alert"
             className="flex items-center justify-between gap-2 py-4"
@@ -240,6 +237,7 @@ function ShareFramePopoverContent({
               titleId={titleId}
               currentScope={currentScope}
               availableScopeOptions={availableScopeOptions}
+              isLoading={isFileShareLoading}
               isUpdatingScope={isUpdatingScope}
               onScopeChange={handleScopeChange}
             />
@@ -258,7 +256,11 @@ function ShareFramePopoverContent({
                 }}
               />
             )}
-            <CopyLinkButton shareURL={shareURL} />
+            {isFileShareLoading ? (
+              <LoadingBlock className="h-8 w-full rounded-xl" />
+            ) : (
+              <CopyLinkButton shareURL={shareURL} />
+            )}
             <FrameSharingViewers
               viewers={sharing?.viewers}
               isLoading={isGrantsLoading}
@@ -296,10 +298,49 @@ function CopyLinkButton({ shareURL }: CopyLinkButtonProps) {
   );
 }
 
+// Approximate widths of the scope labels, in display order.
+const SCOPE_LABEL_SKELETON_CLASSNAMES = ["h-3 w-16", "h-3 w-44", "h-3 w-28"];
+
+interface AccessScopeSkeletonProps {
+  availableScopeOptions: ReturnType<typeof getAvailableScopeOptions>;
+}
+
+function AccessScopeSkeleton({
+  availableScopeOptions,
+}: AccessScopeSkeletonProps) {
+  const { t } = useLingui();
+
+  return (
+    <div role="status" aria-label={t`Loading sharing settings`}>
+      <div aria-hidden="true">
+        {availableScopeOptions.map((option, index) => (
+          <ListItem
+            key={option.value}
+            className="gap-2 p-3 dark:border-border-form"
+            itemsAlignment="center"
+            hasSeparator={index < availableScopeOptions.length - 1}
+            hasSeparatorIfLast
+          >
+            <LoadingBlock className="h-4 w-4 shrink-0" />
+            <LoadingBlock
+              className={
+                SCOPE_LABEL_SKELETON_CLASSNAMES[
+                  index % SCOPE_LABEL_SKELETON_CLASSNAMES.length
+                ]
+              }
+            />
+          </ListItem>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface AccessScopeSectionProps {
   titleId: string;
   currentScope: FileShareScope;
   availableScopeOptions: ReturnType<typeof getAvailableScopeOptions>;
+  isLoading: boolean;
   isUpdatingScope: boolean;
   onScopeChange: (scope: FileShareScope) => void;
 }
@@ -308,6 +349,7 @@ function AccessScopeSection({
   titleId,
   currentScope,
   availableScopeOptions,
+  isLoading,
   isUpdatingScope,
   onScopeChange,
 }: AccessScopeSectionProps) {
@@ -332,59 +374,63 @@ function AccessScopeSection({
       }
     >
       <ListGroup className="overflow-hidden rounded-xl border-x dark:border-border-form">
-        {availableScopeOptions.map((option, index) => {
-          const isSelected = option.value === currentScope;
-          const isDisabled = option.disabled || isUpdatingScope;
-          const inputId = `${titleId}-scope-${option.value}`;
-          return (
-            <Label
-              key={option.value}
-              htmlFor={inputId}
-              className={`block has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-highlight-300 ${
-                isDisabled
-                  ? "cursor-not-allowed opacity-60"
-                  : "cursor-pointer hover:bg-muted-background"
-              }`}
-            >
-              <input
-                type="radio"
-                id={inputId}
-                name={`${titleId}-scope`}
-                aria-labelledby={`${inputId}-label`}
-                value={option.value}
-                checked={isSelected}
-                disabled={isDisabled}
-                onChange={() => onScopeChange(option.value)}
-                className="sr-only"
-              />
-              <ListItem
-                className="gap-2 p-3 dark:border-border-form"
-                itemsAlignment="center"
-                hasSeparator={index < availableScopeOptions.length - 1}
-                hasSeparatorIfLast
+        {isLoading ? (
+          <AccessScopeSkeleton availableScopeOptions={availableScopeOptions} />
+        ) : (
+          availableScopeOptions.map((option, index) => {
+            const isSelected = option.value === currentScope;
+            const isDisabled = option.disabled || isUpdatingScope;
+            const inputId = `${titleId}-scope-${option.value}`;
+            return (
+              <Label
+                key={option.value}
+                htmlFor={inputId}
+                className={`block has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-inset has-[:focus-visible]:ring-highlight-300 ${
+                  isDisabled
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer hover:bg-muted-background"
+                }`}
               >
-                <Icon
-                  visual={option.icon}
-                  size="xs"
-                  className="shrink-0 text-faint"
+                <input
+                  type="radio"
+                  id={inputId}
+                  name={`${titleId}-scope`}
+                  aria-labelledby={`${inputId}-label`}
+                  value={option.value}
+                  checked={isSelected}
+                  disabled={isDisabled}
+                  onChange={() => onScopeChange(option.value)}
+                  className="sr-only"
                 />
-                <span
-                  id={`${inputId}-label`}
-                  className="min-w-0 flex-1 label-xs text-muted-foreground"
+                <ListItem
+                  className="gap-2 p-3 dark:border-border-form"
+                  itemsAlignment="center"
+                  hasSeparator={index < availableScopeOptions.length - 1}
+                  hasSeparatorIfLast
                 >
-                  {t(option.label)}
-                </span>
-                {isSelected && (
                   <Icon
-                    visual={Check}
+                    visual={option.icon}
                     size="xs"
-                    className="shrink-0 text-muted-foreground"
+                    className="shrink-0 text-faint"
                   />
-                )}
-              </ListItem>
-            </Label>
-          );
-        })}
+                  <span
+                    id={`${inputId}-label`}
+                    className="min-w-0 flex-1 label-xs text-muted-foreground"
+                  >
+                    {t(option.label)}
+                  </span>
+                  {isSelected && (
+                    <Icon
+                      visual={Check}
+                      size="xs"
+                      className="shrink-0 text-muted-foreground"
+                    />
+                  )}
+                </ListItem>
+              </Label>
+            );
+          })
+        )}
       </ListGroup>
     </Section>
   );

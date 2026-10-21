@@ -156,6 +156,10 @@ msgid "Invite workspace members by email"
 msgstr "Invite workspace members by email"
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
+msgid "Loading access rules"
+msgstr "Loading access rules"
+
+#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
 msgid "Invitations are sent to email addresses only. People at an added domain can open the link after verifying their email."
 msgstr "Invitations are sent to email addresses only. People at an added domain can open the link after verifying their email."
 
@@ -170,10 +174,6 @@ msgstr "Add"
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
 msgid "Invite"
 msgstr "Invite"
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
-msgid "Loading access rules"
-msgstr "Loading access rules"
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameSharingGrants.tsx
 msgid "Could not load access rules."
@@ -384,6 +384,10 @@ msgstr "Copied!"
 #: front/components/assistant/conversation/interactive_content/frame/ShareFramePopover.tsx
 msgid "Copy link"
 msgstr "Copy link"
+
+#: front/components/assistant/conversation/interactive_content/frame/ShareFramePopover.tsx
+msgid "Loading sharing settings"
+msgstr "Loading sharing settings"
 
 #: front/components/assistant/conversation/interactive_content/frame/ShareFramePopover.tsx
 msgid "Who has access"

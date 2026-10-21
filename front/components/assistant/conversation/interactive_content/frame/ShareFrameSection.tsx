@@ -1,4 +1,4 @@
-import { Button, Icon, InfoCircle } from "@dust-tt/sparkle";
+import { Button, Icon, InfoCircle, LoadingBlock } from "@dust-tt/sparkle";
 import type { ComponentProps, ReactElement, ReactNode } from "react";
 
 interface SectionProps {
@@ -26,6 +26,9 @@ export function Section({ label, description, children }: SectionProps) {
   );
 }
 
+const EMPTY_STATE_CLASSNAME =
+  "flex items-center gap-2 rounded-xl border border-dashed border-border-dark p-3 dark:border-border-form";
+
 interface SectionEmptyStateProps {
   icon: ComponentProps<typeof Icon>["visual"];
   label: string;
@@ -33,9 +36,19 @@ interface SectionEmptyStateProps {
 
 export function SectionEmptyState({ icon, label }: SectionEmptyStateProps) {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-dashed border-border-dark p-3 dark:border-border-form">
+    <div className={EMPTY_STATE_CLASSNAME}>
       <Icon visual={icon} size="xs" className="shrink-0 text-faint" />
       <span className="copy-xs text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+// Same box as `SectionEmptyState`, so the common empty result replaces it without layout shift.
+export function SectionEmptyStateSkeleton() {
+  return (
+    <div aria-hidden="true" className={EMPTY_STATE_CLASSNAME}>
+      <LoadingBlock className="h-4 w-4 shrink-0" />
+      <LoadingBlock className="h-3 w-24" />
     </div>
   );
 }

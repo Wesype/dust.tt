@@ -15,7 +15,13 @@ import {
   sharingDomainSchema,
   sharingEmailSchema,
 } from "@app/types/sharing_grants";
-import { Button, Globe01, Input, ListGroup, Spinner } from "@dust-tt/sparkle";
+import {
+  Button,
+  Globe01,
+  Input,
+  ListGroup,
+  LoadingBlock,
+} from "@dust-tt/sparkle";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
@@ -185,6 +191,24 @@ export function FrameSharingGrants({
       ? t`Invite by email`
       : t`Invite workspace members by email`;
 
+  // The section title, placeholder and validation depend on `canGrantDomains`, only known once
+  // loaded: show a placeholder of the same height rather than the form with the wrong copy.
+  if (isLoading) {
+    return (
+      <div role="status" aria-label={t`Loading access rules`}>
+        <div aria-hidden="true" className="flex flex-col gap-2">
+          <div className="flex h-6 items-center">
+            <LoadingBlock className="h-4 w-36" />
+          </div>
+          <div className="flex gap-2">
+            <LoadingBlock className="h-8 flex-1 rounded-xl" />
+            <LoadingBlock className="h-8 w-13 rounded-xl" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <AwaitableDialog />
@@ -219,7 +243,7 @@ export function FrameSharingGrants({
                 isError={!!errors.recipients}
                 aria-invalid={!!errors.recipients}
                 aria-describedby={errors.recipients ? errorId : undefined}
-                disabled={isLoading || hasError || isSubmitting}
+                disabled={hasError || isSubmitting}
               />
             </div>
             <Button
@@ -227,7 +251,7 @@ export function FrameSharingGrants({
               label={canGrantDomains ? t`Add` : t`Invite`}
               type="submit"
               isLoading={isSubmitting}
-              disabled={isLoading || hasError}
+              disabled={hasError}
             />
           </div>
           {errors.recipients && (
@@ -238,17 +262,7 @@ export function FrameSharingGrants({
         </form>
       </Section>
 
-      {isLoading ? (
-        <div
-          role="status"
-          aria-label={t`Loading access rules`}
-          className="flex justify-center py-4"
-        >
-          <div aria-hidden="true">
-            <Spinner size="sm" />
-          </div>
-        </div>
-      ) : hasError ? (
+      {hasError ? (
         <div role="alert" className="flex items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">
             <Trans>Could not load access rules.</Trans>
