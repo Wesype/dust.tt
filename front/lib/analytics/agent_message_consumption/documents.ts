@@ -8,8 +8,6 @@ import type { MessageConsumptionAllocation } from "@app/lib/api/assistant/agent_
 import type { AgentMessageConsumptionAnalyticsData } from "@app/types/assistant/analytics";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
-import { removeNulls } from "@app/types/shared/utils/general";
-import assert from "assert";
 
 export type ConsumptionDocumentsSkipReason =
   | {
@@ -32,45 +30,20 @@ export type ConsumptionDocumentsSkipReason =
 // the message's current state. Current usages and actions only provide metadata for the items.
 function readReconciledConsumption(
   input: AgentMessageConsumptionAnalyticsInput
-): MessageConsumptionAllocation<BilledRunUsage> | null {
-  if (input.items.length === 0) {
-    return null;
-  }
-
-  const attributionVersion = Math.max(
-    ...input.items.map((item) => item.attributionVersion)
-  );
-  const latestItems = input.items.filter(
-    (item) => item.attributionVersion === attributionVersion
-  );
-  const reconciledCreditMicroByItem = new Map(
-    removeNulls(
-      latestItems.map((item) =>
-        item.reconciledCreditAmountMicro === null
-          ? null
-          : ([item, item.reconciledCreditAmountMicro] as const)
-      )
-    )
-  );
-  if (reconciledCreditMicroByItem.size === 0) {
-    return null;
-  }
-  // A successful attribution pass reconciles every item of its version in one transaction.
-  assert(
-    reconciledCreditMicroByItem.size === latestItems.length,
-    "Only part of the newest attribution version is reconciled"
-  );
-
-  const items = [...reconciledCreditMicroByItem.keys()];
-  const runUsageModelIds = new Set(items.map((item) => item.runUsageId));
+): MessageConsumptionAllocation<BilledRunUsage> {
+  const runUsageModelIds = new Set(input.items.map((item) => item.runUsageId));
 
   return {
-    attributionVersion,
-    items,
+    attributionVersion: input.attributionVersion,
+    items: input.items,
     messageUsages: input.usages.filter((usage) =>
       runUsageModelIds.has(usage.runUsageModelId)
     ),
-    reconciledCreditAmounts: { byItem: reconciledCreditMicroByItem },
+    reconciledCreditAmounts: {
+      byItem: new Map(
+        input.items.map((item) => [item, item.reconciledCreditAmountMicro])
+      ),
+    },
   };
 }
 
@@ -101,9 +74,6 @@ export function buildAgentMessageConsumptionAnalyticsDocuments(
   ConsumptionDocumentsSkipReason
 > {
   const reconciledConsumption = readReconciledConsumption(input);
-  if (!reconciledConsumption) {
-    return new Ok([]);
-  }
 
   const documents = [
     ...buildLlmConsumptionDocuments(input, reconciledConsumption),
