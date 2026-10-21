@@ -21,10 +21,6 @@ import {
   UPDATE_MEMBERS_TOOL_NAME,
 } from "@app/lib/api/actions/servers/pod_manager/metadata";
 import {
-  isPodManagerEditInformationInput,
-  isPodManagerUpdateMembersInput,
-} from "@app/lib/api/actions/servers/pod_manager/types";
-import {
   CREATE_TASKS_TOOL_NAME,
   POD_TASKS_SERVER_NAME,
   UPDATE_TASKS_TOOL_NAME,
@@ -223,7 +219,11 @@ export function ToolValidationDetails({
   if (
     blockedAction.metadata.mcpServerName === POD_MANAGER_SERVER_NAME &&
     blockedAction.metadata.toolName === EDIT_INFORMATION_TOOL_NAME &&
-    isPodManagerEditInformationInput(blockedAction.inputs)
+    validateToolInputs(
+      POD_MANAGER_SERVER_NAME,
+      EDIT_INFORMATION_TOOL_NAME,
+      blockedAction.inputs
+    )
   ) {
     return (
       <PodEditInformationValidationDetails
@@ -237,7 +237,11 @@ export function ToolValidationDetails({
   if (
     blockedAction.metadata.mcpServerName === POD_MANAGER_SERVER_NAME &&
     blockedAction.metadata.toolName === UPDATE_MEMBERS_TOOL_NAME &&
-    isPodManagerUpdateMembersInput(blockedAction.inputs)
+    validateToolInputs(
+      POD_MANAGER_SERVER_NAME,
+      UPDATE_MEMBERS_TOOL_NAME,
+      blockedAction.inputs
+    )
   ) {
     return (
       <PodMembersUpdateValidationDetails
