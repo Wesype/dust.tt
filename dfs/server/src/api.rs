@@ -22,7 +22,10 @@ use crate::{
         resources::{
             directory::DirectoryResource,
             file::FileResource,
-            object::{self, ObjectResource, locks::LockTokens},
+            object::{
+                self, ObjectResource,
+                locks::{LockTokens, validate_lock_id},
+            },
             session::SessionResource,
             tenant::TenantResource,
         },
@@ -422,13 +425,35 @@ impl Dfs for API {
     }
 
     async fn lock(&self, request: Request<LockRequest>) -> Result<Response<LockState>, Status> {
-        self.require_session(&request).await?;
-        Err(status(ErrorCode::Unsupported))
+        let session = self.require_session(&request).await?;
+        let request = request.into_inner();
+        if let Some(lock_id) = &request.lock_id {
+            validate_lock_id(lock_id)?;
+        }
+        let (lock, _) = fdb::with_idempotent_transaction(|tx| {
+            let session = session.as_ref();
+            let request = &request;
+            async move {
+                ObjectResource::lock(&tx, session, request.object_id, request.lock_id.as_deref())
+                    .await
+            }
+        })
+        .await?;
+        Ok(Response::new(lock))
     }
 
     async fn unlock(&self, request: Request<ObjectLock>) -> Result<Response<Empty>, Status> {
-        self.require_session(&request).await?;
-        Err(status(ErrorCode::Unsupported))
+        let session = self.require_session(&request).await?;
+        let request = request.into_inner();
+        fdb::with_idempotent_transaction(|tx| {
+            let tenant_id = &session.tenant.tenant_id;
+            let request = &request;
+            async move {
+                ObjectResource::unlock(&tx, tenant_id, request.object_id, &request.lock_id).await
+            }
+        })
+        .await?;
+        Ok(Response::new(Empty {}))
     }
 
     async fn search(
