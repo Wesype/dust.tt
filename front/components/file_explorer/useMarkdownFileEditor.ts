@@ -28,7 +28,7 @@ interface UseMarkdownFileEditorParams {
   isTooLarge: boolean;
   /** The preview text was cut; an editor fed with it would save a truncated file. */
   isTruncated: boolean;
-  /** The mount accepts writes from this user; no editor opens otherwise. */
+  /** The mount accepts writes from this user; otherwise only the rich editor opens, read-only. */
   canWrite: boolean;
   owner: LightWorkspaceType | undefined;
   /** The file text as fetched, for the rich editor. The processed text is trimmed. */
@@ -58,6 +58,13 @@ export interface MarkdownFileEditor {
   viewMode: MarkdownFilePreviewViewMode;
 }
 
+/**
+ * @cc [owner:tdraier,label:product] rich-editor-replaces-preview
+ * With `co_edition` and a live session server, a Markdown file not too large to preview MUST open
+ * in the rich editor rather than the plain preview, outside source mode and unless its text was cut
+ * before the editor opened. It MUST be read-only when the user cannot write the file, and not live
+ * and without its comments, whose signatures cannot be checked, when it has no canonical path.
+ */
 /**
  * @cc [owner:tdraier,label:product] source-mode-toggle
  * `toggleSourceMode` MUST enter source mode only when debug tools are shown (`showDebugTools`), from
@@ -101,8 +108,8 @@ export function useMarkdownFileEditor({
     entryPath && owner && parseCanonicalScopedPath(entryPath)
       ? entryPath
       : null;
-  const canOpenEditor =
-    category === "markdown" && !!editablePath && !isTooLarge && canWrite;
+  const isPreviewableMarkdown = category === "markdown" && !isTooLarge;
+  const canOpenEditor = isPreviewableMarkdown && !!editablePath && canWrite;
 
   if (isActive !== resetKey.isActive || entryPath !== resetKey.path) {
     setResetKey({ isActive, path: entryPath });
@@ -214,13 +221,15 @@ export function useMarkdownFileEditor({
 
   const rich = useRichMarkdownEditor({
     // Not `canEdit`: an open rich editor must not unmount when the file grows past the cut.
-    enabled: hasFeature("co_edition") && canOpenEditor && !isSourceMode,
+    enabled: hasFeature("co_edition") && isPreviewableMarkdown && !isSourceMode,
     collabUrl: collabUrl,
-    entryPath,
+    fileKey: fileUrl ?? undefined,
+    livePath: editablePath,
     // Each switch resets the rich editor, so it reopens on the file rather than its old content.
     isActive: isActive && !isSourceMode,
     rawContent,
     isTruncated,
+    readOnly: !canOpenEditor,
   });
 
   const toggleSourceMode = () => {

@@ -55,9 +55,38 @@ describe("useMarkdownFileEditor", () => {
     vi.mocked(writeFileContentByPath).mockResolvedValue(new Ok(undefined));
   });
 
-  it("opens no editor when the mount refuses writes", () => {
+  it("opens the rich editor read-only, still live, when the mount refuses writes", () => {
     flags.add("co_edition");
 
+    const { result } = renderHook(() =>
+      useMarkdownFileEditor({ ...params, canWrite: false })
+    );
+
+    expect(result.current.canEdit).toBe(false);
+    expect(result.current.richEditor?.readOnly).toBe(true);
+    expect(result.current.richEditor?.path).toBe("conversation-abc/notes.md");
+  });
+
+  it("opens the rich editor read-only, not live and without comments, for a file without a path", () => {
+    flags.add("co_edition");
+    const commented =
+      'Hi :comment-start{id=c1}there:comment-end{id=c1}\n\n:::annotations\n::comment{id=c1 status=open}\n\n::message{author=user:usr_daph name="Daph" at=2026-09-25T14:16:32.380Z}\n\nNote.\n:::\n';
+
+    const { result } = renderHook(() =>
+      useMarkdownFileEditor({
+        ...params,
+        entryPath: undefined,
+        rawContent: commented,
+      })
+    );
+
+    expect(result.current.canEdit).toBe(false);
+    expect(result.current.richEditor?.readOnly).toBe(true);
+    expect(result.current.richEditor?.path).toBeNull();
+    expect(result.current.richEditor?.initialContent).toBe("Hi there\n");
+  });
+
+  it("opens no editor when the mount refuses writes and co_edition is off", () => {
     const { result } = renderHook(() =>
       useMarkdownFileEditor({ ...params, canWrite: false })
     );
@@ -137,6 +166,7 @@ describe("useMarkdownFileEditor", () => {
     const { result } = renderHook(() => useMarkdownFileEditor(params));
 
     expect(result.current.richEditor?.initialContent).toBe("# Notes\n");
+    expect(result.current.richEditor?.readOnly).toBe(false);
   });
 
   it("keeps the plain editor when no live session server is reachable", () => {
