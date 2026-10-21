@@ -157,12 +157,10 @@ export const buildSchemaExtensions = ({
   live,
   resolveImageSource,
   parsePastedMarkdown = null,
-  emptyTaskLabel,
 }: {
   live: boolean;
   resolveImageSource?: DocumentImageOptions["resolveSource"];
   parsePastedMarkdown?: DocumentOrderedListOptions["parsePastedMarkdown"];
-  emptyTaskLabel?: string;
 }): AnyExtension[] => [
   DocumentAnchors,
   DocumentComments,
@@ -202,7 +200,6 @@ export const buildSchemaExtensions = ({
     parsePastedMarkdown,
   }),
   DocumentListItem.configure({
-    ...(emptyTaskLabel ? { emptyTaskLabel } : {}),
     HTMLAttributes: {
       class:
         "pl-1 marker:text-muted-foreground marker:tabular-nums [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1",
