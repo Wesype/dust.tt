@@ -34,27 +34,15 @@ export const WHITELISTABLE_FEATURES_CONFIG = {
     stage: "ask_owner",
     owner: "rfrenoy",
   },
-  frames_v2: {
-    description: "Enable Frames v2",
-    stage: "self_serve",
-    owner: "fontanierh",
-  },
-  disable_frames_v2: {
-    description:
-      "Make the workspace behave as if frames_v2 were off, overriding its global rollout. " +
-      "Existing Frames v2 Frames stop rendering while it is on.",
-    stage: "ask_owner",
-    owner: "davidebbo",
-  },
   frames_v2_functions: {
     description:
-      "Let Frames v2 declare server functions, databases and persistent files (requires frames_v2)",
+      "Let Frames v2 declare server functions, databases and persistent files",
     stage: "ask_owner",
     owner: "davidebbo",
   },
   frames_v2_drafts: {
     description:
-      "Let agents publish Frames v2 changes as drafts that go live only when made live (requires frames_v2)",
+      "Let agents publish Frames v2 changes as drafts that go live only when made live",
     stage: "ask_owner",
     owner: "davidebbo",
   },
@@ -526,7 +514,6 @@ export const WHITELISTABLE_FEATURES = Object.keys(
   WHITELISTABLE_FEATURES_CONFIG
 ) as WhitelistableFeature[];
 
-const FRAMES_V2_FEATURE = "frames_v2" as const satisfies WhitelistableFeature;
 const FRAMES_V2_FUNCTIONS_FEATURE =
   "frames_v2_functions" as const satisfies WhitelistableFeature;
 const FRAMES_V2_DRAFTS_FEATURE =
@@ -535,51 +522,17 @@ const FRAMES_V2_PUBLIC_FUNCTIONS_FEATURE =
   "frames_v2_public_functions" as const satisfies WhitelistableFeature;
 const FRAMES_V2_SCHEDULES_FEATURE =
   "frames_v2_schedules" as const satisfies WhitelistableFeature;
-const DISABLE_FRAMES_V2_FEATURE =
-  "disable_frames_v2" as const satisfies WhitelistableFeature;
 
-/**
- * @cc [owner:davidebbo,label:product] disable-frames-v2-overrides-frames-v2
- * When `featureFlags` include `disable_frames_v2`, the returned flags MUST NOT include
- * `frames_v2`, whether it came from a workspace flag or a global rollout. Other flags MUST be
- * returned unchanged.
- */
-export function applyFeatureFlagOverrides(
-  featureFlags: WhitelistableFeature[]
-): WhitelistableFeature[] {
-  if (!featureFlags.includes(DISABLE_FRAMES_V2_FEATURE)) {
-    return featureFlags;
-  }
-
-  return featureFlags.filter((flag) => flag !== FRAMES_V2_FEATURE);
-}
-
-/**
- * @cc [owner:davidebbo,label:product] frames-v2-functions-requires-frames-v2
- * Frame functions MUST be reported enabled only when both frames_v2 and frames_v2_functions are
- * on; frames_v2_functions alone MUST NOT enable anything.
- */
 export function isFramesV2FunctionsEnabled(
   featureFlags: WhitelistableFeature[]
 ): boolean {
-  return (
-    featureFlags.includes(FRAMES_V2_FEATURE) &&
-    featureFlags.includes(FRAMES_V2_FUNCTIONS_FEATURE)
-  );
+  return featureFlags.includes(FRAMES_V2_FUNCTIONS_FEATURE);
 }
 
-/**
- * @cc [owner:davidebbo,label:product] frames-v2-drafts-requires-frames-v2
- * Frame drafts MUST be reported enabled only when both frames_v2 and frames_v2_drafts are on;
- * frames_v2_drafts alone MUST NOT enable anything.
- */
 export function isFramesV2DraftsEnabled(
   featureFlags: WhitelistableFeature[]
 ): boolean {
-  return (
-    featureFlags.includes(FRAMES_V2_FEATURE) &&
-    featureFlags.includes(FRAMES_V2_DRAFTS_FEATURE)
-  );
+  return featureFlags.includes(FRAMES_V2_DRAFTS_FEATURE);
 }
 
 /**

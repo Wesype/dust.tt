@@ -1,13 +1,3 @@
-import { getPrefixedToolName } from "@app/lib/actions/tool_name_utils";
-import {
-  FILES_LIST_ACTION_NAME,
-  FILES_SERVER_NAME,
-} from "@app/lib/api/actions/servers/files/metadata";
-import {
-  EDIT_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
-  PUBLISH_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
-  RETRIEVE_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
-} from "@app/lib/api/actions/servers/interactive_content/metadata";
 import { InternalMCPServerInMemoryResource } from "@app/lib/resources/internal_mcp_server_in_memory_resource";
 import { framesSkill } from "@app/lib/resources/skill/code_defined/global/frames";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
@@ -15,29 +5,8 @@ import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import type { AgentLoopExecutionData } from "@app/types/assistant/agent_run";
 import { describe, expect, it } from "vitest";
 
-// Marker unique to the file-system updating section.
-const COMPUTER_FIRST_MARKER =
-  "mounted in the Computer at `/files/conversation-";
-
-// Markers unique to each Pod-only section.
-const POD_APP_MARKER = "### Frames In A Pod";
-const POD_APP_UPDATE_MARKER = "#### Changing An Existing Pod Frame";
-const POD_STORAGE_MARKER = "### Where The Frame's Data Lives";
 const POD_V2_PLACEMENT_MARKER =
   "new Frames still go in the conversation folder";
-
-const FILES_LIST_TOOL = getPrefixedToolName(
-  FILES_SERVER_NAME,
-  FILES_LIST_ACTION_NAME
-);
-
-function agentLoopDataWithUseFileSystem(
-  useFileSystem: boolean | undefined
-): AgentLoopExecutionData {
-  return {
-    conversation: { metadata: { useFileSystem } },
-  } as unknown as AgentLoopExecutionData;
-}
 
 function agentLoopDataInPod(spaceId: string | null): AgentLoopExecutionData {
   return {
@@ -46,9 +15,8 @@ function agentLoopDataInPod(spaceId: string | null): AgentLoopExecutionData {
 }
 
 describe("framesSkill.fetchInstructions", () => {
-  it("uses the dsbx lifecycle and keeps MCP export under Frames v2", async () => {
+  it("uses the dsbx lifecycle and keeps MCP export", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    await FeatureFlagFactory.basic(auth, "frames_v2");
     await FeatureFlagFactory.basic(auth, "frames_v2_functions");
 
     const instructions = await framesSkill.fetchInstructions(auth, {
@@ -159,9 +127,8 @@ describe("framesSkill.fetchInstructions", () => {
     ).resolves.toBe(false);
   });
 
-  it("teaches client-only Frames under Frames v2 without Frame functions", async () => {
+  it("teaches client-only Frames without Frame functions", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    await FeatureFlagFactory.basic(auth, "frames_v2");
 
     const instructions = await framesSkill.fetchInstructions(auth, {
       spaceIds: [],
@@ -191,10 +158,8 @@ describe("framesSkill.fetchInstructions", () => {
 
   it("teaches functions for public visitors only when public functions are enabled", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    await FeatureFlagFactory.basic(auth, "frames_v2");
     await FeatureFlagFactory.basic(auth, "frames_v2_functions");
     const { authenticator: publicAuth } = await createResourceTest({});
-    await FeatureFlagFactory.basic(publicAuth, "frames_v2");
     await FeatureFlagFactory.basic(publicAuth, "frames_v2_functions");
     await FeatureFlagFactory.basic(publicAuth, "frames_v2_public_functions");
 
@@ -217,7 +182,6 @@ describe("framesSkill.fetchInstructions", () => {
 
   it("teaches draft mode and make-live when drafts are enabled", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    await FeatureFlagFactory.basic(auth, "frames_v2");
     await FeatureFlagFactory.basic(auth, "frames_v2_drafts");
 
     const instructions = await framesSkill.fetchInstructions(auth, {
@@ -248,7 +212,6 @@ describe("framesSkill.fetchInstructions", () => {
 
   it("does not mention drafts without the drafts flag, even with functions", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    await FeatureFlagFactory.basic(auth, "frames_v2");
     await FeatureFlagFactory.basic(auth, "frames_v2_functions");
 
     const instructions = await framesSkill.fetchInstructions(auth, {
@@ -263,103 +226,8 @@ describe("framesSkill.fetchInstructions", () => {
     );
   });
 
-  it("does not teach drafts when only frames_v2_drafts is on", async () => {
+  it("defaults Frames to the conversation in a Pod", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    await FeatureFlagFactory.basic(auth, "frames_v2_drafts");
-
-    const instructions = await framesSkill.fetchInstructions(auth, {
-      spaceIds: [],
-    });
-
-    expect(instructions).not.toContain("draft-mode");
-    expect(instructions).not.toContain("make-live");
-  });
-
-  it("teaches the computer-first flow when the Computer is enabled", async () => {
-    const { authenticator: auth } = await createResourceTest({});
-
-    const instructions = await framesSkill.fetchInstructions(auth, {
-      spaceIds: [],
-    });
-
-    expect(instructions).toContain(COMPUTER_FIRST_MARKER);
-    expect(instructions).not.toContain("dsbx frame publish");
-    expect(instructions).toContain("### Slideshows");
-    expect(instructions).toContain("Keep the built-in width and height");
-    expect(instructions).toContain(PUBLISH_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
-    expect(instructions).not.toContain(EDIT_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
-    expect(instructions).not.toContain(
-      RETRIEVE_INTERACTIVE_CONTENT_FILE_TOOL_NAME
-    );
-  });
-
-  it("keeps the retrieve and file-id edit flow for legacy conversations", async () => {
-    const { authenticator: auth } = await createResourceTest({});
-
-    const instructions = await framesSkill.fetchInstructions(auth, {
-      spaceIds: [],
-      agentLoopData: agentLoopDataWithUseFileSystem(false),
-    });
-
-    expect(instructions).not.toContain("dsbx frame publish");
-    expect(instructions).not.toContain(COMPUTER_FIRST_MARKER);
-    expect(instructions).toContain(EDIT_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
-    expect(instructions).toContain(RETRIEVE_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
-  });
-
-  it("treats a conversation with the file system like a new conversation", async () => {
-    const { authenticator: auth } = await createResourceTest({});
-
-    const instructions = await framesSkill.fetchInstructions(auth, {
-      spaceIds: [],
-      agentLoopData: agentLoopDataWithUseFileSystem(true),
-    });
-
-    expect(instructions).toContain(COMPUTER_FIRST_MARKER);
-    expect(instructions).not.toContain(EDIT_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
-  });
-
-  it("keeps Frames in the conversation outside a Pod", async () => {
-    const { authenticator: auth } = await createResourceTest({});
-
-    const instructions = await framesSkill.fetchInstructions(auth, {
-      spaceIds: [],
-      agentLoopData: agentLoopDataInPod(null),
-    });
-
-    expect(instructions).not.toContain(POD_APP_MARKER);
-    expect(instructions).not.toContain(POD_STORAGE_MARKER);
-  });
-
-  it("teaches the Pod app layout in a Pod", async () => {
-    const { authenticator: auth } = await createResourceTest({});
-
-    const instructions = await framesSkill.fetchInstructions(auth, {
-      spaceIds: [],
-      agentLoopData: agentLoopDataInPod("vlt_abc123"),
-    });
-
-    expect(instructions).toContain(POD_APP_MARKER);
-    expect(instructions).toContain("pod-<podId>/MyApp/MyApp.tsx");
-    expect(instructions).not.toContain(POD_STORAGE_MARKER);
-  });
-
-  it("teaches how to find an existing Pod app's path and file id", async () => {
-    const { authenticator: auth } = await createResourceTest({});
-
-    const instructions = await framesSkill.fetchInstructions(auth, {
-      spaceIds: [],
-      agentLoopData: agentLoopDataInPod("vlt_abc123"),
-    });
-
-    expect(instructions).toContain(POD_APP_UPDATE_MARKER);
-    expect(instructions).toContain(FILES_LIST_TOOL);
-    expect(instructions).toContain("[id: fil_...]");
-  });
-
-  it("defaults Frames v2 to the conversation in a Pod", async () => {
-    const { authenticator: auth } = await createResourceTest({});
-    await FeatureFlagFactory.basic(auth, "frames_v2");
 
     const instructions = await framesSkill.fetchInstructions(auth, {
       spaceIds: [],
@@ -369,12 +237,10 @@ describe("framesSkill.fetchInstructions", () => {
     expect(instructions).toContain(POD_V2_PLACEMENT_MARKER);
     expect(instructions).toContain("/files/pod-<podId>/<frame-folder>");
     expect(instructions).toContain("Frame's Save button");
-    expect(instructions).not.toContain(POD_APP_MARKER);
   });
 
-  it("omits Frames v2 Pod placement outside a Pod", async () => {
+  it("omits Pod placement outside a Pod", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    await FeatureFlagFactory.basic(auth, "frames_v2");
 
     const instructions = await framesSkill.fetchInstructions(auth, {
       spaceIds: [],
@@ -383,19 +249,5 @@ describe("framesSkill.fetchInstructions", () => {
 
     expect(instructions).not.toContain(POD_V2_PLACEMENT_MARKER);
     expect(instructions).not.toContain("/files/pod-<podId>/<frame-folder>");
-  });
-
-  it("keeps the legacy flow for a Pod conversation without the file system", async () => {
-    const { authenticator: auth } = await createResourceTest({});
-
-    const instructions = await framesSkill.fetchInstructions(auth, {
-      spaceIds: [],
-      agentLoopData: {
-        conversation: { metadata: { useFileSystem: false }, spaceId: "vlt_a" },
-      } as unknown as AgentLoopExecutionData,
-    });
-
-    expect(instructions).not.toContain(POD_APP_MARKER);
-    expect(instructions).toContain(RETRIEVE_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
   });
 });

@@ -3,7 +3,6 @@ import { attachPublishedFrameToParentAction } from "@app/lib/api/frames/attach_p
 import { recordFramePublishAction } from "@app/lib/api/frames/publish_billing";
 import { publishFrameFromSource } from "@app/lib/api/frames/publish_from_source";
 import { isSandboxExecTokenPayload } from "@app/lib/api/sandbox/access_tokens";
-import { hasFeatureFlag } from "@app/lib/auth";
 import { ConversationResource } from "@app/lib/resources/conversation_resource";
 import logger from "@app/logger/logger";
 import type { FramePublicationStatus } from "@app/types/api/frame_publication";
@@ -69,15 +68,6 @@ app.post(
         api_error: {
           type: "invalid_request_error",
           message: "This sandbox token cannot publish Frames.",
-        },
-      });
-    }
-    if (!(await hasFeatureFlag(auth, "frames_v2"))) {
-      return apiError(ctx, {
-        status_code: 403,
-        api_error: {
-          type: "invalid_request_error",
-          message: "Frames v2 is not enabled for this workspace.",
         },
       });
     }

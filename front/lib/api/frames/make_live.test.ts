@@ -406,7 +406,6 @@ describe("makeFrameDraftLive", () => {
 
   it("fails on the function sharing check like a publish would", async () => {
     const { auth, frame } = await setupFrame();
-    await FeatureFlagFactory.basic(auth, "frames_v2");
     await FeatureFlagFactory.basic(auth, "frames_v2_functions");
     const liveId = await publishBundle(auth, frame, CODE_A, "live");
     const published = await publishFramePublication(auth, {

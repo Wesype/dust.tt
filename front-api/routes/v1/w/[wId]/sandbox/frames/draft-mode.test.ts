@@ -11,7 +11,6 @@ import { describe, expect, it } from "vitest";
 
 async function setup({ draftsEnabled = true } = {}) {
   const context = await createSandboxTokenTestContext();
-  await FeatureFlagFactory.basic(context.auth, "frames_v2");
   if (draftsEnabled) {
     await FeatureFlagFactory.basic(context.auth, "frames_v2_drafts");
   }

@@ -13,11 +13,6 @@ export function sandboxFrameLookupApiError(
         status_code: 403,
         api_error: { type: "sandbox_token_not_allowed", message },
       };
-    case "frames_v2_disabled":
-      return {
-        status_code: 403,
-        api_error: { type: "feature_not_enabled", message },
-      };
     case "conversation_not_found":
       return {
         status_code: 404,

@@ -6,7 +6,6 @@ import { buildAgentMessageBillingPlan } from "@app/lib/credits/agent_message_bil
 import { ConversationModel } from "@app/lib/models/agent/conversation";
 import { AgentMCPActionResource } from "@app/lib/resources/agent_mcp_action_resource";
 import { FileResource } from "@app/lib/resources/file_resource";
-import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import { FileFactory } from "@app/tests/utils/FileFactory";
 import { GroupFactory } from "@app/tests/utils/GroupFactory";
 import { fileStorageMock } from "@app/tests/utils/mocks/file_storage";
@@ -74,7 +73,6 @@ function requestFrameShare(
 
 async function setup({ registered = true }: { registered?: boolean } = {}) {
   const context = await createSandboxTokenTestContext();
-  await FeatureFlagFactory.basic(context.auth, "frames_v2");
   const sourceDirectoryPath = `conversation-${context.conversation.sId}/Status`;
   const manifestPath = `${sourceDirectoryPath}/${FRAME_MANIFEST_FILE}`;
   const mountDirectoryPath = `${getConversationFilesBasePath({
@@ -116,7 +114,6 @@ async function setup({ registered = true }: { registered?: boolean } = {}) {
 
 async function setupLegacyFrame() {
   const context = await createSandboxTokenTestContext();
-  await FeatureFlagFactory.basic(context.auth, "frames_v2");
   const sourcePath = `conversation-${context.conversation.sId}/Legacy.tsx`;
   const mountDirectoryPath = getConversationFilesBasePath({
     workspaceId: context.workspace.sId,
@@ -389,18 +386,6 @@ describe("POST /api/v1/w/[wId]/sandbox/frames", () => {
     expect(response.status).toBe(200);
   });
 
-  it("refuses share-link retrieval without the feature flag", async () => {
-    const context = await createSandboxTokenTestContext();
-
-    const response = await requestFrameShare(
-      context.workspace.sId,
-      context.token,
-      `conversation-${context.conversation.sId}/Status`
-    );
-
-    expect(response.status).toBe(403);
-  });
-
   it("publishes a legacy Frame through its existing publication flow", async () => {
     const context = await setupLegacyFrame();
 
@@ -444,18 +429,6 @@ describe("POST /api/v1/w/[wId]/sandbox/frames", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: { message: `No Frame found at ${unregisteredPath}.` },
     });
-  });
-
-  it("refuses publication without the feature flag", async () => {
-    const context = await createSandboxTokenTestContext();
-
-    const response = await requestFramePublish(
-      context.workspace.sId,
-      context.token,
-      `conversation-${context.conversation.sId}/Status/${FRAME_MANIFEST_FILE}`
-    );
-
-    expect(response.status).toBe(403);
   });
 });
 

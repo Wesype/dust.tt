@@ -1,10 +1,6 @@
-import {
-  buildInteractiveContentInstructions,
-  INTERACTIVE_CONTENT_INSTRUCTIONS,
-} from "@app/lib/api/actions/servers/interactive_content/instructions";
 import { doesWorkspaceServePublicFunctions } from "@app/lib/api/sandbox_functions/workspace_user";
 import type { Authenticator } from "@app/lib/auth";
-import { getFeatureFlags, hasFeatureFlag } from "@app/lib/auth";
+import { getFeatureFlags } from "@app/lib/auth";
 import { FRAME_SKILL_FILES } from "@app/lib/resources/skill/code_defined/global/frames/files";
 import { buildFramesV2Instructions } from "@app/lib/resources/skill/code_defined/global/frames_v2";
 import type { GlobalSkillDefinition } from "@app/lib/resources/skill/code_defined/shared";
@@ -17,8 +13,7 @@ import {
 
 /**
  * @cc [owner:davidebbo,label:product] frame-functions-disclosure
- * Under frames_v2, function, database and persistent-file authoring guidance MUST be included
- * only when Frame functions are enabled (see isFramesV2FunctionsEnabled). Guidance for functions
+ * Function, database and persistent-file authoring guidance MUST be included only when Frame functions are enabled (see isFramesV2FunctionsEnabled). Guidance for functions
  * served to visitors of a public link MUST be included only when the workspace serves public Frame
  * functions to visitors (see doesWorkspaceServePublicFunctions). Draft and make-live guidance MUST
  * be included only when Frame drafts are enabled (see isFramesV2DraftsEnabled).
@@ -38,44 +33,30 @@ export const framesSkill = {
     "using when tsx or React code is shared or available in the conversation. " +
     "Frames used to be a tool, now deprecated. Use this skill when the Frames/interactive " +
     "content tool is mentioned, and whenever asked to modify an existing Frame.",
-  // Edit-the-source-then-publish guidance requires the conversation file system, which exposes
-  // the Frame's source by path. Legacy conversations (created before the file system defaulted
-  // on) keep the retrieve and file-id edit flow. Without a conversation at hand, assume the
-  // file system is on since every new conversation has it.
-  //
-  // In a Pod, legacy Frames are Pod apps: they live in the Pod's shared file system. Frames v2
-  // start in the conversation and only go to the Pod when they belong there. Both only make sense
-  // with a conversation to check, so a Pod-less agent loop keeps the conversation-scoped guidance.
+  // Frames start in the conversation and only go to the Pod when they belong there. That only
+  // makes sense with a conversation to check, so a Pod-less agent loop keeps the
+  // conversation-scoped guidance.
   fetchInstructions: async (
     auth: Authenticator,
     params: { spaceIds: string[]; agentLoopData?: AgentLoopExecutionData }
   ) => {
     const flags = await getFeatureFlags(auth);
     const conversation = params.agentLoopData?.conversation;
-    const isPod = conversation ? isPodConversation(conversation) : false;
-    if (flags.includes("frames_v2")) {
-      return buildFramesV2Instructions({
-        hasFunctions: isFramesV2FunctionsEnabled(flags),
-        hasPublicFunctions: await doesWorkspaceServePublicFunctions({
-          workspace: auth.getNonNullableWorkspace(),
-          plan: auth.plan(),
-        }),
-        hasDrafts: isFramesV2DraftsEnabled(flags),
-        isPod,
-      });
-    }
 
-    if (conversation && conversation.metadata?.useFileSystem !== true) {
-      return INTERACTIVE_CONTENT_INSTRUCTIONS;
-    }
-
-    return buildInteractiveContentInstructions({ isPod });
+    return buildFramesV2Instructions({
+      hasFunctions: isFramesV2FunctionsEnabled(flags),
+      hasPublicFunctions: await doesWorkspaceServePublicFunctions({
+        workspace: auth.getNonNullableWorkspace(),
+        plan: auth.plan(),
+      }),
+      hasDrafts: isFramesV2DraftsEnabled(flags),
+      isPod: conversation ? isPodConversation(conversation) : false,
+    });
   },
   mcpServers: [{ name: "interactive_content" }],
   files: FRAME_SKILL_FILES,
-  // Frames v2 authoring runs entirely through the Computer.
-  warmsConversationSandbox: (auth: Authenticator) =>
-    hasFeatureFlag(auth, "frames_v2"),
+  // Frames authoring runs entirely through the Computer.
+  warmsConversationSandbox: async () => true,
   version: 18,
   icon: "ActionFrameIcon",
 } as const satisfies GlobalSkillDefinition;

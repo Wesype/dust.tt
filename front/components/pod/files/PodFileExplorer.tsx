@@ -903,7 +903,6 @@ function PodFileExplorerContent({ owner, pod }: PodFileExplorerProps) {
         contentClassName="max-w-4xl mx-auto w-full"
         contentNodes={contentNodeEntries}
         defaultViewMode="list"
-        displayFramePackages={true}
         emptyState={hasFiles ? undefined : emptyState}
         files={podGCSFiles}
         currentFolderPath={currentFolderPath}

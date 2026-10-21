@@ -493,7 +493,6 @@ describe("storeFramePublication", () => {
 
   it("rejects a public function when public functions are disabled", async () => {
     const { auth, frame } = await setupFrame();
-    await FeatureFlagFactory.basic(auth, "frames_v2");
     await FeatureFlagFactory.basic(auth, "frames_v2_functions");
 
     const result = await storeFramePublication(auth, {

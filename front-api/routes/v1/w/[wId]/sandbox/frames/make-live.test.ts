@@ -1,6 +1,5 @@
 import { enterFrameDraftMode } from "@app/lib/api/frames/draft_mode";
 import { FileResource } from "@app/lib/resources/file_resource";
-import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import {
   createTestConversationFrameFile,
   createTestLiveConversationFrame,
@@ -44,7 +43,6 @@ afterEach(() => {
 describe("POST /api/v1/w/[wId]/sandbox/frames/make-live", () => {
   it("makes the Frame's pending draft live, whoever published it, and ends draft mode", async () => {
     const context = await createSandboxTokenTestContext();
-    await FeatureFlagFactory.basic(context.auth, "frames_v2");
     const frame = await createTestConversationFrameFile(context.auth, {
       conversationId: context.conversation.sId,
     });
@@ -77,7 +75,6 @@ describe("POST /api/v1/w/[wId]/sandbox/frames/make-live", () => {
 
   it("only ends draft mode when nothing changed in it", async () => {
     const context = await createSandboxTokenTestContext();
-    await FeatureFlagFactory.basic(context.auth, "frames_v2");
     const frame = await createTestConversationFrameFile(context.auth, {
       conversationId: context.conversation.sId,
     });
@@ -109,7 +106,6 @@ describe("POST /api/v1/w/[wId]/sandbox/frames/make-live", () => {
 
   it("returns 403 frame_not_in_conversation for a Frame in another conversation", async () => {
     const context = await createSandboxTokenTestContext();
-    await FeatureFlagFactory.basic(context.auth, "frames_v2");
     const { conversation: other, frame } =
       await createTestLiveConversationFrame(context.auth);
     assert((await enterFrameDraftMode(context.auth, { frame })).isOk());

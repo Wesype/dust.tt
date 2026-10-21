@@ -7,7 +7,6 @@ import type {
 } from "@app/lib/api/sandbox/access_tokens";
 import { isSandboxExecTokenPayload } from "@app/lib/api/sandbox/access_tokens";
 import type { Authenticator } from "@app/lib/auth";
-import { hasFeatureFlag } from "@app/lib/auth";
 import { ConversationResource } from "@app/lib/resources/conversation_resource";
 import { FileResource } from "@app/lib/resources/file_resource";
 import { FRAME_MANIFEST_FILE } from "@app/types/api/frame_manifest";
@@ -18,7 +17,6 @@ export class SandboxFrameLookupError extends Error {
   constructor(
     readonly code:
       | "token_not_allowed"
-      | "frames_v2_disabled"
       | "conversation_not_found"
       | "invalid_source"
       | "frame_not_in_conversation"
@@ -61,12 +59,6 @@ export async function resolveWritableSandboxFrame(
     return lookupError(
       "token_not_allowed",
       "This sandbox token cannot act on Frames."
-    );
-  }
-  if (!(await hasFeatureFlag(auth, "frames_v2"))) {
-    return lookupError(
-      "frames_v2_disabled",
-      "Frames v2 is not enabled for this workspace."
     );
   }
   const conversation = await ConversationResource.fetchById(auth, claims.cId);
