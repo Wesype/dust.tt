@@ -20,6 +20,7 @@ import { MarkdownFilePreviewViewModeSwitch } from "@app/components/file_explorer
 import type { FileEntry } from "@app/components/file_explorer/types";
 import { useMarkdownFileEditor } from "@app/components/file_explorer/useMarkdownFileEditor";
 import { useConversationSandboxFiles } from "@app/hooks/conversations/useConversationSandboxFiles";
+import { useFeatureFlags } from "@app/lib/auth/AuthContext";
 import { useClientType } from "@app/lib/context/clientType";
 import { getFileTypeIcon } from "@app/lib/file_icon_utils";
 import {
@@ -133,6 +134,7 @@ export function FilePreviewPanelView({
     useSidePanelFullScreen(DEFAULT_RIGHT_PANEL_SIZE);
   const isMobile = useIsMobile();
   const clientType = useClientType();
+  const { hasFeature } = useFeatureFlags();
   const [documentControls, setDocumentControls] =
     useState<HTMLDivElement | null>(null);
   const [documentStatus, setDocumentStatus] = useState<HTMLSpanElement | null>(
@@ -288,7 +290,9 @@ export function FilePreviewPanelView({
               </>
             )}
             <div ref={setDocumentControls} className="flex empty:hidden" />
-            {path && preview.category === "markdown" ? (
+            {path &&
+            preview.category === "markdown" &&
+            hasFeature("co_edition") ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
