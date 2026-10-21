@@ -851,6 +851,47 @@ describe("publishFrameV2FromSource", () => {
     }
   );
 
+  it("rejects a manifest declaring schedules without the schedules flag", async () => {
+    const { auth, conversation, frame, manifestPath } = await setup({
+      manifestContent: JSON.stringify({
+        version: 1,
+        description: "Run a function on a schedule.",
+        functions: [
+          {
+            name: "run",
+            description: "Run it.",
+            entryPoint: "functions/run.ts",
+            schedules: [
+              {
+                id: "hourly",
+                cron: "0 * * * *",
+                timezone: "UTC",
+                input: {},
+              },
+            ],
+          },
+        ],
+      }),
+      extraSources: functionSources,
+    });
+    await FeatureFlagFactory.basic(auth, "frames_v2");
+    await FeatureFlagFactory.basic(auth, "frames_v2_functions");
+
+    const result = await publishFrameV2FromSource(auth, {
+      conversation,
+      frame,
+      manifestPath,
+    });
+
+    assert(result.isErr());
+    expect(result.error).toMatchObject({ code: "invalid_manifest" });
+    expect(result.error.message).toContain("Frame schedules are not enabled");
+    expect(ensureFrameSandboxReady).not.toHaveBeenCalled();
+    expect(ensureConversationSandboxReadyWithScope).not.toHaveBeenCalled();
+    const reloaded = await FileResource.fetchById(auth, frame.sId);
+    expect(reloaded?.useCaseMetadata?.activePublicationId).toBeUndefined();
+  });
+
   it("infers TSX source content type from its extension", async () => {
     const { auth, conversation, frame, manifestPath } = await setup({
       uiContentType: "application/x-tiled-tsx",

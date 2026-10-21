@@ -64,6 +64,12 @@ export const WHITELISTABLE_FEATURES_CONFIG = {
     stage: "dust_only",
     owner: "achilleburah",
   },
+  frames_v2_schedules: {
+    description:
+      "Let Frames v2 declare schedules on durable functions (requires frames_v2_functions)",
+    stage: "dust_only",
+    owner: "smb2268",
+  },
   advanced_notion_management: {
     description:
       "Advanced features for Notion workspace management shown to admins",
@@ -527,6 +533,8 @@ const FRAMES_V2_DRAFTS_FEATURE =
   "frames_v2_drafts" as const satisfies WhitelistableFeature;
 const FRAMES_V2_PUBLIC_FUNCTIONS_FEATURE =
   "frames_v2_public_functions" as const satisfies WhitelistableFeature;
+const FRAMES_V2_SCHEDULES_FEATURE =
+  "frames_v2_schedules" as const satisfies WhitelistableFeature;
 const DISABLE_FRAMES_V2_FEATURE =
   "disable_frames_v2" as const satisfies WhitelistableFeature;
 
@@ -585,6 +593,20 @@ export function isFramesV2PublicFunctionsEnabled(
   return (
     isFramesV2FunctionsEnabled(featureFlags) &&
     featureFlags.includes(FRAMES_V2_PUBLIC_FUNCTIONS_FEATURE)
+  );
+}
+
+/**
+ * @cc [owner:smb2268,label:product] frames-v2-schedules-requires-frames-v2-functions
+ * Frame schedules MUST be reported enabled only when Frame functions are enabled (see
+ * isFramesV2FunctionsEnabled) and frames_v2_schedules is on.
+ */
+export function isFramesV2SchedulesEnabled(
+  featureFlags: WhitelistableFeature[]
+): boolean {
+  return (
+    isFramesV2FunctionsEnabled(featureFlags) &&
+    featureFlags.includes(FRAMES_V2_SCHEDULES_FEATURE)
   );
 }
 

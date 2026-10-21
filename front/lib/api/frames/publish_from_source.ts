@@ -52,6 +52,7 @@ import { splitFrameEntryScopedPath } from "@app/types/mount_path";
 import {
   isFramesV2FunctionsEnabled,
   isFramesV2PublicFunctionsEnabled,
+  isFramesV2SchedulesEnabled,
 } from "@app/types/shared/feature_flags";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
@@ -92,6 +93,30 @@ async function checkFrameFunctionsFeature(
     "invalid_manifest",
     "Frame functions and databases are not enabled for this workspace. Remove `functions` and " +
       "`databases` from the manifest and keep the Frame client-only."
+  );
+}
+
+/**
+ * @cc [owner:smb2268,label:product] frame-schedules-publish-gate
+ * Publishing a manifest whose functions declare schedules MUST fail with `invalid_manifest`,
+ * before any build, unless Frame schedules are enabled (see isFramesV2SchedulesEnabled). The
+ * previous publication stays live.
+ */
+async function checkFrameSchedulesFeature(
+  auth: Authenticator,
+  manifest: FrameManifest
+): Promise<Result<void, FramePublicationError>> {
+  if (manifest.functions.every((fn) => fn.schedules.length === 0)) {
+    return new Ok(undefined);
+  }
+  const featureFlags = await getFeatureFlags(auth);
+  if (isFramesV2SchedulesEnabled(featureFlags)) {
+    return new Ok(undefined);
+  }
+  return frameError(
+    "invalid_manifest",
+    "Frame schedules are not enabled for this workspace. Remove `schedules` from the manifest's " +
+      "functions."
   );
 }
 
@@ -526,6 +551,10 @@ async function replaceLegacyFrameFromSource(
     if (featureCheck.isErr()) {
       return featureCheck;
     }
+    const schedulesCheck = await checkFrameSchedulesFeature(auth, manifest);
+    if (schedulesCheck.isErr()) {
+      return schedulesCheck;
+    }
 
     const sharingCheck = await checkFrameFunctionSharing(auth, {
       frame: legacyFrame,
@@ -940,6 +969,10 @@ async function publishFrameV2FromCapturedSourceWithSourceLockHeld(
   const featureCheck = await checkFrameFunctionsFeature(auth, manifest);
   if (featureCheck.isErr()) {
     return featureCheck;
+  }
+  const schedulesCheck = await checkFrameSchedulesFeature(auth, manifest);
+  if (schedulesCheck.isErr()) {
+    return schedulesCheck;
   }
 
   const sharingCheck = await checkFrameFunctionSharing(auth, {

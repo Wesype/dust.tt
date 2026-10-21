@@ -1,4 +1,10 @@
 import {
+  cronFiresAtMostHourly,
+  isValidIanaTimezone,
+  validateCronExpression,
+} from "@app/lib/utils/cron_validation";
+
+import {
   DEFAULT_SANDBOX_FUNCTION_EXECUTION_MODE,
   DEFAULT_SANDBOX_FUNCTION_STAKE,
   SANDBOX_DATABASE_NAME_REGEX,
@@ -96,6 +102,55 @@ const FrameRelativePathSchema = z
       "Path must be relative to the Frame folder, using forward slashes and no '.', '..' or empty segments.",
   });
 
+// Author-controlled and stable; the Temporal schedule id is derived from it.
+export const MAX_FRAME_SCHEDULE_ID_LENGTH = 64;
+export const FRAME_SCHEDULE_ID_REGEX = SANDBOX_FUNCTION_SLUG_REGEX;
+
+export const FrameScheduleManifestSchema = z
+  .object({
+    id: z
+      .string()
+      .max(MAX_FRAME_SCHEDULE_ID_LENGTH, {
+        message: `Schedule id cannot exceed ${MAX_FRAME_SCHEDULE_ID_LENGTH} characters.`,
+      })
+      .regex(FRAME_SCHEDULE_ID_REGEX, {
+        message:
+          "Schedule id must be lowercase alphanumeric with single hyphen separators.",
+      }),
+    cron: z.string(),
+    timezone: z.string(),
+    // The manifest is parsed from JSON, so the value is JSON by construction; its shape is checked
+    // against the function's input schema at publish time.
+    input: z.custom<unknown>((value) => value !== undefined, {
+      message: "Schedule input is required.",
+    }),
+  })
+  .superRefine((schedule, context) => {
+    const timezoneIsValid = isValidIanaTimezone(schedule.timezone);
+    if (!timezoneIsValid) {
+      context.addIssue({
+        code: "custom",
+        message: `Schedule '${schedule.id}' timezone '${schedule.timezone}' is not an IANA timezone (e.g. "Europe/Paris").`,
+        path: ["timezone"],
+      });
+    }
+
+    // Parse in UTC when the timezone is invalid so a bad cron is still reported alongside it.
+    const cron = validateCronExpression({
+      cron: schedule.cron,
+      timezone: timezoneIsValid ? schedule.timezone : "UTC",
+    });
+    if (cron.isErr()) {
+      context.addIssue({
+        code: "custom",
+        message: `Schedule '${schedule.id}' cron '${schedule.cron}' is invalid: ${cron.error}`,
+        path: ["cron"],
+      });
+    }
+  });
+
+export type FrameScheduleManifest = z.infer<typeof FrameScheduleManifestSchema>;
+
 export const FrameFunctionManifestSchema = z.object({
   name: z
     .string()
@@ -112,7 +167,58 @@ export const FrameFunctionManifestSchema = z.object({
   defaultStake: z
     .enum(SANDBOX_FUNCTION_STAKES)
     .default(DEFAULT_SANDBOX_FUNCTION_STAKE),
+  schedules: z.array(FrameScheduleManifestSchema).default([]),
 });
+
+export type FrameFunctionManifest = z.infer<typeof FrameFunctionManifestSchema>;
+
+/**
+ * @cc [owner:smb2268,label:product] schedule-ids-unique-per-frame
+ * Schedule ids MUST be unique across every function of a Frame: reconciliation identifies a
+ * schedule by `(frameId, scheduleId)` alone.
+ */
+/**
+ * @cc [owner:smb2268,label:product] schedules-require-durable-functions
+ * A function with a non-empty `schedules` list MUST declare the `durable` execution mode.
+ */
+/**
+ * @cc [owner:smb2268,label:product] schedules-fire-at-most-hourly
+ * A schedule's cron MUST fire at most once per hour (see cronFiresAtMostHourly); a more frequent
+ * cron MUST fail to parse.
+ */
+function refineFrameScheduleDeclarations(
+  functions: FrameFunctionManifest[],
+  context: z.RefinementCtx
+): void {
+  const scheduleIds = new Set<string>();
+  functions.forEach((fn, functionIndex) => {
+    fn.schedules.forEach((schedule, scheduleIndex) => {
+      const path = ["functions", functionIndex, "schedules", scheduleIndex];
+      if (fn.executionMode !== "durable") {
+        context.addIssue({
+          code: "custom",
+          message: `Schedule '${schedule.id}' targets function '${fn.name}', which must declare "executionMode": "durable" to run on a schedule.`,
+          path,
+        });
+      }
+      if (!cronFiresAtMostHourly(schedule.cron)) {
+        context.addIssue({
+          code: "custom",
+          message: `Schedule '${schedule.id}' cron '${schedule.cron}' fires more than once per hour; the minute field must be a single value, e.g. "0 * * * *".`,
+          path: [...path, "cron"],
+        });
+      }
+      if (scheduleIds.has(schedule.id)) {
+        context.addIssue({
+          code: "custom",
+          message: `Schedule id '${schedule.id}' must be unique within the Frame.`,
+          path: [...path, "id"],
+        });
+      }
+      scheduleIds.add(schedule.id);
+    });
+  });
+}
 
 export const FrameDatabaseManifestSchema = z.object({
   name: z.string().regex(FRAME_DATABASE_NAME_REGEX, {
@@ -158,6 +264,8 @@ export const FrameSourceManifestSchema = z
       }
       databaseNames.add(database.name);
     });
+
+    refineFrameScheduleDeclarations(manifest.functions, context);
   });
 
 export const FrameManifestSchema = FrameSourceManifestSchema.transform(

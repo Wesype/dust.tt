@@ -21,6 +21,7 @@ const publication = {
         entryPoint: "functions/add_task.ts",
         executionMode: "durable",
         defaultStake: "low",
+        schedules: [],
       },
     ],
     databases: [{ name: "tasks", schema: "databases/tasks.db.ts" }],

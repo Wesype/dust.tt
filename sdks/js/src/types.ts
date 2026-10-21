@@ -894,6 +894,7 @@ const WhitelistableFeaturesSchema = FlexibleEnumSchema<
   | "frames_v2_drafts"
   | "frames_v2_functions"
   | "frames_v2_public_functions"
+  | "frames_v2_schedules"
   | "google_sheets_tool"
   | "gpt_5_6_terra_long_context"
   | "http_client_tool"

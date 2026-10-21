@@ -9,6 +9,7 @@ import {
   MAX_FRAME_NAME_LENGTH,
   parseFrameManifest,
   validateFrameV2Name,
+  MAX_FRAME_SCHEDULE_ID_LENGTH,
 } from "@app/types/api/frame_manifest";
 import {
   DEFAULT_SANDBOX_FUNCTION_EXECUTION_MODE,
@@ -72,6 +73,7 @@ describe("FrameManifestSchema", () => {
           ...FUNCTION,
           executionMode: DEFAULT_SANDBOX_FUNCTION_EXECUTION_MODE,
           defaultStake: DEFAULT_SANDBOX_FUNCTION_STAKE,
+          schedules: [],
         },
       ]);
     }
@@ -191,6 +193,157 @@ describe("FrameManifestSchema", () => {
     });
 
     expect(parsed.success).toBe(false);
+  });
+
+  describe("schedules", () => {
+    const SCHEDULE = {
+      id: "daily-refresh",
+      cron: "0 9 * * 1-5",
+      timezone: "Europe/Paris",
+      input: { source: "crm", limit: 50 },
+    };
+
+    function parseWithSchedules(
+      schedules: unknown[],
+      fn: Record<string, unknown> = FUNCTION
+    ) {
+      return FrameManifestSchema.safeParse({
+        ...MANIFEST,
+        functions: [{ ...fn, schedules }],
+      });
+    }
+
+    it("parses a schedule on a durable function", () => {
+      const parsed = parseWithSchedules([SCHEDULE], {
+        ...FUNCTION,
+        executionMode: "durable",
+      });
+
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.functions[0].schedules).toEqual([SCHEDULE]);
+      }
+    });
+
+    it("defaults to no schedules", () => {
+      const parsed = FrameManifestSchema.safeParse({
+        ...MANIFEST,
+        functions: [FUNCTION],
+      });
+
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.functions[0].schedules).toEqual([]);
+      }
+    });
+
+    it("rejects a schedule on a fast function", () => {
+      const parsed = parseWithSchedules([SCHEDULE], {
+        ...FUNCTION,
+        executionMode: "fast",
+      });
+
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues[0]?.message).toContain(
+          `Schedule 'daily-refresh' targets function 'add-task'`
+        );
+      }
+    });
+
+    it("rejects duplicate schedule ids across functions", () => {
+      const parsed = FrameManifestSchema.safeParse({
+        ...MANIFEST,
+        functions: [
+          { ...FUNCTION, schedules: [SCHEDULE] },
+          {
+            ...FUNCTION,
+            name: "list-tasks",
+            entryPoint: "functions/list_tasks.ts",
+            schedules: [SCHEDULE],
+          },
+        ],
+      });
+
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues[0]).toMatchObject({
+          message:
+            "Schedule id 'daily-refresh' must be unique within the Frame.",
+          path: ["functions", 1, "schedules", 0, "id"],
+        });
+      }
+    });
+
+    it.each(["Daily Refresh", "a".repeat(MAX_FRAME_SCHEDULE_ID_LENGTH + 1)])(
+      "rejects schedule id %j",
+      (id) => {
+        expect(parseWithSchedules([{ ...SCHEDULE, id }]).success).toBe(false);
+      }
+    );
+
+    it("rejects an invalid cron at the schedule's cron path", () => {
+      const parsed = parseWithSchedules([{ ...SCHEDULE, cron: "@daily" }]);
+
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues[0]).toMatchObject({
+          message: expect.stringContaining(
+            "Schedule 'daily-refresh' cron '@daily' is invalid"
+          ),
+          path: ["functions", 0, "schedules", 0, "cron"],
+        });
+      }
+    });
+
+    it.each(["*/15 * * * *", "0,30 * * * *", "* * * * *", "0-5 9 * * *"])(
+      "rejects cron %j as more than hourly",
+      (cron) => {
+        const parsed = parseWithSchedules([{ ...SCHEDULE, cron }]);
+
+        expect(parsed.success).toBe(false);
+        if (!parsed.success) {
+          expect(parsed.error.issues[0]).toMatchObject({
+            message: expect.stringContaining("fires more than once per hour"),
+            path: ["functions", 0, "schedules", 0, "cron"],
+          });
+        }
+      }
+    );
+
+    it("rejects an invalid timezone at the schedule's timezone path", () => {
+      const parsed = parseWithSchedules([{ ...SCHEDULE, timezone: "utc" }]);
+
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues[0]).toMatchObject({
+          message: expect.stringContaining("is not an IANA timezone"),
+          path: ["functions", 0, "schedules", 0, "timezone"],
+        });
+      }
+    });
+
+    it("requires an input", () => {
+      const { input: _omitted, ...withoutInput } = SCHEDULE;
+
+      expect(parseWithSchedules([withoutInput]).success).toBe(false);
+    });
+
+    it("parses schedules from a manifest file", () => {
+      const parsed = parseFrameManifest(
+        Buffer.from(
+          JSON.stringify({
+            ...MANIFEST,
+            functions: [{ ...FUNCTION, schedules: [SCHEDULE] }],
+          })
+        )
+      );
+
+      expect(parsed.isOk()).toBe(true);
+      if (parsed.isOk()) {
+        expect(parsed.value.functions[0].schedules).toEqual([SCHEDULE]);
+      }
+    });
   });
 
   it("returns a useful error for invalid JSON", () => {
