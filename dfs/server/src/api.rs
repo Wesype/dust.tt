@@ -22,7 +22,7 @@ use crate::{
         resources::{
             directory::DirectoryResource,
             file::FileResource,
-            object::{self, ObjectResource},
+            object::{self, ObjectResource, locks::LockTokens},
             session::SessionResource,
             tenant::TenantResource,
         },
@@ -373,9 +373,7 @@ impl Dfs for API {
         if request.operations.is_empty() {
             return Err(status(ErrorCode::InvalidInput));
         }
-        if !request.locks.is_empty() {
-            return Err(status(ErrorCode::Unsupported));
-        }
+        let locks = LockTokens::new(request.locks)?;
         let operations = request
             .operations
             .into_iter()
@@ -389,8 +387,9 @@ impl Dfs for API {
             let session = session.as_ref();
             // Grouping consumes the operations, so every FDB attempt needs its own copy.
             let operations = operations.clone();
+            let locks = &locks;
             async move {
-                let results = ObjectResource::apply(&tx, session, operations).await?;
+                let results = ObjectResource::apply(&tx, session, operations, locks).await?;
                 let response = OperationBatch {
                     results: results
                         .into_iter()

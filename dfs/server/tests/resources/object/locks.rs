@@ -1,12 +1,23 @@
 use super::*;
-use crate::storage::{fdb, resources::tenant::TenantResource};
+use crate::storage::{
+    fdb,
+    resources::{
+        SUPERUSER_SUBJECT,
+        directory::DirectoryResource,
+        file::{self, FileResource},
+        tenant::TenantResource,
+    },
+};
 use anyhow::{Context, Result};
+use dfs_protocol::rpc::WriteOperation;
 
 pub(crate) async fn run() -> Result<()> {
     lock_checks_require_current_tokens().await?;
     expired_lock_invalidation_is_transactional().await?;
     lock_checks_conflict_with_concurrent_acquisition().await?;
     expiry_grace_and_refresh_never_shorten().await?;
+    unlocked_mutation_prevents_slow_replica_revival().await?;
+    concurrent_refresh_conflicts_with_takeover().await?;
     cleanup_preserves_refreshed_locks().await?;
     cleanup_conflicts_with_concurrent_refresh().await
 }
@@ -43,6 +54,7 @@ async fn lock_checks_require_current_tokens() -> Result<()> {
     assert!(
         ObjectResource::check_locks(&tx, &session, &[object_id], &tokens)
             .await?
+            .0
             .is_empty()
     );
     let (other_tenant, _) = TenantResource::new(ObjectId::new_v7().to_string())?;
@@ -50,6 +62,7 @@ async fn lock_checks_require_current_tokens() -> Result<()> {
     assert!(
         ObjectResource::check_locks(&tx, &other_session, &[object_id], &LockTokens::default())
             .await?
+            .0
             .is_empty()
     );
     assert!(matches!(
@@ -62,6 +75,7 @@ async fn lock_checks_require_current_tokens() -> Result<()> {
     assert!(
         ObjectResource::check_locks(&tx, &session, &[object_id], &LockTokens::default())
             .await?
+            .0
             .is_empty()
     );
     assert!(matches!(
@@ -84,18 +98,20 @@ async fn expired_lock_invalidation_is_transactional() -> Result<()> {
     let expiry_key = ObjectResource::lock_expiry_key(&tenant.tenant_id, object_id, lock.expires_at);
     for commit in [false, true] {
         let tx = fdb::database()?.create_trx()?;
-        let expired =
-            ObjectResource::check_locks(&tx, &session, &[object_id], &LockTokens::default())
-                .await?;
-        assert_eq!(expired, vec![(object_id, lock.clone())]);
+        let expired = ObjectResource::check_locks(
+            &tx,
+            &session,
+            &[object_id, object_id],
+            &LockTokens::default(),
+        )
+        .await?;
+        assert_eq!(expired, ExpiredLocks(vec![(object_id, lock.clone())]));
         assert_eq!(
             ObjectResource::fetch_lock(&tx, &tenant.tenant_id, object_id).await?,
             Some(lock.clone())
         );
         assert!(tx.get(&expiry_key, false).await?.is_some());
-        for (object_id, lock) in expired {
-            ObjectResource::clear_lock(&tx, &tenant.tenant_id, object_id, &lock);
-        }
+        expired.clear(&tx, &tenant.tenant_id);
         assert!(
             ObjectResource::fetch_lock(&tx, &tenant.tenant_id, object_id)
                 .await?
@@ -135,6 +151,7 @@ async fn lock_checks_conflict_with_concurrent_acquisition() -> Result<()> {
     assert!(
         ObjectResource::check_locks(&tx, &session, &[object_id], &LockTokens::default())
             .await?
+            .0
             .is_empty()
     );
     let lock = acquire(&tenant.tenant_id, object_id, clock::now_ms()?).await?;
@@ -216,6 +233,224 @@ async fn expiry_grace_and_refresh_never_shorten() -> Result<()> {
     );
     ObjectResource::unlock(&tx, &tenant_id, object_id, &replacement.lock_id).await?;
     tx.commit().await?;
+    Ok(())
+}
+
+async fn file_with_expired_lock() -> Result<(SessionResource, ObjectId, LockState)> {
+    let (tenant, _) = TenantResource::new(ObjectId::new_v7().to_string())?;
+    let (session, _) = SessionResource::new(&tenant, vec![SUPERUSER_SUBJECT.to_owned()])?;
+    let tx = fdb::database()?.create_trx()?;
+    let root = ObjectResource::new_root(&tenant)?;
+    root.create(&tx, &[]).await?;
+    let file = DirectoryResource::try_from(root)?
+        .create_child(
+            &tx,
+            ObjectId::new_v7(),
+            "locked.txt".to_owned(),
+            ObjectKind::File,
+            None,
+            HashMap::new(),
+        )
+        .await?;
+    tx.commit().await?;
+    let lock = acquire(
+        &tenant.tenant_id,
+        file.object_id,
+        clock::now_ms()? - LOCK_TTL_MS - LOCK_TAKEOVER_GRACE_MS,
+    )
+    .await?;
+    Ok((session, file.object_id, lock))
+}
+
+async fn unlocked_mutation_prevents_slow_replica_revival() -> Result<()> {
+    let (session, object_id, lock) = file_with_expired_lock().await?;
+    let tenant_id = &session.tenant.tenant_id;
+    let write = WriteOperation {
+        object_id,
+        offset: 0,
+        data: b"unlocked writer".to_vec(),
+        append: false,
+    };
+    let tx = fdb::database()?.create_trx()?;
+    assert!(matches!(
+        FileResource::apply_write(
+            &tx,
+            &session,
+            WriteOperation {
+                offset: u64::MAX,
+                ..write.clone()
+            },
+            &LockTokens::default(),
+        )
+        .await,
+        Err(storage::Error::Resource(file::Error::InvalidRange))
+    ));
+    tx.commit().await?;
+    let tx = fdb::database()?.create_trx()?;
+    assert_eq!(
+        ObjectResource::fetch_lock(&tx, tenant_id, object_id).await?,
+        Some(lock.clone())
+    );
+    assert!(
+        tx.get(
+            &ObjectResource::lock_expiry_key(tenant_id, object_id, lock.expires_at),
+            false
+        )
+        .await?
+        .is_some()
+    );
+    let unchanged = ObjectResource::fetch(&tx, &session.tenant, &object_id)
+        .await?
+        .context("missing file")?;
+    assert_eq!(unchanged.size, 0);
+    assert!(
+        FileResource::try_from(unchanged)?
+            .read(&tx, 0, 100)
+            .await?
+            .is_empty()
+    );
+    FileResource::apply_write(&tx, &session, write.clone(), &LockTokens::default()).await?;
+    tx.commit().await?;
+    let tx = fdb::database()?.create_trx()?;
+    assert!(matches!(
+        ObjectResource::lock_at(
+            &tx,
+            tenant_id,
+            object_id,
+            Some(&lock.lock_id),
+            lock.expires_at - 1,
+        )
+        .await,
+        Err(storage::Error::Resource(Error::LockLost))
+    ));
+    let tokens = LockTokens::new(vec![ObjectLock {
+        object_id,
+        lock_id: lock.lock_id.clone(),
+    }])?;
+    assert!(matches!(
+        ObjectResource::check_locks_at(&tx, tenant_id, &[object_id], &tokens, lock.expires_at - 1)
+            .await,
+        Err(storage::Error::Resource(Error::LockLost))
+    ));
+    assert!(matches!(
+        FileResource::apply_write(&tx, &session, write.clone(), &tokens).await,
+        Err(storage::Error::Resource(file::Error::Object(
+            Error::LockLost
+        )))
+    ));
+    let object = ObjectResource::fetch(&tx, &session.tenant, &object_id)
+        .await?
+        .context("missing file")?;
+    assert_eq!(
+        FileResource::try_from(object)?.read(&tx, 0, 100).await?,
+        write.data
+    );
+    assert!(
+        tx.get(
+            &ObjectResource::lock_expiry_key(tenant_id, object_id, lock.expires_at),
+            false
+        )
+        .await?
+        .is_none()
+    );
+    let (begin, end) = tenant_subspace(tenant_id).range();
+    tx.clear_range(&begin, &end);
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn concurrent_refresh_conflicts_with_takeover() -> Result<()> {
+    for refresh_first in [true, false] {
+        let (session, object_id, lock) = file_with_expired_lock().await?;
+        let tenant_id = &session.tenant.tenant_id;
+        let refresh = fdb::database()?.create_trx()?;
+        let refreshed = ObjectResource::lock_at(
+            &refresh,
+            tenant_id,
+            object_id,
+            Some(&lock.lock_id),
+            lock.expires_at - 1,
+        )
+        .await?;
+        let takeover = fdb::database()?.create_trx()?;
+        let write = WriteOperation {
+            object_id,
+            offset: 0,
+            data: b"unlocked writer".to_vec(),
+            append: false,
+        };
+        FileResource::apply_write(&takeover, &session, write.clone(), &LockTokens::default())
+            .await?;
+        let (first, second) = if refresh_first {
+            (refresh, takeover)
+        } else {
+            (takeover, refresh)
+        };
+        first.commit().await?;
+        assert_eq!(
+            second
+                .commit()
+                .await
+                .err()
+                .context("expected conflict")?
+                .code(),
+            1020
+        );
+        let retry = fdb::database()?.create_trx()?;
+        if refresh_first {
+            assert!(matches!(
+                FileResource::apply_write(&retry, &session, write.clone(), &LockTokens::default())
+                    .await,
+                Err(storage::Error::Resource(file::Error::Object(
+                    Error::WouldBlock
+                )))
+            ));
+        } else {
+            assert!(matches!(
+                ObjectResource::lock_at(
+                    &retry,
+                    tenant_id,
+                    object_id,
+                    Some(&lock.lock_id),
+                    lock.expires_at - 1,
+                )
+                .await,
+                Err(storage::Error::Resource(Error::LockLost))
+            ));
+        }
+        retry.commit().await?;
+        let tx = fdb::database()?.create_trx()?;
+        let object = ObjectResource::fetch(&tx, &session.tenant, &object_id)
+            .await?
+            .context("missing file")?;
+        let data = FileResource::try_from(object)?.read(&tx, 0, 100).await?;
+        assert_eq!(data, if refresh_first { vec![] } else { write.data });
+        assert_eq!(
+            ObjectResource::fetch_lock(&tx, tenant_id, object_id).await?,
+            refresh_first.then_some(refreshed.clone())
+        );
+        assert!(
+            tx.get(
+                &ObjectResource::lock_expiry_key(tenant_id, object_id, lock.expires_at),
+                false
+            )
+            .await?
+            .is_none()
+        );
+        assert_eq!(
+            tx.get(
+                &ObjectResource::lock_expiry_key(tenant_id, object_id, refreshed.expires_at),
+                false
+            )
+            .await?
+            .is_some(),
+            refresh_first
+        );
+        ObjectResource::unlock(&tx, tenant_id, object_id, &lock.lock_id).await?;
+        let (begin, end) = tenant_subspace(tenant_id).range();
+        tx.clear_range(&begin, &end);
+        tx.commit().await?;
+    }
     Ok(())
 }
 

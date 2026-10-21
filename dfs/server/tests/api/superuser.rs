@@ -62,7 +62,6 @@ pub(crate) async fn superuser_sessions_read_and_write_despite_denies() -> Result
                         ..Default::default()
                     })),
                 }],
-                locks: Vec::new(),
             },
             &superuser_authorization,
         )?)
@@ -96,7 +95,6 @@ pub(crate) async fn superuser_sessions_read_and_write_despite_denies() -> Result
                             append: false,
                         })),
                     }],
-                    locks: Vec::new(),
                 },
                 &authorization,
             )?)

@@ -44,6 +44,18 @@ impl LockTokens {
     }
 }
 
+#[must_use]
+#[derive(Debug, PartialEq)]
+pub struct ExpiredLocks(Vec<(ObjectId, LockState)>);
+
+impl ExpiredLocks {
+    pub(in crate::storage::resources) fn clear(self, tx: &Transaction, tenant_id: &str) {
+        for (object_id, lock) in self.0 {
+            ObjectResource::clear_lock(tx, tenant_id, object_id, &lock);
+        }
+    }
+}
+
 pub fn validate_lock_id(lock_id: &[u8]) -> Result<(), Error> {
     ObjectId::try_from(lock_id).map_err(|_| Error::InvalidLockId)?;
     Ok(())
@@ -141,12 +153,17 @@ impl ObjectResource {
         Ok(())
     }
 
+    /**
+     * @cc [owner:id13,label:backend;concurrency] check-locks-no-writes
+     * Checks MUST NOT write. Expired locks MUST be returned for the caller to clear only after its
+     * operation succeeds, so a failed operation leaves lock state unchanged.
+     */
     pub async fn check_locks(
         tx: &Transaction,
         session: &SessionResource,
         targets: &[ObjectId],
         tokens: &LockTokens,
-    ) -> Result<Vec<(ObjectId, LockState)>, storage::Error<Error>> {
+    ) -> Result<ExpiredLocks, storage::Error<Error>> {
         let now_ms = clock::now_ms().map_err(|_| Error::TimestampGeneration)?;
         Self::check_locks_at(tx, &session.tenant.tenant_id, targets, tokens, now_ms).await
     }
@@ -157,9 +174,12 @@ impl ObjectResource {
         targets: &[ObjectId],
         tokens: &LockTokens,
         now_ms: u64,
-    ) -> Result<Vec<(ObjectId, LockState)>, storage::Error<Error>> {
+    ) -> Result<ExpiredLocks, storage::Error<Error>> {
         let mut expired = Vec::new();
-        for object_id in targets {
+        for (index, object_id) in targets.iter().enumerate() {
+            if targets[..index].contains(object_id) {
+                continue;
+            }
             let lock = Self::fetch_lock(tx, tenant_id, *object_id).await?;
             if let Some(token) = tokens.0.get(object_id) {
                 if !lock
@@ -175,9 +195,13 @@ impl ObjectResource {
                 expired.push((*object_id, lock));
             }
         }
-        Ok(expired)
+        Ok(ExpiredLocks(expired))
     }
 
+    /**
+     * @cc [owner:id13,label:backend;concurrency] cleanup-takeover-grace
+     * Cleanup MUST NOT clear a lock before `expires_at + LOCK_TAKEOVER_GRACE_MS`.
+     */
     pub async fn clear_expired_locks(
         tx: &Transaction,
         now_ms: u64,
