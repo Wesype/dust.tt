@@ -4,7 +4,10 @@ import {
   dispatchSessionCommentMentions,
 } from "@app/lib/api/collab/comments";
 import { loadCollabSession } from "@app/lib/api/collab/session_file";
-import { getYDocUnsavableBodyReason } from "@app/lib/api/collab/ydoc";
+import {
+  anchorYDocComment,
+  getYDocUnsavableBodyReason,
+} from "@app/lib/api/collab/ydoc";
 import {
   concurrentExecutor,
   setTimeoutAsync,
@@ -17,6 +20,7 @@ import {
   isDefaultSaveState,
   parseSessionName,
 } from "@app/types/collab";
+import type { Result } from "@app/types/shared/result";
 import { Err } from "@app/types/shared/result";
 import { normalizeError } from "@app/types/shared/utils/error_utils";
 import { safeParseJSON } from "@app/types/shared/utils/json_utils";
@@ -31,12 +35,13 @@ import {
   startSession,
   stopWrites,
 } from "@front-api/lib/collab/session";
+import type { LocalTransactionOrigin } from "@hocuspocus/server";
 import { Hocuspocus } from "@hocuspocus/server";
 
 import { z } from "zod";
 
 export const UNLOAD_GRACE_PERIOD_MS = 5 * 60 * 1000;
-const COMMENT_COMMAND_TIMEOUT_MS = 30 * 1000;
+export const COMMENT_COMMAND_TIMEOUT_MS = 30 * 1000;
 // Each store serializes and uploads the whole `.md`, its only durable copy for now: a crash loses up
 // to `STORE_MAX_DEBOUNCE_MS` plus `STORE_DEBOUNCE_MS` of edits; a shutdown saves them first.
 const STORE_DEBOUNCE_MS = 5 * 1000;
@@ -46,6 +51,10 @@ const refusedMessage = (requestId: string, error: CommentRequestErrorCode) =>
   serverMessage({ type: "refused", requestId, error });
 
 type CommandResult = Awaited<ReturnType<typeof applyCommentRequest>>;
+
+// The comment marks the session places are no connection's change: saves go through whoever last
+// changed the text, and a commenter may not be able to write.
+const COMMENT_MARK_ORIGIN: LocalTransactionOrigin = { source: "local" };
 
 const commandRequestSchema = z.object({
   type: z.literal("command"),
@@ -114,15 +123,19 @@ function logUnexpected(
  * @cc [owner:tdraier,label:security;product] collab-comment-threads
  * A connection MUST receive the session's threads when it asks. A comment command MUST be applied
  * with `applyCommentRequest` for the connection's own file, one at a time per document, and
- * answered to that connection only. Once accepted, the new threads MUST be sent to every
- * connection of the document and the document stored, so the save writes them, through the
- * connection that last changed its text, or through the latest commenter's when none did, and the
- * message it added handed to `dispatchSessionCommentMentions` without waiting for it. A command its
- * document unloaded before it finished MUST change nothing. Every command carrying a request id
- * MUST be answered, refused as `unavailable` when it is invalid, failed, outlived its document,
- * found the document's last save failed at its turn, or did not finish within
- * `COMMENT_COMMAND_TIMEOUT_MS`, and a failing or late command MUST NOT hold the later ones. Any
- * other message that is not a valid client message MUST be ignored.
+ * answered to that connection only. An accepted `add` carrying an anchor MUST first mark its text
+ * with `anchorYDocComment`, as a change of no connection's, which saves MUST NOT go through, and be
+ * refused with its error, or as `unavailable` when it throws, keeping neither the thread nor the
+ * mark, when that fails; the mark MUST reach every connection before the threads. Once accepted,
+ * the new threads MUST be sent to every connection of the document and the document stored, so
+ * the save writes them, through the connection that last changed its text, or through the latest
+ * commenter's when none did, and the message it added handed to `dispatchSessionCommentMentions`
+ * without waiting for it. A command its document unloaded before it finished MUST change nothing.
+ * Every command carrying a request id MUST be answered, refused as `unavailable` when it is
+ * invalid, failed, outlived its document, found the document's last save failed at its turn, or
+ * did not finish within `COMMENT_COMMAND_TIMEOUT_MS` of its arrival, then never applied, and a
+ * failing or late command MUST NOT hold the later ones. Any other message that is not a valid
+ * client message MUST be ignored.
  */
 export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
   const hocuspocus = new Hocuspocus<CollabAccess>({
@@ -179,9 +192,9 @@ export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
       return content.doc;
     },
 
-    async onChange({ document, context }) {
+    async onChange({ document, context, transactionOrigin }) {
       const session = getSession(document);
-      if (session) {
+      if (session && transactionOrigin !== COMMENT_MARK_ORIGIN) {
         session.lastChangedBy = context;
       }
     },
@@ -311,6 +324,8 @@ export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
       }
 
       const { requestId, command } = message.data;
+      // From its arrival: a command waiting behind others is as late as one that runs long.
+      const deadline = Date.now() + COMMENT_COMMAND_TIMEOUT_MS;
       const logFailure = (err: unknown) =>
         logger.error(
           {
@@ -321,11 +336,15 @@ export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
           "Collab comment command failed"
         );
       const apply = async (): Promise<CommandResult> => {
+        const remaining = deadline - Date.now();
         try {
-          const applied = await Promise.race([
-            applyCommentRequest(file, session.comments, command),
-            setTimeoutAsync(COMMENT_COMMAND_TIMEOUT_MS),
-          ]);
+          const applied =
+            remaining > 0
+              ? await Promise.race([
+                  applyCommentRequest(file, session.comments, command),
+                  setTimeoutAsync(remaining),
+                ])
+              : "timeout";
           if (applied === "timeout") {
             logger.error(
               { documentName, workspaceId: file.workspaceId },
@@ -355,6 +374,30 @@ export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
             )
           );
           return;
+        }
+
+        if (command.type === "add" && command.anchor) {
+          let anchored: Result<void, CommentRequestErrorCode>;
+          try {
+            anchored = anchorYDocComment(
+              document,
+              {
+                commentId: command.commentId,
+                anchor: command.anchor,
+                comments: result.value.comments,
+              },
+              COMMENT_MARK_ORIGIN
+            );
+          } catch (err) {
+            logFailure(err);
+            anchored = new Err("unavailable");
+          }
+          if (anchored.isErr()) {
+            connection.sendStateless(refusedMessage(requestId, anchored.error));
+            return;
+          }
+          // The mark first, so editors already hold it when the thread arrives.
+          document.flush();
         }
 
         // TODO(co-edition): a command still applies after its sender left, whose channel already

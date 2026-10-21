@@ -12,13 +12,18 @@ import {
   saveCollabSession,
 } from "@app/lib/api/collab/session_file";
 import { mintCollabTicket } from "@app/lib/api/collab/tickets";
-import { dfmToYDoc, yDocToDfm } from "@app/lib/api/collab/ydoc";
+import {
+  dfmToYDoc,
+  yDocCommentedTexts,
+  yDocToDfm,
+} from "@app/lib/api/collab/ydoc";
 import { Authenticator } from "@app/lib/auth";
 import { onAgentActivity, onAgentEdit } from "@app/lib/client/collab/agents";
 import type { CommentChannel } from "@app/lib/client/collab/comments";
 import { createCommentChannel } from "@app/lib/client/collab/comments";
 import type { DfmComment } from "@app/lib/markdown/dfm";
 import { CollabAgentFactory } from "@app/tests/utils/CollabAgentFactory";
+import { commentAnchorOf } from "@app/tests/utils/comment_anchors";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import type { AgentEditMessage, InsertedIdRange } from "@app/types/collab";
 import { toSessionName } from "@app/types/collab";
@@ -35,6 +40,7 @@ import {
 } from "@front-api/lib/collab/collab.test_utils";
 import {
   saveAllSessions,
+  COMMENT_COMMAND_TIMEOUT_MS,
   createCollabHocuspocus,
   UNLOAD_GRACE_PERIOD_MS,
 } from "@front-api/lib/collab/hocuspocus";
@@ -51,7 +57,15 @@ import { Connection } from "@hocuspocus/server";
 import type { Peer } from "crossws";
 import crossws from "crossws/adapters/node";
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import * as Y from "yjs";
 
 vi.mock("@app/lib/api/collab/access", async (importActual) => {
@@ -739,6 +753,44 @@ describe("comment threads in a live session", () => {
     expect(late.isErr() && late.error).toBe("unavailable");
   }, 15_000);
 
+  it("marks an added thread's text before answering it, and refuses one it cannot anchor", async () => {
+    const { writer, hocuspocus, url } = await start();
+    const { channel: mine, provider: myProvider } = await join(url, writer);
+    const { channel: theirs, provider: theirProvider } = await join(
+      url,
+      writer
+    );
+
+    const added = await mine.send({
+      type: "add",
+      commentId: "c2",
+      body: "Ship it.",
+      anchor: commentAnchorOf(myProvider.document, "Hello"),
+    });
+    expect(added.isOk() && added.value).toEqual(CREATED);
+    expect(yDocCommentedTexts(myProvider.document).get("c2")).toBe("Hello");
+    await vi.waitFor(() =>
+      expect(theirs.getThreads()).toEqual([THREAD, CREATED])
+    );
+    expect(yDocCommentedTexts(theirProvider.document).get("c2")).toBe("Hello");
+    // The mark is no connection's change of the text.
+    const document = hocuspocus.documents.get(
+      toSessionName(writer.workspaceId, writer.canonicalPath)
+    );
+    expect(document && getSession(document)?.lastChangedBy).toBeUndefined();
+
+    const outside = { item: { client: 1, clock: 999_999 }, assoc: -1 as const };
+    const refused = await mine.send({
+      type: "add",
+      commentId: "c3",
+      body: "Nowhere.",
+      anchor: { first: outside, last: outside },
+    });
+    expect(refused.isErr() && refused.error).toBe("unanchored");
+    expect(mine.getThreads()).toEqual([THREAD, CREATED]);
+    expect(yDocCommentedTexts(myProvider.document).has("c3")).toBe(false);
+  }, 15_000);
+
   it("saves comments through the latest commenter when nobody changed the text", async () => {
     const first = await collabAccess(true);
     const second: CollabAccess = {
@@ -794,6 +846,59 @@ describe("comment threads in a live session", () => {
       expect(vi.mocked(saveCollabSession).mock.calls.at(-1)?.[0].auth).toBe(
         second.auth
       )
+    );
+  });
+
+  it("refuses a command whose turn comes after its deadline, without applying it", async () => {
+    const file = await collabAccess(true);
+    vi.mocked(loadCollabSession).mockImplementation(loadSource);
+    vi.mocked(applyCommentRequest).mockClear();
+    vi.mocked(applyCommentRequest).mockImplementation(
+      () => new Promise(() => undefined)
+    );
+    const hocuspocus = createCollabHocuspocus();
+    const documentName = toSessionName(file.workspaceId, file.canonicalPath);
+    await hocuspocus.openDirectConnection(documentName, file);
+    const document = hocuspocus.documents.get(documentName);
+    if (!document) {
+      throw new Error("The document did not load.");
+    }
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+
+    const socket = { send: vi.fn(), close: vi.fn(), readyState: 1 };
+    const connection = new Connection(
+      socket,
+      new Request("http://localhost/api/collab"),
+      document,
+      "socket",
+      file
+    );
+    const answered = vi.spyOn(connection, "sendStateless");
+    for (const requestId of ["r1", "r2"]) {
+      await hocuspocus.hooks("onStateless", {
+        connection,
+        document,
+        documentName,
+        payload: JSON.stringify({
+          type: "command",
+          requestId,
+          command: { type: "add", commentId: requestId, body: "Hi." },
+        }),
+      });
+    }
+
+    // The first command runs out the time the second also had, waiting behind it.
+    await vi.advanceTimersByTimeAsync(COMMENT_COMMAND_TIMEOUT_MS);
+    expect(applyCommentRequest).toHaveBeenCalledTimes(1);
+    expect(answered.mock.calls.map(([message]) => JSON.parse(message))).toEqual(
+      ["r1", "r2"].map((requestId) => ({
+        type: "refused",
+        requestId,
+        error: "unavailable",
+      }))
     );
   });
 

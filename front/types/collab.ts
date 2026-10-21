@@ -37,13 +37,38 @@ export function parseSessionName(
 
 const commentIdSchema = z.string().min(1);
 
+const yIdSchema = z.object({
+  client: z.number().int().nonnegative(),
+  clock: z.number().int().nonnegative(),
+});
+
+/** A Yjs relative position right after a character, as `Y.relativePositionToJSON` writes it. */
+const relativePositionSchema = z.object({
+  item: yIdSchema,
+  assoc: z.literal(-1),
+});
+
+/**
+ * The text a new thread anchors to, by the relative positions right after its first and last
+ * characters a comment mark can sit on, so it follows the edits made while the command travels.
+ */
+export const commentAnchorSchema = z.object({
+  first: relativePositionSchema,
+  last: relativePositionSchema,
+});
+
+export type CommentAnchor = z.infer<typeof commentAnchorSchema>;
+
 export const commentRequestSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("add"),
     commentId: commentIdSchema,
     body: z.string().min(1),
-    // The text the browser anchors once the thread exists, which agents get as the quote.
+    // The text the thread anchors to, which agents get as the quote.
     quote: z.string().optional(),
+    // TODO(co-edition): require it once no browser anchors its threads itself.
+    // The session marks it; without it, the browser anchors the thread once accepted.
+    anchor: commentAnchorSchema.optional(),
   }),
   z.object({
     type: z.literal("reply"),
@@ -77,6 +102,7 @@ export const COMMENT_REQUEST_ERROR_CODES = [
   "not_found",
   "thread_changed",
   "unwritable",
+  "unanchored",
 ] as const;
 
 export type CommentRequestErrorCode =

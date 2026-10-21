@@ -10,7 +10,11 @@ import type {
   DocumentProps,
   CollabStatus,
 } from "@app/components/editor/document/types";
-import { dfmToYDoc, yDocToDfm } from "@app/lib/api/collab/ydoc";
+import {
+  anchorYDocComment,
+  dfmToYDoc,
+  yDocToDfm,
+} from "@app/lib/api/collab/ydoc";
 import type { CommentChannel } from "@app/lib/client/collab/comments";
 import type { DfmMessageVerifier } from "@app/lib/client/dfm_signatures";
 import type { DfmAuthor, DfmComment, DfmMessage } from "@app/lib/markdown/dfm";
@@ -38,6 +42,7 @@ import type { Editor, JSONContent } from "@tiptap/core";
 import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type * as Y from "yjs";
 
 const AUTHOR: DfmAuthor = { kind: "user", id: "usr_tom", name: "Tom" };
 const AT = "2026-09-25T14:16:32.380Z";
@@ -58,10 +63,14 @@ type LiveCommentAnswer = Result<DfmComment | null, CommentRequestErrorCode>;
 
 /**
  * A live session's comment side: it applies each command to its threads and sends them, as the
- * server does, writing new messages as `AUTHOR` at `AT`. `answer` answers instead, and can still
- * accept the command.
+ * server does, writing new messages as `AUTHOR` at `AT` and marking new threads' anchors in `doc`.
+ * `answer` answers instead, and can still accept the command.
  */
-function commentSession(initialThreads: DfmComment[], answer?: SessionAnswer) {
+function commentSession(
+  doc: Y.Doc,
+  initialThreads: DfmComment[],
+  answer?: SessionAnswer
+) {
   let threads = initialThreads;
   const listeners = new Set<(comments: DfmComment[]) => void>();
   const broadcast = (next: DfmComment[]) => {
@@ -83,6 +92,20 @@ function commentSession(initialThreads: DfmComment[], answer?: SessionAnswer) {
           status: "open",
           messages: [message(command.body)],
         };
+        if (command.anchor) {
+          const anchored = anchorYDocComment(
+            doc,
+            {
+              commentId: command.commentId,
+              anchor: command.anchor,
+              comments: [...threads, created],
+            },
+            { source: "local", context: null }
+          );
+          if (anchored.isErr()) {
+            return new Err(anchored.error);
+          }
+        }
         broadcast([...threads, created]);
         return new Ok(created);
       }
@@ -156,7 +179,7 @@ async function renderDocument(
   if (live.isErr()) {
     throw new Error(live.error);
   }
-  const session = commentSession(live.value.comments, answer);
+  const session = commentSession(live.value.doc, live.value.comments, answer);
   const extensions = buildCollabExtensions({
     t: (descriptor) => descriptor.id ?? "",
     document: live.value.doc,
