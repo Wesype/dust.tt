@@ -30,20 +30,24 @@ import { assertNever } from "@app/types/shared/utils/assert_never";
  * are notified apart, never through the conversation.
  */
 
+type DocumentConversationLookup =
+  | { kind: "conversation"; conversation: ConversationResource }
+  | {
+      kind: "pod";
+      pod: SpaceResource;
+      conversation: ConversationResource | null;
+    };
+
 /**
- * @cc [owner:tdraier,label:product] document-conversation
- * A file in a conversation's files MUST use that conversation. A file in a pod MUST use the
- * pod's conversation linked to its normalized path, created in the pod on first use without
- * notifying the pod, and `isPodDocument` MUST tell this second case; callers MUST hold the
- * document's lock, so concurrent posts share one conversation. Any other file has no conversation.
+ * @cc [owner:adrien,label:product] document-conversation-lookup
+ * A file in a conversation's files MUST find that conversation. A file in a pod MUST find the pod
+ * and its conversation linked to its normalized path, if any. Any other file, or one whose
+ * conversation or pod cannot be fetched, MUST find none. It MUST NOT create anything.
  */
-async function getDocumentConversation(
+async function fetchDocumentConversation(
   auth: Authenticator,
   documentPath: string
-): Promise<{
-  conversation: ConversationResource;
-  isPodDocument: boolean;
-} | null> {
+): Promise<DocumentConversationLookup | null> {
   const scope = parseScopedPrefix(documentPath);
   if (!scope) {
     return null;
@@ -52,28 +56,18 @@ async function getDocumentConversation(
   switch (scope.kind) {
     case "conversation": {
       const conversation = await ConversationResource.fetchById(auth, scope.id);
-      return conversation ? { conversation, isPodDocument: false } : null;
+      return conversation ? { kind: "conversation", conversation } : null;
     }
     case "pod": {
       const pod = await SpaceResource.fetchById(auth, scope.id);
       if (!pod) {
         return null;
       }
-      const existing = await ConversationResource.fetchLatestForDocument(auth, {
-        space: pod,
-        documentPath,
-      });
-      if (existing) {
-        return { conversation: existing, isPodDocument: true };
-      }
-      const conversation = await createConversation(auth, {
-        title: `Comments · ${getFileNameFromScopedPath(documentPath)}`,
-        visibility: "unlisted",
-        spaceId: pod.id,
-        metadata: { dfmDocumentPath: documentPath },
-        notifyPodMembers: false,
-      });
-      return { conversation, isPodDocument: true };
+      const conversation = await ConversationResource.fetchLatestForDocument(
+        auth,
+        { space: pod, documentPath }
+      );
+      return { kind: "pod", pod, conversation };
     }
     case "conversation_metadata":
     case "user":
@@ -82,6 +76,40 @@ async function getDocumentConversation(
     default:
       return assertNever(scope);
   }
+}
+
+/**
+ * @cc [owner:tdraier,label:product] document-conversation
+ * A file MUST use the conversation `fetchDocumentConversation` finds. A file in a pod without one
+ * MUST use a conversation linked to its normalized path, created in the pod without notifying the
+ * pod, and `isPodDocument` MUST tell a pod's file; callers MUST hold the document's lock, so
+ * concurrent posts share one conversation. Any other file has no conversation.
+ */
+async function getDocumentConversation(
+  auth: Authenticator,
+  documentPath: string
+): Promise<{
+  conversation: ConversationResource;
+  isPodDocument: boolean;
+} | null> {
+  const found = await fetchDocumentConversation(auth, documentPath);
+  if (!found) {
+    return null;
+  }
+  if (found.kind === "conversation") {
+    return { conversation: found.conversation, isPodDocument: false };
+  }
+  if (found.conversation) {
+    return { conversation: found.conversation, isPodDocument: true };
+  }
+  const conversation = await createConversation(auth, {
+    title: `Comments · ${getFileNameFromScopedPath(documentPath)}`,
+    visibility: "unlisted",
+    spaceId: found.pod.id,
+    metadata: { dfmDocumentPath: documentPath },
+    notifyPodMembers: false,
+  });
+  return { conversation, isPodDocument: true };
 }
 
 /**
