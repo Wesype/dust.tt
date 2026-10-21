@@ -1,5 +1,4 @@
 import {
-  deriveFrameScheduleId,
   FRAME_DATABASE_NAME_REGEX,
   FRAME_DEFAULT_UI_ENTRY_POINT,
   FrameManifestSchema,
@@ -7,11 +6,9 @@ import {
   isSafeFrameRelativePath,
   MAX_FRAME_DATABASE_COUNT,
   MAX_FRAME_FUNCTION_DESCRIPTION_LENGTH,
-  MAX_FRAME_FUNCTION_NAME_LENGTH,
   MAX_FRAME_NAME_LENGTH,
   parseFrameManifest,
   validateFrameV2Name,
-  MAX_FRAME_SCHEDULE_ID_LENGTH,
 } from "@app/types/api/frame_manifest";
 import {
   DEFAULT_SANDBOX_FUNCTION_EXECUTION_MODE,
@@ -203,11 +200,6 @@ describe("FrameManifestSchema", () => {
       timezone: "Europe/Paris",
       input: { source: "crm", limit: 50 },
     };
-    const SCHEDULE_ID = deriveFrameScheduleId({
-      functionName: FUNCTION.name,
-      ...SCHEDULE,
-    });
-
     function parseWithSchedules(
       schedules: unknown[],
       fn: Record<string, unknown> = FUNCTION
@@ -218,7 +210,7 @@ describe("FrameManifestSchema", () => {
       });
     }
 
-    it("parses a schedule on a durable function and derives its id", () => {
+    it("parses a schedule on a durable function", () => {
       const parsed = parseWithSchedules([SCHEDULE], {
         ...FUNCTION,
         executionMode: "durable",
@@ -226,66 +218,16 @@ describe("FrameManifestSchema", () => {
 
       expect(parsed.success).toBe(true);
       if (parsed.success) {
-        expect(parsed.data.functions[0].schedules).toEqual([
-          { ...SCHEDULE, id: SCHEDULE_ID },
-        ]);
-        expect(SCHEDULE_ID).toMatch(/^add-task-[0-9a-f]{8}$/);
+        expect(parsed.data.functions[0].schedules).toEqual([SCHEDULE]);
       }
     });
 
-    it("derives the same id for the same declaration and a new one for any change", () => {
-      const same = deriveFrameScheduleId({
-        functionName: FUNCTION.name,
-        ...SCHEDULE,
-        input: { limit: 50, source: "crm" },
-      });
-      expect(same).toBe(SCHEDULE_ID);
-
-      for (const changed of [
-        { ...SCHEDULE, cron: "0 10 * * 1-5" },
-        { ...SCHEDULE, timezone: "UTC" },
-        { ...SCHEDULE, input: { source: "billing", limit: 50 } },
-      ]) {
-        expect(
-          deriveFrameScheduleId({ functionName: FUNCTION.name, ...changed })
-        ).not.toBe(SCHEDULE_ID);
-      }
-      expect(
-        deriveFrameScheduleId({ functionName: "list-tasks", ...SCHEDULE })
-      ).not.toBe(SCHEDULE_ID);
-    });
-
-    it("keeps derived ids within the id length limit", () => {
-      const id = deriveFrameScheduleId({
-        functionName: "a".repeat(MAX_FRAME_FUNCTION_NAME_LENGTH),
-        ...SCHEDULE,
-      });
-
-      expect(id).toHaveLength(MAX_FRAME_SCHEDULE_ID_LENGTH);
-      expect(id).toMatch(/-[0-9a-f]{8}$/);
-    });
-
-    it("keeps functions apart even when their names agree on the visible prefix", () => {
-      const prefix = "a".repeat(MAX_FRAME_SCHEDULE_ID_LENGTH);
-      const first = deriveFrameScheduleId({
-        functionName: `${prefix}-one`,
-        ...SCHEDULE,
-      });
-      const second = deriveFrameScheduleId({
-        functionName: `${prefix}-two`,
-        ...SCHEDULE,
-      });
-
-      expect(first.slice(0, -9)).toBe(second.slice(0, -9));
-      expect(first).not.toBe(second);
-    });
-
-    it("ignores an id written in the manifest", () => {
+    it("drops an id written in the manifest", () => {
       const parsed = parseWithSchedules([{ ...SCHEDULE, id: "custom" }]);
 
       expect(parsed.success).toBe(true);
       if (parsed.success) {
-        expect(parsed.data.functions[0].schedules[0].id).toBe(SCHEDULE_ID);
+        expect(parsed.data.functions[0].schedules).toEqual([SCHEDULE]);
       }
     });
 
@@ -298,8 +240,7 @@ describe("FrameManifestSchema", () => {
 
       expect(parsed.success).toBe(true);
       if (parsed.success) {
-        const ids = parsed.data.functions[0].schedules.map((s) => s.id);
-        expect(new Set(ids).size).toBe(3);
+        expect(parsed.data.functions[0].schedules).toHaveLength(3);
       }
     });
 
@@ -403,9 +344,7 @@ describe("FrameManifestSchema", () => {
 
       expect(parsed.isOk()).toBe(true);
       if (parsed.isOk()) {
-        expect(parsed.value.functions[0].schedules).toEqual([
-          { ...SCHEDULE, id: SCHEDULE_ID },
-        ]);
+        expect(parsed.value.functions[0].schedules).toEqual([SCHEDULE]);
       }
     });
   });

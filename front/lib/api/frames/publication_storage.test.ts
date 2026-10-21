@@ -32,7 +32,6 @@ import { fileStorageMock } from "@app/tests/utils/mocks/file_storage";
 import { redisMock } from "@app/tests/utils/mocks/redis";
 import { getNamespace } from "@app/tests/utils/test_cls";
 import {
-  deriveFrameScheduleId,
   FRAME_MANIFEST_FILE,
   FrameManifestSchema,
 } from "@app/types/api/frame_manifest";
@@ -163,17 +162,10 @@ const functionArtifacts = [
   },
 ] satisfies FramePublicationFunctionArtifact[];
 
-const addTaskDeclaration = {
+const addTaskSchedule = {
   cron: "0 9 * * 1-5",
   timezone: "Europe/Paris",
   input: { title: "Daily stand-up" },
-};
-const addTaskSchedule = {
-  ...addTaskDeclaration,
-  id: deriveFrameScheduleId({
-    functionName: "add-task",
-    ...addTaskDeclaration,
-  }),
 };
 
 const manifestWithSchedule = FrameManifestSchema.parse({

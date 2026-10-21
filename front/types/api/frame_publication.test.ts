@@ -1,7 +1,4 @@
-import {
-  deriveFrameScheduleId,
-  FrameManifestSchema,
-} from "@app/types/api/frame_manifest";
+import { FrameManifestSchema } from "@app/types/api/frame_manifest";
 import {
   FramePublicationDescriptorSchema,
   isSameFramePublicationContent,
@@ -132,14 +129,10 @@ describe("FramePublicationDescriptorSchema", () => {
 });
 
 describe("publication schedules", () => {
-  const declaration = {
+  const schedule = {
     cron: "0 9 * * 1-5",
     timezone: "Europe/Paris",
     input: { title: "Daily refresh", tags: ["crm", null, 3] },
-  };
-  const schedule = {
-    ...declaration,
-    id: deriveFrameScheduleId({ functionName: "add-task", ...declaration }),
   };
   const publicationWithSchedule = {
     ...publication,

@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import {
   cronFiresAtMostHourly,
   isValidIanaTimezone,
@@ -105,41 +103,6 @@ const FrameRelativePathSchema = z
       "Path must be relative to the Frame folder, using forward slashes and no '.', '..' or empty segments.",
   });
 
-const FRAME_SCHEDULE_ID_HASH_LENGTH = 8;
-export const MAX_FRAME_SCHEDULE_ID_LENGTH = 64;
-
-/**
- * @cc [owner:smb2268,label:product] schedule-id-is-derived-from-its-declaration
- * A schedule's id MUST be computed from its function name, cron, timezone and input, all four
- * hashed, and never declared in the manifest or stored on its own. Identical declarations MUST
- * yield the same id and a change to any of the four a different one, so reconciliation treats an
- * edited schedule as a new schedule and `(frameId, scheduleId)` identifies a schedule Frame-wide.
- * The id MUST be at most `MAX_FRAME_SCHEDULE_ID_LENGTH` characters.
- */
-export function deriveFrameScheduleId({
-  functionName,
-  cron,
-  timezone,
-  input,
-}: {
-  functionName: string;
-  cron: string;
-  timezone: string;
-  input: unknown;
-}): string {
-  // The name is hashed too: the readable prefix is truncated, so it alone cannot keep two long
-  // function names apart.
-  const digest = createHash("sha256")
-    .update(
-      JSON.stringify([functionName, cron, timezone, stableStringify(input)])
-    )
-    .digest("hex")
-    .slice(0, FRAME_SCHEDULE_ID_HASH_LENGTH);
-  const prefixLength =
-    MAX_FRAME_SCHEDULE_ID_LENGTH - FRAME_SCHEDULE_ID_HASH_LENGTH - 1;
-  return `${functionName.slice(0, prefixLength)}-${digest}`;
-}
-
 const FrameScheduleSourceManifestSchema = z
   .object({
     cron: z.string(),
@@ -196,10 +159,10 @@ export const FrameFunctionManifestSchema = z.object({
 type FrameFunctionSourceManifest = z.infer<typeof FrameFunctionManifestSchema>;
 
 /**
- * @cc [owner:smb2268,label:product] schedule-declarations-unique-per-frame
- * Two schedules of a Frame MUST NOT derive the same id: a function declaring the same cron,
- * timezone and input twice MUST fail to parse. Any other combination of schedules, on one
- * function or across functions, is allowed.
+ * @cc [owner:smb2268,label:product] schedule-declarations-unique-per-function
+ * A function declaring the same cron, timezone and input twice MUST fail to parse; input equality
+ * ignores key order. Any other combination of schedules, on one function or across functions, is
+ * allowed.
  */
 /**
  * @cc [owner:smb2268,label:product] schedules-require-durable-functions
@@ -214,9 +177,8 @@ function refineFrameScheduleDeclarations(
   functions: FrameFunctionSourceManifest[],
   context: z.RefinementCtx
 ): void {
-  // Same derivation the transform stores on each schedule.
-  const seenIds = new Set<string>();
   functions.forEach((fn, functionIndex) => {
+    const seenDeclarations = new Set<string>();
     fn.schedules.forEach((schedule, scheduleIndex) => {
       const path = ["functions", functionIndex, "schedules", scheduleIndex];
       if (fn.executionMode !== "durable") {
@@ -233,20 +195,19 @@ function refineFrameScheduleDeclarations(
           path: [...path, "cron"],
         });
       }
-      const id = deriveFrameScheduleId({
-        functionName: fn.name,
-        cron: schedule.cron,
-        timezone: schedule.timezone,
-        input: schedule.input,
-      });
-      if (seenIds.has(id)) {
+      const declaration = JSON.stringify([
+        schedule.cron,
+        schedule.timezone,
+        stableStringify(schedule.input),
+      ]);
+      if (seenDeclarations.has(declaration)) {
         context.addIssue({
           code: "custom",
           message: `Function '${fn.name}' declares the same schedule twice (cron '${schedule.cron}', timezone '${schedule.timezone}', same input).`,
           path,
         });
       }
-      seenIds.add(id);
+      seenDeclarations.add(declaration);
     });
   });
 }
@@ -303,18 +264,6 @@ export const FrameManifestSchema = FrameSourceManifestSchema.transform(
   (manifest) => ({
     ...manifest,
     uiEntryPoint: manifest.uiEntryPoint ?? FRAME_DEFAULT_UI_ENTRY_POINT,
-    functions: manifest.functions.map((fn) => ({
-      ...fn,
-      schedules: fn.schedules.map((schedule) => ({
-        ...schedule,
-        id: deriveFrameScheduleId({
-          functionName: fn.name,
-          cron: schedule.cron,
-          timezone: schedule.timezone,
-          input: schedule.input,
-        }),
-      })),
-    })),
   })
 );
 
