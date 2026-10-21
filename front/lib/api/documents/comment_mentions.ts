@@ -77,6 +77,7 @@ async function getDocumentConversation(
     }
     case "conversation_metadata":
     case "user":
+    case "frame":
       return null;
     default:
       return assertNever(scope);
