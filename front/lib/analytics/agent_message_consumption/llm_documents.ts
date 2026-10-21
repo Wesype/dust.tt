@@ -7,7 +7,10 @@ import type {
   BilledRunUsage,
   ReconciledConsumptionItem,
 } from "@app/lib/analytics/agent_message_consumption/load";
-import { isUnavailableRunUsage } from "@app/lib/api/assistant/agent_message_consumption_attribution/allocation";
+import {
+  compareRunsChronologically,
+  isUnavailableRunUsage,
+} from "@app/lib/api/assistant/agent_message_consumption_attribution/allocation";
 import type { AgentMessageModelConsumptionItemResource } from "@app/lib/resources/agent_message_consumption_item_resource";
 import type {
   AgentMessageConsumptionAnalyticsLlmData,
@@ -40,17 +43,18 @@ function emptyGrossCredits(): AgentMessageConsumptionAnalyticsLlmGrossCreditMicr
 }
 
 // Match each model run to the step stored on its output content. If no content identifies the run,
-// use its zero-based position in the message's run list.
+// use its zero-based position among the message's runs in chronological order.
 function stepIndexByRunModelId({
-  dustRunIds,
   runs,
   stepContents,
-}: Pick<
-  AgentMessageConsumptionAnalyticsInput,
-  "dustRunIds" | "runs" | "stepContents"
->): Map<ModelId, number> {
-  const fallbackStepByDustRunId = new Map(
-    dustRunIds.map((dustRunId, index) => [dustRunId, index])
+}: Pick<AgentMessageConsumptionAnalyticsInput, "runs" | "stepContents">): Map<
+  ModelId,
+  number
+> {
+  const fallbackStepByRunModelId = new Map(
+    [...runs]
+      .sort(compareRunsChronologically)
+      .map((run, index) => [run.id, index])
   );
   const contentStepByDustRunId = new Map<string, number>();
   for (const content of stepContents) {
@@ -68,7 +72,7 @@ function stepIndexByRunModelId({
     runs.map((run) => [
       run.id,
       contentStepByDustRunId.get(run.dustRunId) ??
-        fallbackStepByDustRunId.get(run.dustRunId) ??
+        fallbackStepByRunModelId.get(run.id) ??
         0,
     ])
   );

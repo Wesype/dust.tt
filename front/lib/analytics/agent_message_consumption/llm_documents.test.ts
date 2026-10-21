@@ -153,4 +153,85 @@ describe("buildLlmConsumptionDocuments", () => {
       }),
     ]);
   });
+
+  it("falls back to the chronological run order without step content", async () => {
+    const { authenticator: auth, workspace } = await createResourceTest({
+      role: "admin",
+    });
+    const agent = await AgentConfigurationFactory.createTestAgent(auth);
+    const conversationType = await ConversationFactory.create(auth, {
+      agentConfigurationId: agent.sId,
+      messagesCreatedAt: [],
+    });
+    const conversation = await ConversationResource.fetchById(
+      auth,
+      conversationType.sId
+    );
+    if (!conversation) {
+      throw new Error("Conversation was not created");
+    }
+
+    const userMessage = await ConversationFactory.createUserMessageWithRank({
+      auth,
+      workspace,
+      conversationId: conversation.id,
+      rank: 0,
+      content: "Hello",
+    });
+    const firstRun = await RunFactory.createWithUsage(auth);
+    const secondRun = await RunFactory.createWithUsage(auth);
+    const agentMessage = await ConversationFactory.createAgentMessageWithRank({
+      workspace,
+      conversationId: conversation.id,
+      rank: 1,
+      parentId: userMessage.id,
+      agentConfigurationId: agent.sId,
+      agentConfigurationVersion: agent.version,
+    });
+    const agentMessageModelId = agentMessage.agentMessageId;
+    if (!agentMessageModelId) {
+      throw new Error("Agent message was not created");
+    }
+
+    await AgentMessageModel.update(
+      {
+        completedAt: new Date("2026-08-05T12:00:00.000Z"),
+        runIds: [secondRun.run.dustRunId, firstRun.run.dustRunId],
+        status: "succeeded",
+      },
+      { where: { id: agentMessageModelId, workspaceId: workspace.id } }
+    );
+    await AgentMessageConsumptionItemFactory.createItems(auth, {
+      agentMessageModelId,
+      conversation,
+      reconciled: true,
+      records: [firstRun, secondRun].map(({ runUsageModelId }) => ({
+        itemType: "output",
+        runUsageModelId,
+        outputTokensCount: 20,
+        grossAttributedCreditAmountMicro: 1_000,
+      })),
+    });
+
+    const input = await loadAgentMessageConsumptionAnalyticsInput(auth, {
+      agentMessageId: agentMessage.sId,
+    });
+    if (!input) {
+      throw new Error("Consumption analytics input was not loaded");
+    }
+    expect(input.stepContents).toEqual([]);
+    expect(
+      new Map(
+        buildLlmConsumptionDocuments(input).map((document) => [
+          document.run_usage_id,
+          document.step_index,
+        ])
+      )
+    ).toEqual(
+      new Map([
+        [firstRun.runUsageModelId.toString(), 0],
+        [secondRun.runUsageModelId.toString(), 1],
+      ])
+    );
+  });
 });

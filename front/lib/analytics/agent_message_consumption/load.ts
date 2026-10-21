@@ -73,7 +73,6 @@ export type AgentMessageConsumptionAnalyticsInput =
   ConsumptionAnalyticsMessageMetadata & {
     actions: AgentMCPActionResource[];
     attributionVersion: number;
-    dustRunIds: string[];
     enabledSkillIdsByActionId: ReadonlyMap<string, string[]>;
     // Every item of the newest attribution version, all reconciled.
     items: ReconciledConsumptionItem[];
@@ -370,7 +369,6 @@ export async function loadAgentMessageConsumptionAnalyticsInput(
     completedAt,
     contextOrigin: triggeringUserMessage.origin,
     conversationId: conversation.conversationId,
-    dustRunIds,
     enabledSkillIdsByActionId,
     items: reconciledItems.items,
     messageStatus: agentMessage.status,
