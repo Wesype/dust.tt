@@ -2,8 +2,6 @@ import { ConfigurableToolInputSchemas } from "@app/lib/actions/mcp_internal_acti
 import { INTERNAL_MIME_TYPES } from "@dust-tt/client";
 import { z } from "zod";
 
-export const MAX_BROWSE_URLS = 16;
-
 const SearchInputSchema = z.object({
   query: z
     .string()
@@ -99,48 +97,6 @@ export function isIncludeInputType(
     IncludeInputSchema.safeParse(input).success ||
     IncludeInputSchema.extend(TagsInputSchema.shape).safeParse(input).success
   );
-}
-
-export const WebsearchInputSchema = z.object({
-  query: z
-    .string()
-    .describe(
-      "The query used to perform the Google search. If requested by the " +
-        "user, use the Google syntax `site:` to restrict the search " +
-        "to a particular website or domain."
-    ),
-});
-
-type WebsearchInputType = z.infer<typeof WebsearchInputSchema>;
-
-export function isWebsearchInputType(
-  input: Record<string, unknown>
-): input is WebsearchInputType {
-  return WebsearchInputSchema.safeParse(input).success;
-}
-
-export const WebbrowseInputSchema = z.object({
-  urls: z
-    .string()
-    .array()
-    .max(MAX_BROWSE_URLS)
-    .describe(`List of urls to browse (max: ${MAX_BROWSE_URLS})`),
-  screenshotMode: z
-    .enum(["none", "viewport", "fullPage"])
-    .optional()
-    .describe("Screenshot mode: 'none' (default), 'viewport', or 'fullPage'."),
-  links: z
-    .boolean()
-    .optional()
-    .describe("If true, also retrieve outgoing links from the page."),
-});
-
-type WebbrowseInputType = z.infer<typeof WebbrowseInputSchema>;
-
-export function isWebbrowseInputType(
-  input: Record<string, unknown>
-): input is WebbrowseInputType {
-  return WebbrowseInputSchema.safeParse(input).success;
 }
 
 export const DataSourceFilesystemFindInputSchema = z.object({
