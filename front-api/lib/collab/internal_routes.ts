@@ -15,9 +15,11 @@ import type {
   CollabSourceWriteResponse,
 } from "@app/types/collab_internal";
 import {
+  COLLAB_AGENT_ACTIVITY_PATH,
   COLLAB_SOURCE_EDIT_PATH,
   COLLAB_SOURCE_READ_PATH,
   COLLAB_SOURCE_WRITE_PATH,
+  collabAgentActivityRequestSchema,
   collabSourceEditRequestSchema,
   collabSourceReadRequestSchema,
   collabSourceWriteRequestSchema,
@@ -64,7 +66,9 @@ function isAuthorized(authorization: string | undefined): boolean {
  * is, its replacement text in place of the source, answering `edit_refused` with `too_large` as
  * the session does for an edited source over that size (`collab-session-source-edit`). An edit
  * the session cannot apply because it cannot read its own document MUST answer 500, so the caller
- * reports a failure of the server rather than a refusal of the edit.
+ * reports a failure of the server rather than a refusal of the edit. An agent's activity MUST be
+ * shown only once `checkCollabReadAccess` opens the file for the request's user, workspace and
+ * path, answering as the collab ticket route does otherwise.
  */
 export function createInternalRoutes(hocuspocus: Hocuspocus<CollabAccess>) {
   const app = createHono();
@@ -231,6 +235,30 @@ export function createInternalRoutes(hocuspocus: Hocuspocus<CollabAccess>) {
         default:
           return assertNever(edited.error.kind);
       }
+    }
+  );
+
+  /** @ignoreswagger */
+  app.post(
+    COLLAB_AGENT_ACTIVITY_PATH,
+    validate("json", collabAgentActivityRequestSchema),
+    async (ctx) => {
+      const { workspaceId, userId, canonicalPath, agent, activity } =
+        ctx.req.valid("json");
+      const documentName = toSessionName(workspaceId, canonicalPath);
+      if (!hocuspocus.documents.has(documentName)) {
+        return ctx.json({});
+      }
+
+      const file = await checkCollabReadAccess(
+        await Authenticator.fromUserIdAndWorkspaceId(userId, workspaceId),
+        canonicalPath
+      );
+      if (file.isErr()) {
+        return apiError(ctx, collabAccessErrorToApiError(file.error));
+      }
+      showAgentActivity(hocuspocus, documentName, agent, activity);
+      return ctx.json({});
     }
   );
 
