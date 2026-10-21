@@ -131,6 +131,7 @@ const API_ERROR_TYPES = [
   "file_read_only",
   "collab_session_conflict",
   "collab_session_write_refused",
+  "collab_session_unsupported_location",
   // Runs:
   "run_not_found",
   // Spaces:

@@ -57,6 +57,14 @@ export function collabAccessErrorToApiError(
           message: error.message,
         },
       };
+    case "unsupported_location":
+      return {
+        status_code: 400,
+        api_error: {
+          type: "collab_session_unsupported_location",
+          message: error.message,
+        },
+      };
     case "too_large":
       return {
         status_code: 413,

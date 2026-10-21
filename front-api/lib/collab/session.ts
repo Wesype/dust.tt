@@ -221,8 +221,7 @@ export function showAgentActivity(
  * `replaceYDocContent` as a change from `file`, replace the session's threads with the ones it
  * returns, send them to every connection when they changed, and store the document so the
  * save writes the change; a source the editor refuses MUST fail and change nothing. `file`
- * MUST be able to write, and the session's storage MUST have revisions, since without them its
- * saves could not be conditional; otherwise the write MUST fail and change nothing. It MUST
+ * MUST be able to write; otherwise the write MUST fail and change nothing. It MUST
  * take its turn among the document's comment commands, answering `closed` if the document unloaded
  * meanwhile, and a write that fails MUST NOT hold the later ones. A write whose turn has not come
  * within `COLLAB_SOURCE_WRITE_WAIT_MS` MUST answer `busy` and never apply, so its caller never
@@ -397,11 +396,6 @@ async function applyInTurn<T, R>(
     return new Ok({ kind: "busy" });
   }
   const { document, session } = open;
-  if (session.lastSave.revision === undefined) {
-    return new Err(
-      "This document's storage does not support safe changes yet."
-    );
-  }
 
   let turn: "waiting" | "taken" | "expired" = "waiting";
   const write = (): Result<TurnOutcome<T, R>, string> => {
@@ -668,8 +662,7 @@ export async function saveSession(
  * continuing from the revision of the session's last save, all read when its write starts. A
  * session MUST have at most one write pending, so a Redis that does not answer holds one state
  * per document: the stores asked while it is pending MUST start a single write once it has been
- * answered. Nothing MUST be stored for a session whose last save has no revision. A failure MUST
- * be logged and MUST NOT throw.
+ * answered. A failure MUST be logged and MUST NOT throw.
  */
 export function storeSessionState(document: Document): void {
   const session = getSession(document);
@@ -704,16 +697,12 @@ async function storeStateOnce(
   document: Document,
   { lastSave, epoch, comments }: CollabSession
 ): Promise<void> {
-  const { revision } = lastSave;
-  if (revision === undefined) {
-    return;
-  }
   const fields = stateLogFields(document);
   let stored: Awaited<ReturnType<typeof storeYDocState>>;
   try {
     stored = await storeYDocState(document.name, {
       epoch,
-      revision,
+      revision: lastSave.revision,
       doc: document,
       comments,
     });

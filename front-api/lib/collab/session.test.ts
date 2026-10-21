@@ -306,28 +306,6 @@ describe("readSessionSource, writeSessionSource and editSessionSource", () => {
     expect(await openSource(hocuspocus, name)).toBe(EDITED);
   });
 
-  it("refuse a write to a session whose storage has no revisions, changing nothing", async () => {
-    const hocuspocus = createCollabHocuspocus();
-    const { agent, reader, name } = await collabAccesses();
-    vi.mocked(loadCollabSession).mockImplementationOnce(async () => {
-      const loaded = await loadSource();
-      return new Ok({
-        ...loaded.value,
-        lastSave: { ...loaded.value.lastSave, revision: undefined },
-      });
-    });
-    await hocuspocus.openDirectConnection(name, reader);
-
-    const written = await writeSessionSource(hocuspocus, {
-      file: agent,
-      base: SOURCE,
-      source: EDITED,
-    });
-
-    expect(written.isErr()).toBe(true);
-    expect(await openSource(hocuspocus, name)).toBe(SOURCE);
-  });
-
   it("refuse a source the editor refuses, or a file that cannot write, changing nothing", async () => {
     const hocuspocus = createCollabHocuspocus();
     const { agent, reader, name } = await collabAccesses();

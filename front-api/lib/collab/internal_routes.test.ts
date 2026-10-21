@@ -4,9 +4,9 @@ import config from "@app/lib/api/config";
 import { DustFileSystem, DustFileSystemError } from "@app/lib/api/file_system";
 import { WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES } from "@app/lib/api/files/file_system_ops";
 import { CollabAgentFactory } from "@app/tests/utils/CollabAgentFactory";
+import { writeConversationFile } from "@app/tests/utils/conversation_files";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
-import { writeUserFile } from "@app/tests/utils/user_files";
 import { toSessionName } from "@app/types/collab";
 import {
   COLLAB_AGENT_ACTIVITY_PATH,
@@ -16,7 +16,6 @@ import {
   COLLAB_SOURCE_WRITE_PATH,
 } from "@app/types/collab_internal";
 import { Err } from "@app/types/shared/result";
-import { giveSessionRevision } from "@front-api/lib/collab/collab.test_utils";
 import { createCollabHocuspocus } from "@front-api/lib/collab/hocuspocus";
 import { createInternalRoutes } from "@front-api/lib/collab/internal_routes";
 import { createHono } from "@front-api/lib/hono";
@@ -128,7 +127,11 @@ describe("createInternalRoutes", () => {
   async function openNotes() {
     const { authenticator: auth, workspace } = await createResourceTest({});
     await FeatureFlagFactory.basic(auth, "co_edition");
-    const canonicalPath = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const canonicalPath = await writeConversationFile(
+      auth,
+      "notes.md",
+      "# Notes\n"
+    );
     const file = await checkCollabAccess(auth, canonicalPath);
     if (file.isErr()) {
       throw new Error(file.error.message);
@@ -310,8 +313,7 @@ describe("createInternalRoutes", () => {
   });
 
   it("applies an edit to the open document's current source", async () => {
-    const { hocuspocus, name, request } = await openNotes();
-    giveSessionRevision(hocuspocus, name);
+    const { hocuspocus, request } = await openNotes();
 
     const response = await post(
       COLLAB_SOURCE_EDIT_PATH,
@@ -375,7 +377,6 @@ describe("createInternalRoutes", () => {
 
   it("answers 500 to an edit when the session cannot read its own document", async () => {
     const { hocuspocus, name, request } = await openNotes();
-    giveSessionRevision(hocuspocus, name);
     hocuspocus.documents.get(name)?.getMap(ENVELOPE_MAP_NAME).clear();
 
     const response = await post(

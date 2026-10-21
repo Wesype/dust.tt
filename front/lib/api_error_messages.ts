@@ -116,6 +116,7 @@ export const API_ERROR_MESSAGES: Record<APIErrorType, MessageDescriptor> = {
   file_read_only: msg`You can only read this file.`,
   collab_session_conflict: msg`This file is being edited live and changed before your edit could be saved. Reload it and try again.`,
   collab_session_write_refused: msg`This file is being edited live and can't take this change.`,
+  collab_session_unsupported_location: msg`Only files in a conversation or a Pod can be edited live.`,
   run_not_found: msg`Run not found.`,
   space_already_exists: msg`A space with this name already exists.`,
   space_not_found: msg`Space not found.`,

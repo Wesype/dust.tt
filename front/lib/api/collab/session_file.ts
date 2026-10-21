@@ -23,7 +23,7 @@ import { Err, Ok } from "@app/types/shared/result";
 
 /** The file as the session last read or saved it. */
 export interface CollabSave {
-  revision: string | undefined;
+  revision: string;
   source: string;
 }
 
@@ -50,9 +50,10 @@ function readSessionText(
 
 /**
  * @cc [owner:tdraier,label:product;concurrency] collab-session-load
- * The save returned MUST carry the revision of the bytes read, when storage has one, and
- * as source what `yDocToDfm` gives for the document those bytes load, so a load alone never counts
- * as a change, or the text read when the editor cannot load them and the stored state is returned.
+ * The save returned MUST carry the revision of the bytes read, and as source what `yDocToDfm`
+ * gives for the document those bytes load, so a load alone never counts as a change, or the text
+ * read when the editor cannot load them and the stored state is returned. A read without a
+ * revision MUST fail the load, since none of the session's saves could be conditional.
  */
 /**
  * @cc [owner:tdraier,label:product;concurrency] collab-session-load-state
@@ -61,9 +62,9 @@ function readSessionText(
  * that state's document, threads and epoch, so its Yjs ids survive a reload, even when the editor
  * cannot load the bytes read, with `hasUnsavedEdits` when `yDocToDfm` gives it another source than
  * the returned save's. Otherwise the document MUST be built from the bytes read, with a new epoch
- * and no unsaved edits. `shouldStoreState` MUST be set when storage has a revision, the fetch did
- * not fail, and no state was stored at that revision. A state that cannot be fetched MUST only be
- * logged: the load then goes on from the bytes read. The load MUST NOT store anything.
+ * and no unsaved edits. `shouldStoreState` MUST be set when the fetch did not fail and no state
+ * was stored at that revision. A state that cannot be fetched MUST only be logged: the load then
+ * goes on from the bytes read. The load MUST NOT store anything.
  */
 export async function loadCollabSession({
   dustFs,
@@ -79,18 +80,10 @@ export async function loadCollabSession({
   }
 
   const { text, revision } = read.value;
-  const fromFile = readSessionText(text);
   if (revision === undefined) {
-    return fromFile.isErr()
-      ? fromFile
-      : new Ok({
-          content: fromFile.value.content,
-          lastSave: { revision, source: fromFile.value.source },
-          epoch: newYDocEpoch(),
-          hasUnsavedEdits: false,
-          shouldStoreState: false,
-        });
+    return new Err("This file's storage does not support revisions.");
   }
+  const fromFile = readSessionText(text);
 
   const documentName = toSessionName(workspaceId, canonicalPath);
   const stored = await fetchYDocState(documentName);
@@ -149,12 +142,11 @@ export class CollabSaveError extends Error {
 /**
  * @cc [owner:tdraier,label:product;concurrency] collab-session-save
  * The save MUST write `yDocToDfm` of the session, its threads included, only when it
- * differs from `last.source`. With a `last.revision`, the write MUST be conditional on it: a file
- * changed since then MUST be left unchanged and the save MUST fail. Without one, the file is
- * overwritten, as the editor's own save does on such storage. It MUST return the file as now
- * stored: `last` when nothing was written, otherwise the written source and its revision. A write
- * refused because the file changed since `last.revision` MUST fail with `revision_conflict`, any
- * other failure with `failed`.
+ * differs from `last.source`, and conditional on `last.revision`: a file changed since then MUST
+ * be left unchanged and the save MUST fail. It MUST return the file as now stored: `last` when
+ * nothing was written, otherwise the written source and its revision. A write refused because the
+ * file changed since `last.revision` MUST fail with `revision_conflict`, any other failure with
+ * `failed`.
  */
 export async function saveCollabSession(
   { auth, dustFs, canonicalPath }: CollabAccess,
@@ -169,9 +161,8 @@ export async function saveCollabSession(
     return new Ok(last);
   }
 
-  // TODO(co-edition): without `last.revision` the write is unconditional, so threads or content
-  // written to the file since the load are erased. It also decodes the source back from the
-  // buffer and stats the file again, on every save.
+  // TODO(co-edition): it decodes the source back from the buffer and stats the file again, on
+  // every save.
   const written = await writeCanonicalFileContent(
     auth,
     dustFs,
@@ -190,7 +181,13 @@ export async function saveCollabSession(
       )
     );
   }
-  return new Ok({ revision: written.value.revision, source: source.value });
+  const { revision } = written.value;
+  if (revision === undefined) {
+    return new Err(
+      new CollabSaveError("failed", "The file was written without a revision.")
+    );
+  }
+  return new Ok({ revision, source: source.value });
 }
 
 // A name taken by another copy made in the same minute gets a number: past this many, give up.

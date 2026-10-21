@@ -63,9 +63,13 @@ describe("live document names", () => {
 });
 
 describe("openCollabAccess and loadCollabSession", () => {
-  it("open the user's Markdown file for writing and load its content", async () => {
+  it("open a conversation's Markdown file for writing and load its content", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n\nHello.\n");
+    const path = await writeConversationFile(
+      auth,
+      "notes.md",
+      "# Notes\n\nHello.\n"
+    );
 
     const file = await openCollabAccess(auth, path);
     expect(file.isOk()).toBe(true);
@@ -86,14 +90,18 @@ describe("openCollabAccess and loadCollabSession", () => {
 
   it("open a .markdown file, as the editor does", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    const path = await writeUserFile(auth, "notes.markdown", "# Notes\n");
+    const path = await writeConversationFile(
+      auth,
+      "notes.markdown",
+      "# Notes\n"
+    );
 
     expect((await openCollabAccess(auth, path)).isOk()).toBe(true);
   });
 
   it("refuse a file that is not Markdown", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    const path = await writeUserFile(
+    const path = await writeConversationFile(
       auth,
       "notes.txt",
       "Hello.\n",
@@ -105,7 +113,7 @@ describe("openCollabAccess and loadCollabSession", () => {
 
   it("refuse a path that is not normalized", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const path = await writeConversationFile(auth, "notes.md", "# Notes\n");
     const [scope, name] = path.split("/");
 
     expect((await openCollabAccess(auth, `${scope}/./${name}`)).isErr()).toBe(
@@ -116,7 +124,7 @@ describe("openCollabAccess and loadCollabSession", () => {
 
   it("refuse a path with a trailing slash, which a backend may resolve to the file", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const path = await writeConversationFile(auth, "notes.md", "# Notes\n");
     vi.spyOn(DustFileSystem.prototype, "stat").mockResolvedValue(
       new Ok({ contentType: "text/markdown", sizeBytes: 8 })
     );
@@ -126,7 +134,8 @@ describe("openCollabAccess and loadCollabSession", () => {
 
   it("refuse a missing file", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    const path = `user-${auth.getNonNullableUser().sId}/missing.md`;
+    const notes = await writeConversationFile(auth, "notes.md", "# Notes\n");
+    const path = notes.replace(/notes\.md$/, "missing.md");
     fileStorageMock.setFileExists(
       (filePath) => !filePath.endsWith("missing.md")
     );
@@ -136,7 +145,7 @@ describe("openCollabAccess and loadCollabSession", () => {
 
   it("refuse a directory named like a Markdown file", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const path = await writeConversationFile(auth, "notes.md", "# Notes\n");
     vi.spyOn(DustFileSystem.prototype, "stat").mockResolvedValue(
       new Ok({ contentType: "application/x-directory", sizeBytes: 0 })
     );
@@ -146,7 +155,7 @@ describe("openCollabAccess and loadCollabSession", () => {
 
   it("refuse a file larger than the file API can write", async () => {
     const { authenticator: auth } = await createResourceTest({});
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const path = await writeConversationFile(auth, "notes.md", "# Notes\n");
     vi.spyOn(DustFileSystem.prototype, "stat").mockResolvedValue(
       new Ok({
         contentType: "text/markdown",
@@ -160,16 +169,44 @@ describe("openCollabAccess and loadCollabSession", () => {
   it("refuse another user's file", async () => {
     const { authenticator: owner } = await createResourceTest({});
     const { authenticator: other } = await createResourceTest({});
-    const path = await writeUserFile(owner, "notes.md", "# Notes\n");
+    const path = await writeConversationFile(owner, "notes.md", "# Notes\n");
 
     expect((await openCollabAccess(other, path)).isErr()).toBe(true);
+  });
+
+  it("refuse a user's own file, which the file API reads without a revision", async () => {
+    const { authenticator: auth } = await createResourceTest({});
+    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+
+    const file = await openCollabAccess(auth, path);
+
+    expect(file.isErr() && file.error.code).toBe("unsupported_location");
+  });
+
+  it("fail to load a file read without a revision", async () => {
+    const { authenticator: auth, workspace } = await createResourceTest({});
+    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const dustFs = await DustFileSystem.forUser(auth);
+    if (dustFs.isErr()) {
+      throw dustFs.error;
+    }
+
+    const loaded = await loadCollabSession({
+      auth,
+      workspaceId: workspace.sId,
+      canonicalPath: path,
+      dustFs: dustFs.value,
+      canWrite: true,
+    });
+
+    expect(loaded.isErr()).toBe(true);
   });
 });
 
 describe("saveCollabSession", () => {
-  async function loadUserFile(text: string) {
+  async function loadFile(text: string) {
     const { authenticator: auth } = await createResourceTest({});
-    const path = await writeUserFile(auth, "notes.md", text);
+    const path = await writeConversationFile(auth, "notes.md", text);
     const file = await openCollabAccess(auth, path);
     if (file.isErr()) {
       throw new Error(file.error.message);
@@ -183,7 +220,7 @@ describe("saveCollabSession", () => {
   }
 
   it("does not write a document that has not changed", async () => {
-    const { file, content, lastSave } = await loadUserFile("# Notes\n");
+    const { file, content, lastSave } = await loadFile("# Notes\n");
 
     const result = await saveCollabSession(file, content, lastSave);
     expect(result.isOk() && result.value).toEqual(lastSave);
@@ -191,7 +228,7 @@ describe("saveCollabSession", () => {
   });
 
   it("writes an edit to the file", async () => {
-    const { auth, file, content, lastSave } = await loadUserFile("# Notes\n");
+    const { auth, file, content, lastSave } = await loadFile("# Notes\n");
     typeInto(content, "Edited.");
 
     const result = await saveCollabSession(file, content, lastSave);
@@ -208,7 +245,7 @@ describe("saveCollabSession", () => {
   });
 
   it("writes conditional on the last revision and returns the new one", async () => {
-    const { file, content, lastSave } = await loadUserFile("# Notes\n");
+    const { file, content, lastSave } = await loadFile("# Notes\n");
     typeInto(content, "Edited.");
     vi.mocked(writeCanonicalFileContent).mockResolvedValueOnce(
       new Ok({ created: false, revision: "8" })
@@ -223,7 +260,7 @@ describe("saveCollabSession", () => {
   });
 
   it("fails when the file changed since its last revision", async () => {
-    const { file, content, lastSave } = await loadUserFile("# Notes\n");
+    const { file, content, lastSave } = await loadFile("# Notes\n");
     typeInto(content, "Edited.");
     vi.mocked(writeCanonicalFileContent).mockResolvedValueOnce(
       new Err(
@@ -412,9 +449,6 @@ describe("loadCollabSession with the stored Yjs state", () => {
     file: ConversationFile,
     { epoch, lastSave, content }: Awaited<ReturnType<typeof load>>
   ) {
-    if (lastSave.revision === undefined) {
-      throw new Error("A conversation's file has revisions.");
-    }
     const stored = await storeYDocState(
       toSessionName(file.workspaceId, file.canonicalPath),
       { epoch, revision: lastSave.revision, ...content }
@@ -546,23 +580,5 @@ describe("loadCollabSession with the stored Yjs state", () => {
     expect(bodyOf(loaded.content.doc)).toContain("Hello.");
     expect(loaded.hasUnsavedEdits).toBe(false);
     expect(loaded.shouldStoreState).toBe(false);
-  });
-
-  it("starts a new epoch at each load and asks no store on storage without revisions", async () => {
-    const { authenticator: auth } = await createResourceTest({});
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
-    const file = await openCollabAccess(auth, path);
-    if (file.isErr()) {
-      throw new Error(file.error.message);
-    }
-
-    const first = await loadCollabSession(file.value);
-    const second = await loadCollabSession(file.value);
-
-    expect(first.isOk() && first.value.lastSave.revision).toBeUndefined();
-    expect(first.isOk() && second.isOk() && first.value.epoch).not.toBe(
-      second.isOk() && second.value.epoch
-    );
-    expect(first.isOk() && first.value.shouldStoreState).toBe(false);
   });
 });

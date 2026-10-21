@@ -6,9 +6,9 @@ import { Authenticator } from "@app/lib/auth";
 import { FeatureFlagResource } from "@app/lib/resources/feature_flag_resource";
 import { MembershipResource } from "@app/lib/resources/membership_resource";
 import { WorkspaceResource } from "@app/lib/resources/workspace_resource";
+import { writeConversationFile } from "@app/tests/utils/conversation_files";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
-import { writeUserFile } from "@app/tests/utils/user_files";
 import { toSessionName } from "@app/types/collab";
 import { Err } from "@app/types/shared/result";
 import {
@@ -31,7 +31,7 @@ describe("authenticateConnection", () => {
   it("opens the ticket's file for its user, once", async () => {
     const { authenticator: auth, workspace } = await createResourceTest({});
     await FeatureFlagFactory.basic(auth, "co_edition");
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const path = await writeConversationFile(auth, "notes.md", "# Notes\n");
     const name = { workspaceId: workspace.sId, canonicalPath: path };
     const ticket = await ticketFor(auth, path);
 
@@ -46,7 +46,7 @@ describe("authenticateConnection", () => {
   it("opens the file for a user who can only read it", async () => {
     const { authenticator: auth, workspace } = await createResourceTest({});
     await FeatureFlagFactory.basic(auth, "co_edition");
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const path = await writeConversationFile(auth, "notes.md", "# Notes\n");
     const readOnly = vi
       .spyOn(DustFileSystem.prototype, "checkWriteAccess")
       .mockReturnValue(
@@ -66,7 +66,7 @@ describe("authenticateConnection", () => {
   it("refuses a ticket minted for another file", async () => {
     const { authenticator: auth, workspace } = await createResourceTest({});
     await FeatureFlagFactory.basic(auth, "co_edition");
-    const notes = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const notes = await writeConversationFile(auth, "notes.md", "# Notes\n");
     const ticket = await ticketFor(auth, notes);
     const other = notes.replace("notes.md", "other.md");
 
@@ -81,7 +81,7 @@ describe("authenticateConnection", () => {
   it("refuses a ticket used for another workspace", async () => {
     const { authenticator: auth } = await createResourceTest({});
     await FeatureFlagFactory.basic(auth, "co_edition");
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const path = await writeConversationFile(auth, "notes.md", "# Notes\n");
     const ticket = await ticketFor(auth, path);
 
     const result = await authenticateConnection(
@@ -99,7 +99,7 @@ describe("authenticateConnection", () => {
       user,
     } = await createResourceTest({});
     await FeatureFlagFactory.basic(auth, "co_edition");
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const path = await writeConversationFile(auth, "notes.md", "# Notes\n");
     const ticket = await ticketFor(auth, path);
     const revoked = await MembershipResource.revokeMembership({
       user,
@@ -122,7 +122,7 @@ describe("authenticateConnection", () => {
   it("refuses a ticket once co_edition is turned off", async () => {
     const { authenticator: auth, workspace } = await createResourceTest({});
     await FeatureFlagFactory.basic(auth, "co_edition");
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const path = await writeConversationFile(auth, "notes.md", "# Notes\n");
     const ticket = await ticketFor(auth, path);
     await FeatureFlagResource.disable(workspace, "co_edition");
 
@@ -139,7 +139,7 @@ describe("authenticateConnection", () => {
   it("refuses a ticket once the workspace is in maintenance", async () => {
     const { authenticator: auth, workspace } = await createResourceTest({});
     await FeatureFlagFactory.basic(auth, "co_edition");
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const path = await writeConversationFile(auth, "notes.md", "# Notes\n");
     const ticket = await ticketFor(auth, path);
     await WorkspaceResource.updateMetadata(workspace.id, {
       maintenance: "relocation",
@@ -161,7 +161,7 @@ describe("authenticateConnection", () => {
       workspace,
       user,
     } = await createResourceTest({});
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const path = await writeConversationFile(auth, "notes.md", "# Notes\n");
 
     // What the browser sent before tickets: the user's own id.
     const result = await authenticateConnection(
@@ -185,7 +185,7 @@ describe("recheckAllConnections", () => {
       user,
     } = await createResourceTest({});
     await FeatureFlagFactory.basic(auth, "co_edition");
-    const path = await writeUserFile(auth, "notes.md", "# Notes\n");
+    const path = await writeConversationFile(auth, "notes.md", "# Notes\n");
     const readOnly = canWrite
       ? null
       : vi
