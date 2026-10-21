@@ -35,6 +35,7 @@ export async function executeFramesAuthoring(
   const instructions = buildFramesV2Instructions({
     hasFunctions: true,
     hasPublicFunctions: true,
+    hasDrafts: false,
     isPod: false,
   });
 

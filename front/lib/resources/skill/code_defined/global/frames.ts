@@ -10,14 +10,18 @@ import { buildFramesV2Instructions } from "@app/lib/resources/skill/code_defined
 import type { GlobalSkillDefinition } from "@app/lib/resources/skill/code_defined/shared";
 import type { AgentLoopExecutionData } from "@app/types/assistant/agent_run";
 import { isPodConversation } from "@app/types/assistant/conversation";
-import { isFramesV2FunctionsEnabled } from "@app/types/shared/feature_flags";
+import {
+  isFramesV2DraftsEnabled,
+  isFramesV2FunctionsEnabled,
+} from "@app/types/shared/feature_flags";
 
 /**
  * @cc [owner:davidebbo,label:product] frame-functions-disclosure
  * Under frames_v2, function, database and persistent-file authoring guidance MUST be included
  * only when Frame functions are enabled (see isFramesV2FunctionsEnabled). Guidance for functions
  * served to visitors of a public link MUST be included only when the workspace serves public Frame
- * functions to visitors (see doesWorkspaceServePublicFunctions).
+ * functions to visitors (see doesWorkspaceServePublicFunctions). Draft and make-live guidance MUST
+ * be included only when Frame drafts are enabled (see isFramesV2DraftsEnabled).
  */
 export const framesSkill = {
   sId: "frames",
@@ -56,6 +60,7 @@ export const framesSkill = {
           workspace: auth.getNonNullableWorkspace(),
           plan: auth.plan(),
         }),
+        hasDrafts: isFramesV2DraftsEnabled(flags),
         isPod,
       });
     }
@@ -71,6 +76,6 @@ export const framesSkill = {
   // Frames v2 authoring runs entirely through the Computer.
   warmsConversationSandbox: (auth: Authenticator) =>
     hasFeatureFlag(auth, "frames_v2"),
-  version: 17,
+  version: 18,
   icon: "ActionFrameIcon",
 } as const satisfies GlobalSkillDefinition;

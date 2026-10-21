@@ -513,12 +513,19 @@ Edit existing Pod Frames in place.
 export const buildFramesV2Instructions = ({
   hasFunctions,
   hasPublicFunctions,
+  hasDrafts,
   isPod,
 }: {
   hasFunctions: boolean;
   hasPublicFunctions: boolean;
+  hasDrafts: boolean;
   isPod: boolean;
-}) => `\
+}) => {
+  const publishOutcome = hasDrafts
+    ? "records a publication, which goes live unless the Frame is in draft mode"
+    : "records a publication and makes it live";
+
+  return `\
 # Frames v2
 
 Frames are interactive React applications. Use the Computer to create and edit their source, and
@@ -531,14 +538,13 @@ ${
     ? `- A Frames v2 source is a package-like folder anchored by \`manifest.json\`. The published
   manifest is the canonical Frame resource; its folder contains the UI source, assets, and
   function source. The manifest declares one UI entry point (\`index.tsx\` by default) and every
-  server function. Publishing snapshots the whole folder, builds every declared function, and
-  atomically activates the publication. The first publish also assigns the Frame's stable identity.
+  server function. Publishing snapshots the whole folder, builds every declared function and
+  ${publishOutcome}. The first publish also assigns the Frame's stable identity.
 `
     : `- A Frames v2 source is a package-like folder anchored by \`manifest.json\`. The published
   manifest is the canonical Frame resource; its folder contains the UI source and assets. The
   manifest declares one UI entry point (\`index.tsx\` by default). Publishing snapshots the whole
-  folder and atomically activates the publication. The first publish also assigns the Frame's
-  stable identity.
+  folder and ${publishOutcome}. The first publish also assigns the Frame's stable identity.
 `
 }- A legacy (v1) Frame is anchored by a single \`.tsx\` entry file. Publishing resolves that entry
   file and its local imports, then updates the existing Frame through the legacy bundle pipeline.
@@ -572,7 +578,7 @@ Every Computer command is a round trip of several seconds. When possible, write 
 and publish a new Frame in one Computer command. There is no scaffold step: create the folder,
 write \`manifest.json\` and \`index.tsx\`${hasFunctions ? " (plus any functions or databases)" : ""}, lint, then publish.
 The first \`dsbx frame publish\` mints the Frame's stable identity from the manifest path and
-activates the publication.
+makes its publication live.
 
 \`\`\`bash
 FRAME=/files/conversation-<conversationId>/<frame-folder>
@@ -725,10 +731,10 @@ the Frame. Use the suggested \`./…\` path so those references still work when 
 ${
   hasFunctions
     ? `There is no separate v2 function publish. Publish the manifest once: the UI source and all
-declared functions are built, stored, and activated atomically, and the declared databases are
-reconciled as described above:
+declared functions are built and stored, the declared databases are reconciled as described above,
+and it ${publishOutcome}:
 `
-    : `Publish the manifest once; the UI source is built, stored, and activated atomically:
+    : `Publish the manifest once; the UI source is built and stored, and it ${publishOutcome}:
 `
 }
 \`\`\`bash
@@ -737,7 +743,7 @@ dsbx frame publish /files/<scope>/<frame-folder>/manifest.json
 
 Publishing runs the manifest, UI, ${hasFunctions ? "function-build, database-contract " : ""}and Tailwind checks.
 If any fails, no partial publication
-becomes active: fix the reported error and rerun. Tailwind arbitrary values such as \`h-[600px]\`
+is recorded or made live: fix the reported error and rerun. Tailwind arbitrary values such as \`h-[600px]\`
 are errors, not warnings: use predefined classes or the \`style\` prop. Run the attached linter
 before publishing to check in-package file paths${hasFunctions ? " and function names" : ""}. For a brand-new folder,
 publish also assigns the Frame identity; republishing the same path updates that Frame in place.
@@ -749,7 +755,8 @@ that.
 
 ${
   hasFunctions
-    ? `Call a function from the active publication by its stable Frame ID and bare manifest name:
+    ? `Call a function from the Frame's current publication${hasDrafts ? " (its draft while draft mode is on and you can edit the Frame, else the live one)" : ""}
+by its stable Frame ID and bare manifest name:
 
 \`\`\`bash
 dsbx frame call <frame-id> <function-name> --input '<json>'
@@ -786,7 +793,36 @@ unless the user asked for it.
 Use the Computer and CLI for all other Frame operations. Use \`dsbx frame --help\` as the authority
 for available operations.
 
-${hasFunctions ? `${MIGRATING_LEGACY_FRAME}\n` : ""}## Editing
+${
+  hasDrafts
+    ? `## Draft mode
+
+Draft mode lets a Frame change without touching what its share link serves. While draft mode is
+on, every publish, yours and the user's edits in the Frame panel alike, goes to a draft that only
+shows in the conversation's Frame panel, functions included; the share link keeps serving the live
+version until the draft is validated. The user can turn draft mode on from the Frame panel. Turn it
+on yourself before you change a Frame other people already use, or when the user wants to review a
+change before it goes live:
+
+\`\`\`bash
+dsbx frame draft-mode /files/<scope>/<frame-folder>/manifest.json
+\`\`\`
+
+It needs a Frame that is already published, since a Frame's first publish always goes live. Then
+edit and publish as usual. When a publish reports \`"status": "draft"\`, the change is only in the
+draft: never say it is visible on the share link, and tell the user to review it in the Frame
+panel. When they ask you to make it live or approve it, validate it; this makes the Frame's latest
+version live, including edits the user saved in the panel, and ends draft mode:
+
+\`\`\`bash
+dsbx frame make-live /files/<scope>/<frame-folder>/manifest.json
+\`\`\`
+
+The user can also validate from the Frame panel.
+
+`
+    : ""
+}${hasFunctions ? `${MIGRATING_LEGACY_FRAME}\n` : ""}## Editing
 
 Use the Computer to edit Frame source. Never run concurrent file mutations against the same path:
 read the current file, apply one edit, then start the next edit to that file. Apply the edit, run
@@ -796,3 +832,4 @@ When fixing a validation or runtime problem, preserve working structure and make
 targeted edit. ${hasFunctions ? "Do not replace an entire UI or function for a localized state, schema, or styling bug." : "Do not replace an entire UI for a localized state or styling bug."}
 
 ${buildInteractiveContentAuthoringProseV2({ hasFramesV2: true, hasFunctions })}`;
+};

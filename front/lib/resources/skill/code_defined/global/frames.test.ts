@@ -92,7 +92,11 @@ describe("framesSkill.fetchInstructions", () => {
     expect(instructions).toContain("canonical Frame resource");
     expect(instructions).toContain("`index.tsx` by default");
     expect(instructions).toContain("single `.tsx` entry file");
-    expect(instructions).toContain("atomically activates the publication");
+    expect(instructions).toContain("publication and makes it live");
+    expect(instructions).not.toContain("atomically activates the publication");
+    expect(instructions).toContain(
+      "Call a function from the Frame's current publication\nby its stable Frame ID"
+    );
     expect(instructions).toContain("## Authoring a function");
     expect(instructions).toContain('userIdentity: "workspace_user_required"');
     expect(instructions).toContain("### Fast and durable functions");
@@ -209,6 +213,66 @@ describe("framesSkill.fetchInstructions", () => {
     expect(withPublicFunctions).toContain(
       "A non-null user is a workspace member"
     );
+  });
+
+  it("teaches draft mode and make-live when drafts are enabled", async () => {
+    const { authenticator: auth } = await createResourceTest({});
+    await FeatureFlagFactory.basic(auth, "frames_v2");
+    await FeatureFlagFactory.basic(auth, "frames_v2_drafts");
+
+    const instructions = await framesSkill.fetchInstructions(auth, {
+      spaceIds: [],
+    });
+
+    expect(instructions).toContain("## Draft mode");
+    expect(instructions).toContain(
+      "dsbx frame draft-mode /files/<scope>/<frame-folder>/manifest.json"
+    );
+    expect(instructions).toContain(
+      "goes to a draft that only\nshows in the conversation's Frame panel"
+    );
+    expect(instructions).toContain(
+      "which goes live unless the Frame is in draft mode"
+    );
+    expect(instructions).not.toContain("--draft");
+    expect(instructions).toContain(
+      "dsbx frame make-live /files/<scope>/<frame-folder>/manifest.json"
+    );
+    expect(instructions).toContain("the share link keeps serving the live");
+    expect(instructions).toContain(
+      "including edits the user saved in the panel"
+    );
+    expect(instructions).toContain("never say it is visible on the share link");
+    expect(instructions).not.toContain("publicationId");
+  });
+
+  it("does not mention drafts without the drafts flag, even with functions", async () => {
+    const { authenticator: auth } = await createResourceTest({});
+    await FeatureFlagFactory.basic(auth, "frames_v2");
+    await FeatureFlagFactory.basic(auth, "frames_v2_functions");
+
+    const instructions = await framesSkill.fetchInstructions(auth, {
+      spaceIds: [],
+    });
+
+    expect(instructions).not.toMatch(/draft/i);
+    expect(instructions).not.toContain("make-live");
+    expect(instructions).toContain("records a publication and makes it live");
+    expect(instructions).toContain(
+      "do not parse the Frame ID from the CLI output"
+    );
+  });
+
+  it("does not teach drafts when only frames_v2_drafts is on", async () => {
+    const { authenticator: auth } = await createResourceTest({});
+    await FeatureFlagFactory.basic(auth, "frames_v2_drafts");
+
+    const instructions = await framesSkill.fetchInstructions(auth, {
+      spaceIds: [],
+    });
+
+    expect(instructions).not.toContain("draft-mode");
+    expect(instructions).not.toContain("make-live");
   });
 
   it("teaches the computer-first flow when the Computer is enabled", async () => {
