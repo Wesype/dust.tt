@@ -308,9 +308,39 @@ describe("getOrCreateConversationFolder", () => {
     );
   });
 
+  it("gives every participant of a conversation outside pods read and write access to its folder", async () => {
+    const { authenticator, workspace, user } = await createResourceTest({});
+    const { transport, context } = setup();
+    const other = await UserFactory.basic();
+    await MembershipFactory.associate(workspace, other, { role: "user" });
+    const conversation = await createConversation(authenticator);
+    for (const participant of [user, other]) {
+      await ConversationResource.upsertParticipation(authenticator, {
+        conversation,
+        action: "posted",
+        user: participant.toJSON(),
+      });
+    }
+
+    const res = await getOrCreateConversationFolder(
+      authenticator,
+      context,
+      conversation
+    );
+
+    expect(res.isOk()).toBe(true);
+    expect(transport.calls.at(-1)?.request).toEqual({
+      objectId: { value: Buffer.from(res.isOk() ? res.value : "", "hex") },
+      changes: [user, other].map((participant) => ({
+        grant: { allow: { subject: `u:${participant.sId}`, mode: 6 } },
+        remove: false,
+      })),
+    });
+  });
+
   it("creates a conversation of a pod under the pod's folder", async () => {
     const { workspace, user } = await createResourceTest({});
-    const { dfs, context } = setup();
+    const { dfs, transport, context } = setup();
     const pod = await SpaceFactory.project(workspace, user.id);
     // Refreshed so that it includes the new pod's groups.
     const auth = await Authenticator.fromUserIdAndWorkspaceId(
@@ -332,5 +362,14 @@ describe("getOrCreateConversationFolder", () => {
     expect(dfs.paths()).toContain(
       `/users/${user.sId}/pods/${pod.name}/.conversations/conv-${conversation.sId}`
     );
+    // Its access is the pod folder's.
+    const folderId = { value: Buffer.from(res.isOk() ? res.value : "", "hex") };
+    expect(
+      transport.calls.filter(
+        (call) =>
+          call.method === "UpdateGrants" &&
+          JSON.stringify(call.request.objectId) === JSON.stringify(folderId)
+      )
+    ).toEqual([]);
   });
 });

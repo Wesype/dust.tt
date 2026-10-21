@@ -18,6 +18,7 @@ import type { DfsGrant, DfsObjectId } from "@app/types/dfs";
 import { DfsError, isDfsObjectId } from "@app/types/dfs";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
+import { removeNulls } from "@app/types/shared/utils/general";
 
 /**
  * @cc [owner:fabiencelier,label:product] folder-mime-types
@@ -228,6 +229,12 @@ async function getFirstEditor(
  * folder of `user`, or of its first participant when no user is given (backfill). `context.fs` MUST
  * be a session that can write the parent folder.
  */
+/**
+ * @cc [owner:fabiencelier,label:security] conversation-folder-grants
+ * The folder of a conversation in a pod MUST get no grant: its access is the pod folder's. A folder
+ * created here for any other conversation MUST get an ALLOW with `rw` for each of its participants.
+ * A folder that already existed in dfs MUST be reused without changing its grants.
+ */
 export async function getOrCreateConversationFolder(
   auth: Authenticator,
   context: DfsFolderContext,
@@ -237,12 +244,12 @@ export async function getOrCreateConversationFolder(
   if (conversation.dfsObjectId) {
     return new Ok(conversation.dfsObjectId);
   }
-  const parentId = await getOrCreateConversationParentFolder(
-    auth,
-    context,
-    conversation,
-    { user }
-  );
+  const pod = await getConversationPod(auth, conversation);
+  const parentId = pod
+    ? await getOrCreatePodFolder(auth, context, pod, { user })
+    : await getOrCreateConversationOwnerFolder(auth, context, conversation, {
+        user,
+      });
   if (parentId.isErr()) {
     return parentId;
   }
@@ -264,24 +271,52 @@ export async function getOrCreateConversationFolder(
       )
     );
   }
+  // Only on a folder created here, see `conversation-folder-grants`.
+  const participants =
+    pod || !folder.value.created
+      ? []
+      : await getParticipants(auth, conversation);
+  if (participants.length > 0) {
+    const granted = await context.tenantClient.updateGrants({
+      objectId: stored,
+      changes: participants.map((participant) => ({
+        grant: getConversationParticipantGrant(participant),
+        remove: false,
+      })),
+    });
+    if (granted.isErr()) {
+      return granted;
+    }
+  }
   return new Ok(stored);
 }
 
-async function getOrCreateConversationParentFolder(
+/** The grant of a participant of a conversation outside pods, see `conversation-folder-grants`. */
+function getConversationParticipantGrant(user: UserResource): DfsGrant {
+  return { type: "allow", subject: createUserSubject(user), mode: 0o6 };
+}
+
+/** The pod `conversation` is in, if any. Its folder's access is then driven by the pod's. */
+async function getConversationPod(
+  auth: Authenticator,
+  conversation: ConversationResource
+): Promise<SpaceResource | null> {
+  if (!conversation.spaceId) {
+    return null;
+  }
+  const [space] = await SpaceResource.fetchByModelIds(auth, [
+    conversation.spaceId,
+  ]);
+  return space?.isProject() ? space : null;
+}
+
+async function getOrCreateConversationOwnerFolder(
   auth: Authenticator,
   context: DfsFolderContext,
   conversation: ConversationResource,
   { user }: { user?: UserResource }
 ): Promise<Result<DfsObjectId, DfsError>> {
-  if (conversation.spaceId) {
-    const [space] = await SpaceResource.fetchByModelIds(auth, [
-      conversation.spaceId,
-    ]);
-    if (space?.isProject()) {
-      return getOrCreatePodFolder(auth, context, space, { user });
-    }
-  }
-  const owner = user ?? (await getFirstParticipant(auth, conversation));
+  const owner = user ?? (await getParticipants(auth, conversation))[0];
   if (!owner) {
     return new Err(
       new DfsError(
@@ -293,13 +328,18 @@ async function getOrCreateConversationParentFolder(
   return getOrCreateUserFolder(auth, context, owner);
 }
 
-async function getFirstParticipant(
+/** The participants of `conversation`, first participant first. */
+async function getParticipants(
   auth: Authenticator,
   conversation: ConversationResource
-): Promise<UserResource | null> {
-  const [first] = await ConversationResource.listParticipantDetails(
+): Promise<UserResource[]> {
+  const details = await ConversationResource.listParticipantDetails(
     auth,
     conversation
   );
-  return first ? UserResource.fetchByModelId(first.userId) : null;
+  const users = await UserResource.fetchByModelIds(
+    details.map((d) => d.userId)
+  );
+  const usersById = new Map(users.map((u) => [u.id, u]));
+  return removeNulls(details.map((d) => usersById.get(d.userId) ?? null));
 }
