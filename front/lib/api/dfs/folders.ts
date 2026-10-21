@@ -14,7 +14,7 @@ import { ConversationResource } from "@app/lib/resources/conversation_resource";
 import { DfsUserFolderResource } from "@app/lib/resources/dfs_user_folder_resource";
 import { SpaceResource } from "@app/lib/resources/space_resource";
 import { UserResource } from "@app/lib/resources/user_resource";
-import type { DfsGrantUpdate, DfsObjectId } from "@app/types/dfs";
+import type { DfsGrant, DfsObjectId } from "@app/types/dfs";
 import { DfsError, isDfsObjectId } from "@app/types/dfs";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
@@ -33,8 +33,12 @@ export const DFS_CONVERSATION_FOLDER_MIME_TYPE =
   "application/vnd.dust.conversation";
 
 export interface DfsFolderContext {
-  // The file system the folders are created with.
+  // A session of the user the pod and conversation folders are created for (see
+  // `createDfsSession`): they are created under that user's folder, which only that user can write.
   fs: DfsFileSystem;
+  // A superuser session, only to create user folders, which no grant lets a user create (see
+  // `superuser-session-uses`).
+  getSuperuserFs: () => Promise<Result<DfsFileSystem, DfsError>>;
   // Authenticated with the tenant key of the authenticated workspace, to set grants.
   tenantClient: Pick<DfsClient, "updateGrants">;
   // The tenant root (`DfsTenantResource.rootId`).
@@ -97,8 +101,12 @@ export async function getOrCreateUserFolder(
   if (stored) {
     return new Ok(stored.dfsObjectId);
   }
+  const superuserFs = await context.getSuperuserFs();
+  if (superuserFs.isErr()) {
+    return superuserFs;
+  }
   const folder = await ensureFolder(
-    context.fs,
+    superuserFs.value,
     userFolderUri(context.rootId, user.sId)
   );
   if (folder.isErr()) {
@@ -132,7 +140,7 @@ export async function getOrCreateUserFolder(
 
 /**
  * The folder of the pod `space`, under the folder of `user`, or of its first editor when no user is
- * given (backfill).
+ * given (backfill). `context.fs` MUST be a session of that user.
  */
 /**
  * @cc [owner:fabiencelier,label:security] pod-folder-grants
@@ -173,10 +181,13 @@ export async function getOrCreatePodFolder(
     return folder;
   }
   // Attached even when the folder already existed, see `pod-folder-grants`.
-  // TODO(dfs): keep the grants in sync when the pod's restriction or attached groups change.
+  // Later permission changes are reflected by `syncPodFolderGrants`.
   const granted = await context.tenantClient.updateGrants({
     objectId: folder.value.id,
-    changes: await getPodFolderGrants(space),
+    changes: (await getPodFolderGrants(space)).map((grant) => ({
+      grant,
+      remove: false,
+    })),
   });
   if (granted.isErr()) {
     return granted;
@@ -191,18 +202,16 @@ export async function getOrCreatePodFolder(
   return new Ok(stored);
 }
 
-async function getPodFolderGrants(
+/** The grants of the pod folder of `space`, see `pod-folder-grants`. */
+export async function getPodFolderGrants(
   space: SpaceResource
-): Promise<DfsGrantUpdate[]> {
+): Promise<DfsGrant[]> {
   const references = await space.fetchGrantReferences();
   return references.map((reference) => ({
-    grant: {
-      type: "allow",
-      subject: createGroupSubject(reference.groupSId),
-      // Only the workspace global group holds a `reader` grant, on open pods.
-      mode: reference.isReader() ? 0o4 : 0o6,
-    },
-    remove: false,
+    type: "allow",
+    subject: createGroupSubject(reference.groupSId),
+    // Only the workspace global group holds a `reader` grant, on open pods.
+    mode: reference.isReader() ? 0o4 : 0o6,
   }));
 }
 
@@ -216,7 +225,8 @@ async function getFirstEditor(
 
 /**
  * The folder of `conversation`: under its pod's folder for a conversation in a pod, else under the
- * folder of `user`, or of its first participant when no user is given (backfill).
+ * folder of `user`, or of its first participant when no user is given (backfill). `context.fs` MUST
+ * be a session that can write the parent folder.
  */
 export async function getOrCreateConversationFolder(
   auth: Authenticator,

@@ -21,6 +21,7 @@ export class GcsImportFactory {
         client: dfs,
         folders: {
           fs,
+          getSuperuserFs: async () => new Ok(fs),
           tenantClient: new DfsClient(transport, "t".repeat(64)),
           rootId: dfs.rootId,
         },
