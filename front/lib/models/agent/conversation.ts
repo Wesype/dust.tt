@@ -525,6 +525,10 @@ export class AgentMessageModel extends WorkspaceAwareModel<AgentMessageModel> {
   declare resolvedReasoningEffort: string | null;
   declare modelResolutionMethod: ModelResolutionMethodType | null;
 
+  // Model that actually answered when Anthropic's server-side fallback kicked in for at least one
+  // model call of this message; null when no fallback happened.
+  declare fallbackModelId: string | null;
+
   // Denormalized from messages for conversation-scoped fetches (plain column, no FK — the value
   // is derived from messages at write time).
   declare conversationId: ModelId;
@@ -638,6 +642,11 @@ AgentMessageModel.init(
       defaultValue: null,
     },
     resolvedReasoningEffort: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: null,
+    },
+    fallbackModelId: {
       type: DataTypes.STRING,
       allowNull: true,
       defaultValue: null,
