@@ -145,6 +145,7 @@ describe("useAutoOpenSidePanel", () => {
         type: "interactive_content",
         fileId: frame.fileId,
         timestamp: "1710000000000",
+        openedFrom: { source: "agent", uiElement: "side_panel_auto_open" },
       });
     });
   });
@@ -175,6 +176,7 @@ describe("useAutoOpenSidePanel", () => {
         type: "interactive_content",
         fileId: frame.fileId,
         timestamp: "1710000000999",
+        openedFrom: { source: "agent", uiElement: "side_panel_auto_open" },
       });
     });
   });
@@ -231,6 +233,7 @@ describe("useAutoOpenSidePanel", () => {
         type: "interactive_content",
         fileId: frame.fileId,
         timestamp: "1710000000999",
+        openedFrom: { source: "agent", uiElement: "side_panel_auto_open" },
       });
     });
   });
@@ -271,6 +274,7 @@ describe("useAutoOpenSidePanel", () => {
         type: "interactive_content",
         fileId: "fil_frame",
         timestamp: "pub-1",
+        openedFrom: { source: "agent", uiElement: "side_panel_auto_open" },
       });
     });
   });
@@ -348,6 +352,7 @@ describe("useAutoOpenSidePanel", () => {
         type: "interactive_content",
         fileId: "fil_frame",
         timestamp: "1710000000000",
+        openedFrom: { source: "agent", uiElement: "side_panel_auto_open" },
       });
     });
   });

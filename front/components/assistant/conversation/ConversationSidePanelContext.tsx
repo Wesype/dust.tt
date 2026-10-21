@@ -1,4 +1,5 @@
 import { getDefaultRightPanelSize } from "@app/components/assistant/conversation/constant";
+import type { FrameOpenOrigin } from "@app/components/assistant/conversation/interactive_content/frameTracking";
 import type { AgentMessageWithStreaming } from "@app/components/assistant/conversation/types";
 import { useActiveConversationId } from "@app/hooks/useActiveConversationId";
 import { useHashParam } from "@app/hooks/useHashParams";
@@ -34,6 +35,8 @@ type OpenPanelParams =
       type: "interactive_content";
       fileId: string;
       timestamp?: string;
+      // What opened the Frame, for tracking. Not part of the panel's identity.
+      openedFrom: FrameOpenOrigin;
     }
   | ({
       type: "file_preview";
@@ -168,9 +171,20 @@ function panelIdentityKey(params: OpenPanelParams): string {
 // loads its latest version rather than a streaming-era snapshot.
 function panelHistoryEntry(params: OpenPanelParams): OpenPanelParams {
   if (params.type === INTERACTIVE_CONTENT_SIDE_PANEL_TYPE) {
-    return { type: params.type, fileId: params.fileId };
+    return {
+      type: params.type,
+      fileId: params.fileId,
+      openedFrom: params.openedFrom,
+    };
   }
   return params;
+}
+
+// What opened the panel, when it shows a Frame.
+function frameOpenedFromOf(params: OpenPanelParams): FrameOpenOrigin | null {
+  return params.type === INTERACTIVE_CONTENT_SIDE_PANEL_TYPE
+    ? params.openedFrom
+    : null;
 }
 
 // Inverse of panelDataKey, for panels restored from the URL hash (deep links, back/forward).
@@ -188,7 +202,12 @@ function panelParamsFromHash(
     }
     case INTERACTIVE_CONTENT_SIDE_PANEL_TYPE: {
       const [fileId, timestamp] = data.split("@");
-      return { type, fileId, timestamp };
+      return {
+        type,
+        fileId,
+        timestamp,
+        openedFrom: { source: "user", uiElement: "page_url" },
+      };
     }
     case FILE_PREVIEW_SIDE_PANEL_TYPE: {
       const target = parseFilePreviewData(data);
@@ -265,6 +284,9 @@ interface ConversationSidePanelContextType {
   // In-memory only: user closed the Files panel this conversation session. Cleared on
   // conversation change / reload. Suppresses auto-open for any later generated files.
   wasFilesPanelAutoOpenDismissed: () => boolean;
+  // What opened the shown Frame, for its tracking. Null when it is shown again through the history,
+  // which is not an open.
+  frameOpenedFrom: FrameOpenOrigin | null;
 }
 
 // Past a few levels, going back one panel at a time stops matching what the user remembers, so
@@ -336,6 +358,8 @@ export function ConversationSidePanelProvider({
   const layoutBeforeFullScreenRef = React.useRef<SidePanelLayout | null>(null);
   const [hasConversation, setHasConversation] = React.useState(false);
   const [isPanelClosing, setIsPanelClosing] = React.useState(false);
+  const [frameOpenedFrom, setFrameOpenedFrom] =
+    React.useState<FrameOpenOrigin | null>(null);
   const [virtuosoMsg, setVirtuosoMsg] =
     React.useState<AgentMessageWithStreaming | null>(null);
   const setPanelRef = useCallback(
@@ -431,6 +455,7 @@ export function ConversationSidePanelProvider({
     const previous = history[history.length - 1];
     if (previous) {
       panelHistoryRef.current = history.slice(0, -1);
+      setFrameOpenedFrom(null);
       showPanel(previous);
       return;
     }
@@ -492,6 +517,7 @@ export function ConversationSidePanelProvider({
         ].slice(-MAX_PANEL_HISTORY);
       }
       panelHistoryRef.current = history;
+      setFrameOpenedFrom(frameOpenedFromOf(params));
       showPanel(params);
     },
     [isPanelClosing, closePanel, showPanel]
@@ -558,6 +584,7 @@ export function ConversationSidePanelProvider({
           panelHistoryRef.current = panelHistoryRef.current.filter(
             (entry) => panelIdentityKey(entry) !== shownKey
           );
+          setFrameOpenedFrom(frameOpenedFromOf(fromHash));
         }
       }
     } else if (!data) {
@@ -585,6 +612,7 @@ export function ConversationSidePanelProvider({
       data,
       wasAutoOpenDismissedForFileId,
       wasFilesPanelAutoOpenDismissed,
+      frameOpenedFrom,
     }),
     [
       currentPanel,
@@ -600,6 +628,7 @@ export function ConversationSidePanelProvider({
       data,
       wasAutoOpenDismissedForFileId,
       wasFilesPanelAutoOpenDismissed,
+      frameOpenedFrom,
     ]
   );
 

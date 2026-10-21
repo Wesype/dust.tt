@@ -683,7 +683,11 @@ function PodFileExplorerContent({ owner, pod }: PodFileExplorerProps) {
   const onDownload = useFileExplorerDownload({ owner, getFileResponse });
 
   const onOpenInteractive = (entry: { fileId: string }) =>
-    openPanel({ type: "interactive_content", fileId: entry.fileId });
+    openPanel({
+      type: "interactive_content",
+      fileId: entry.fileId,
+      openedFrom: { source: "user", uiElement: "pod_files" },
+    });
 
   const onOpenInPanel = (entry: FileEntry) =>
     openPanel({ type: "file_preview", kind: "path", filePath: entry.path });

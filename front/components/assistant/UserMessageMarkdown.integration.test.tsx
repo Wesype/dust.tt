@@ -76,6 +76,7 @@ vi.mock(
       data: undefined,
       wasAutoOpenDismissedForFileId: () => false,
       wasFilesPanelAutoOpenDismissed: () => false,
+      frameOpenedFrom: null,
     }),
   })
 );

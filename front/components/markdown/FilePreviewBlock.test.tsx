@@ -152,6 +152,7 @@ function renderWithSidePanel(
           data: undefined,
           wasAutoOpenDismissedForFileId: () => false,
           wasFilesPanelAutoOpenDismissed: () => false,
+          frameOpenedFrom: null,
         }}
       >
         <FilePreviewProvider owner={mockOwner}>{ui}</FilePreviewProvider>
@@ -261,6 +262,7 @@ describe("getFilePreviewPlugin", () => {
           data: undefined,
           wasAutoOpenDismissedForFileId: () => false,
           wasFilesPanelAutoOpenDismissed: () => false,
+          frameOpenedFrom: null,
         }}
       >
         <FilePreviewProvider owner={mockOwner}>
@@ -280,6 +282,7 @@ describe("getFilePreviewPlugin", () => {
         {
           type: "interactive_content",
           fileId: "fil_frame",
+          openedFrom: { source: "user", uiElement: "file_citation" },
         },
         { keepCurrent: false }
       );

@@ -57,6 +57,7 @@ describe("Img", () => {
               data: undefined,
               wasAutoOpenDismissedForFileId: () => false,
               wasFilesPanelAutoOpenDismissed: () => false,
+              frameOpenedFrom: null,
             }}
           >
             <FilePreviewProvider owner={mockOwner}>

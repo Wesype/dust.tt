@@ -128,6 +128,7 @@ export function useAutoOpenSidePanel({
           type: "interactive_content",
           fileId: firstFile.fileId,
           timestamp: firstFile.updatedAt,
+          openedFrom: { source: "agent", uiElement: "side_panel_auto_open" },
         });
       }
       return;
@@ -169,6 +170,7 @@ export function useAutoOpenSidePanel({
             type: "interactive_content",
             fileId: firstFile.fileId,
             timestamp: revision,
+            openedFrom: { source: "agent", uiElement: "side_panel_auto_open" },
           });
           return;
         }
@@ -189,6 +191,7 @@ export function useAutoOpenSidePanel({
         type: "interactive_content",
         fileId: firstFile.fileId,
         ...(revision ? { timestamp: revision } : {}),
+        openedFrom: { source: "agent", uiElement: "side_panel_auto_open" },
       });
       return;
     }

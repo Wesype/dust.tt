@@ -53,6 +53,7 @@ function renderWithPreviewProviders(children: React.ReactNode) {
           data: undefined,
           wasAutoOpenDismissedForFileId: () => false,
           wasFilesPanelAutoOpenDismissed: () => false,
+          frameOpenedFrom: null,
         }}
       >
         <FilePreviewProvider owner={mockOwner}>{children}</FilePreviewProvider>
