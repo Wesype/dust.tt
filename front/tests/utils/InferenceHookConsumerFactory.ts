@@ -1,5 +1,5 @@
 import type {
-  BlockingInferenceHook,
+  EnforcedInferenceHook,
   InferenceHookConsumer,
   InferenceHookInput,
   InferenceHookOnError,
@@ -91,7 +91,7 @@ export class InferenceHookConsumerFactory {
     });
   }
 
-  static blocking(
+  static enforced(
     consumer: InferenceHookConsumer,
     {
       timeoutMs = 1_000,
@@ -100,7 +100,7 @@ export class InferenceHookConsumerFactory {
       timeoutMs?: number;
       onError?: InferenceHookOnError;
     } = {}
-  ): BlockingInferenceHook {
+  ): EnforcedInferenceHook {
     return { consumer, timeoutMs, onError };
   }
 }

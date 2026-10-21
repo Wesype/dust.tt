@@ -1,6 +1,6 @@
 import {
   makeInferenceHookDeniedError,
-  runBlockingInferenceHooks,
+  runInferenceHooks,
 } from "@app/lib/inference_hook";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import { InferenceHookConsumerFactory } from "@app/tests/utils/InferenceHookConsumerFactory";
@@ -9,16 +9,16 @@ import { describe, expect, it, vi } from "vitest";
 
 const notCancelled = new AbortController().signal;
 
-describe("runBlockingInferenceHooks", () => {
+describe("runInferenceHooks", () => {
   it("does no hook work when inference hooks are disabled", async () => {
     const { authenticator } = await createResourceTest({ role: "admin" });
     const input =
       await InferenceHookInputFactory.beforeModelCall(authenticator);
     const consumer = InferenceHookConsumerFactory.allow();
 
-    const result = await runBlockingInferenceHooks({
+    const result = await runInferenceHooks({
       featureFlags: [],
-      hooks: [InferenceHookConsumerFactory.blocking(consumer)],
+      hooks: [InferenceHookConsumerFactory.enforced(consumer)],
       input,
       signal: notCancelled,
     });
@@ -33,11 +33,11 @@ describe("runBlockingInferenceHooks", () => {
     const allowConsumer = InferenceHookConsumerFactory.allow();
     const denyConsumer = InferenceHookConsumerFactory.deny("Policy denied");
 
-    const result = await runBlockingInferenceHooks({
+    const result = await runInferenceHooks({
       featureFlags: ["inference_hooks"],
       hooks: [
-        InferenceHookConsumerFactory.blocking(allowConsumer),
-        InferenceHookConsumerFactory.blocking(denyConsumer),
+        InferenceHookConsumerFactory.enforced(allowConsumer),
+        InferenceHookConsumerFactory.enforced(denyConsumer),
       ],
       input,
       signal: notCancelled,
@@ -54,11 +54,11 @@ describe("runBlockingInferenceHooks", () => {
       await InferenceHookInputFactory.beforeModelCall(authenticator);
     const pending = InferenceHookConsumerFactory.slow({ delayMs: 60_000 });
 
-    const result = await runBlockingInferenceHooks({
+    const result = await runInferenceHooks({
       featureFlags: ["inference_hooks"],
       hooks: [
-        InferenceHookConsumerFactory.blocking(pending, { timeoutMs: 60_000 }),
-        InferenceHookConsumerFactory.blocking(
+        InferenceHookConsumerFactory.enforced(pending, { timeoutMs: 60_000 }),
+        InferenceHookConsumerFactory.enforced(
           InferenceHookConsumerFactory.deny("Policy denied")
         ),
       ],
@@ -87,11 +87,11 @@ describe("runBlockingInferenceHooks", () => {
       return { action: "allow" };
     });
 
-    const run = runBlockingInferenceHooks({
+    const run = runInferenceHooks({
       featureFlags: ["inference_hooks"],
       hooks: [
-        InferenceHookConsumerFactory.blocking(first),
-        InferenceHookConsumerFactory.blocking(second),
+        InferenceHookConsumerFactory.enforced(first),
+        InferenceHookConsumerFactory.enforced(second),
       ],
       input,
       signal: notCancelled,
@@ -112,10 +112,10 @@ describe("runBlockingInferenceHooks", () => {
       await InferenceHookInputFactory.beforeModelCall(authenticator);
 
     await expect(
-      runBlockingInferenceHooks({
+      runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.blocking(
+          InferenceHookConsumerFactory.enforced(
             InferenceHookConsumerFactory.failing(),
             { onError: "allow" }
           ),
@@ -126,10 +126,10 @@ describe("runBlockingInferenceHooks", () => {
     ).resolves.toEqual({ action: "allow" });
 
     await expect(
-      runBlockingInferenceHooks({
+      runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.blocking(
+          InferenceHookConsumerFactory.enforced(
             InferenceHookConsumerFactory.failing(),
             { onError: "deny" }
           ),
@@ -149,10 +149,10 @@ describe("runBlockingInferenceHooks", () => {
       await InferenceHookInputFactory.beforeModelCall(authenticator);
 
     await expect(
-      runBlockingInferenceHooks({
+      runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.blocking(
+          InferenceHookConsumerFactory.enforced(
             InferenceHookConsumerFactory.slow({ delayMs: 100 }),
             { timeoutMs: 1, onError: "allow" }
           ),
@@ -163,10 +163,10 @@ describe("runBlockingInferenceHooks", () => {
     ).resolves.toEqual({ action: "allow" });
 
     await expect(
-      runBlockingInferenceHooks({
+      runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.blocking(
+          InferenceHookConsumerFactory.enforced(
             InferenceHookConsumerFactory.slow({ delayMs: 100 }),
             { timeoutMs: 1, onError: "deny" }
           ),
@@ -186,14 +186,14 @@ describe("runBlockingInferenceHooks", () => {
       await InferenceHookInputFactory.beforeModelCall(authenticator);
 
     await expect(
-      runBlockingInferenceHooks({
+      runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.blocking(
+          InferenceHookConsumerFactory.enforced(
             InferenceHookConsumerFactory.hanging(),
             { timeoutMs: 10, onError: "allow" }
           ),
-          InferenceHookConsumerFactory.blocking(
+          InferenceHookConsumerFactory.enforced(
             InferenceHookConsumerFactory.slow({
               delayMs: 50,
               verdict: { action: "deny", reason: "Long hook denied" },
@@ -207,14 +207,14 @@ describe("runBlockingInferenceHooks", () => {
     ).resolves.toEqual({ action: "deny", reason: "Long hook denied" });
 
     await expect(
-      runBlockingInferenceHooks({
+      runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.blocking(
+          InferenceHookConsumerFactory.enforced(
             InferenceHookConsumerFactory.slow({ delayMs: 50 }),
             { timeoutMs: 10, onError: "deny" }
           ),
-          InferenceHookConsumerFactory.blocking(
+          InferenceHookConsumerFactory.enforced(
             InferenceHookConsumerFactory.allow(),
             { timeoutMs: 500, onError: "allow" }
           ),
@@ -234,10 +234,10 @@ describe("runBlockingInferenceHooks", () => {
       await InferenceHookInputFactory.beforeModelCall(authenticator);
 
     await expect(
-      runBlockingInferenceHooks({
+      runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.blocking(
+          InferenceHookConsumerFactory.enforced(
             InferenceHookConsumerFactory.hanging(),
             { timeoutMs: 10, onError: "allow" }
           ),
@@ -248,10 +248,10 @@ describe("runBlockingInferenceHooks", () => {
     ).resolves.toEqual({ action: "allow" });
 
     await expect(
-      runBlockingInferenceHooks({
+      runInferenceHooks({
         featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookConsumerFactory.blocking(
+          InferenceHookConsumerFactory.enforced(
             InferenceHookConsumerFactory.hanging(),
             { timeoutMs: 10, onError: "deny" }
           ),
@@ -271,16 +271,16 @@ describe("runBlockingInferenceHooks", () => {
       await InferenceHookInputFactory.beforeModelCall(authenticator);
     const queued = InferenceHookConsumerFactory.allow();
 
-    const result = await runBlockingInferenceHooks({
+    const result = await runInferenceHooks({
       featureFlags: ["inference_hooks"],
       hooks: [
         ...Array.from({ length: 8 }, () =>
-          InferenceHookConsumerFactory.blocking(
+          InferenceHookConsumerFactory.enforced(
             InferenceHookConsumerFactory.hanging(),
             { timeoutMs: 20, onError: "allow" }
           )
         ),
-        InferenceHookConsumerFactory.blocking(queued, {
+        InferenceHookConsumerFactory.enforced(queued, {
           timeoutMs: 5,
           onError: "deny",
         }),
@@ -304,9 +304,9 @@ describe("runBlockingInferenceHooks", () => {
     const controller = new AbortController();
     controller.abort();
 
-    const result = await runBlockingInferenceHooks({
+    const result = await runInferenceHooks({
       featureFlags: ["inference_hooks"],
-      hooks: [InferenceHookConsumerFactory.blocking(consumer)],
+      hooks: [InferenceHookConsumerFactory.enforced(consumer)],
       input,
       signal: controller.signal,
     });
@@ -325,10 +325,10 @@ describe("runBlockingInferenceHooks", () => {
     const controller = new AbortController();
     setTimeout(() => controller.abort(), 10);
 
-    const result = await runBlockingInferenceHooks({
+    const result = await runInferenceHooks({
       featureFlags: ["inference_hooks"],
       hooks: [
-        InferenceHookConsumerFactory.blocking(consumer, { timeoutMs: 60_000 }),
+        InferenceHookConsumerFactory.enforced(consumer, { timeoutMs: 60_000 }),
       ],
       input,
       signal: controller.signal,
