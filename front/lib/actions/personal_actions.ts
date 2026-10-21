@@ -1,4 +1,5 @@
 import type { MCPOAuthUseCase } from "@app/types/oauth/lib";
+import { assertNever } from "@app/types/shared/utils/assert_never";
 
 /**
  * @cc [owner:tdraier,label:security] authorless-messages-skip-personal-servers
@@ -18,3 +19,23 @@ export function isServerUsableForMessage(
 export const PERSONAL_SERVER_UNUSABLE_MESSAGE =
   "These tools run on each person's own credentials, and the message being answered was posted " +
   "by Dust on someone's behalf rather than written by a person, so they cannot be used here.";
+
+/**
+ * Model-facing note appended to tool descriptions so the agent knows which
+ * credential mode the server is configured with. Null when the server has no
+ * OAuth use case (no credentials involved).
+ */
+export function getCredentialModeDescriptionNote(
+  oAuthUseCase: MCPOAuthUseCase | null
+): string | null {
+  switch (oAuthUseCase) {
+    case "personal_actions":
+      return "Note: Uses each user's personal credentials.";
+    case "platform_actions":
+      return "Note: Uses the workspace shared credentials.";
+    case null:
+      return null;
+    default:
+      assertNever(oAuthUseCase);
+  }
+}

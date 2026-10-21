@@ -65,6 +65,7 @@ import {
   decideMCPAuthFailureAction,
 } from "@app/lib/actions/mcp_oauth_provider";
 import {
+  getCredentialModeDescriptionNote,
   isServerUsableForMessage,
   PERSONAL_SERVER_UNUSABLE_MESSAGE,
 } from "@app/lib/actions/personal_actions";
@@ -1274,6 +1275,7 @@ export async function tryListMCPTools(
     listableActionsWithOrigin,
     async ({ action, isFromSkillServer }) => {
       let connectionParams: MCPConnectionParams;
+      let credentialModeNote: string | null = null;
       if (isServerSideMCPServerConfiguration(action)) {
         const mcpServerView = preFetchedMcpServerViews.get(
           action.mcpServerViewId
@@ -1296,6 +1298,11 @@ export async function tryListMCPTools(
           return new Err(error);
         }
         connectionParams = makeServerSideMCPConnectionParams(mcpServerView);
+        // Model-only: tell the agent which credential mode is active without
+        // changing the description shown in the product UI.
+        credentialModeNote = getCredentialModeDescriptionNote(
+          mcpServerView.oAuthUseCase
+        );
       } else {
         connectionParams = makeClientSideMCPConnectionParams(action, {
           conversationId: agentLoopListToolsContext.conversation.sId,
@@ -1423,6 +1430,10 @@ export async function tryListMCPTools(
           } else if (hasTableConfiguration) {
             extraDescription += `\nDescription of the tables:\n${action.description}`;
           }
+        }
+
+        if (credentialModeNote) {
+          extraDescription += `\n${credentialModeNote}`;
         }
 
         processedTools.push({
