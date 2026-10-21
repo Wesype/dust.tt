@@ -185,8 +185,7 @@ export type FramePublicationTarget = z.infer<
   typeof FramePublicationTargetSchema
 >;
 
-export const FramePublishModeSchema = z.enum(["live", "draft"]);
-export type FramePublishMode = z.infer<typeof FramePublishModeSchema>;
+export type FramePublishMode = "live" | "draft";
 
 export type FramePublicationStatus = "live" | "draft";
 

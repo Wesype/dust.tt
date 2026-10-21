@@ -7,7 +7,6 @@ import {
   buildFramePublication,
 } from "@app/lib/api/frames/build_and_publish";
 import { reconcileFramePublicationDatabasesOnStagedSource } from "@app/lib/api/frames/database_reconciliation";
-import { emitFrameDraftModeAuditLog } from "@app/lib/api/frames/draft_mode";
 import { withFrameSourceLock } from "@app/lib/api/frames/operation_lock";
 import type { FramePublicationSourceFile } from "@app/lib/api/frames/publication_storage";
 import {
@@ -234,12 +233,6 @@ export type PublishFrameFromSourceParams = {
    * Frame's identity is converted in place once the replacement builds.
    */
   replacesPath?: string;
-  /**
-   * Set by sandbox clients that still ask for a draft per publish: turns draft mode on first when
-   * the Frame has a live publication, so the publish is a draft (a Frame with nothing live goes
-   * live anyway).
-   */
-  draftRequested?: boolean;
 };
 
 export async function publishFrameFromSource(
@@ -249,7 +242,6 @@ export async function publishFrameFromSource(
     publishedByAgentConfigurationId,
     sourcePath,
     replacesPath,
-    draftRequested = false,
   }: PublishFrameFromSourceParams
 ): Promise<Result<PublishFrameFromSourceResult, PublishFrameFromSourceError>> {
   if (replacesPath) {
@@ -276,7 +268,6 @@ export async function publishFrameFromSource(
       frame,
       manifestPath: normalizedPath,
       publishedByAgentConfigurationId,
-      draftRequested,
     });
     if (publication.isErr()) {
       return new Err(publication.error);
@@ -290,13 +281,6 @@ export async function publishFrameFromSource(
       status: publication.value.status,
       created,
     });
-  }
-
-  if (draftRequested) {
-    return frameError(
-      "invalid_source",
-      "Drafts are only supported for Frames v2."
-    );
   }
 
   const splitResult = splitFrameEntryScopedPath(normalizedPath);
@@ -931,9 +915,8 @@ async function readFrameV2SourceTree(
  * While `frame`, read under the source lock, is in draft mode (`isInFrameDraftMode`), a Frames v2
  * publish from source MUST NOT change its live publication, whoever publishes (agent or panel
  * Save): it stores a draft, or changes nothing when the source matches the live publication.
- * Outside draft mode it publishes live. Callers choose only through `draftRequested`, which turns
- * draft mode on first. A draft-mode toggle takes the same lock, so it cannot interleave with a
- * publish.
+ * Outside draft mode it publishes live; callers cannot choose. A draft-mode toggle takes the same
+ * lock, so it cannot interleave with a publish.
  */
 async function publishFrameV2FromCapturedSourceWithSourceLockHeld(
   auth: Authenticator,
@@ -942,13 +925,11 @@ async function publishFrameV2FromCapturedSourceWithSourceLockHeld(
     manifest,
     sourceFiles,
     publishedByAgentConfigurationId,
-    draftRequested = false,
   }: {
     frame: FileResource;
     manifest: FrameManifest;
     sourceFiles: FramePublicationSourceFile[];
     publishedByAgentConfigurationId?: string;
-    draftRequested?: boolean;
   }
 ): Promise<
   Result<
@@ -969,17 +950,6 @@ async function publishFrameV2FromCapturedSourceWithSourceLockHeld(
     return sharingCheck;
   }
 
-  if (
-    draftRequested &&
-    !frame.isInFrameDraftMode &&
-    frame.useCaseMetadata?.activePublicationId
-  ) {
-    await frame.enterFrameDraftMode({
-      userSId: auth.getNonNullableUser().sId,
-    });
-    emitFrameDraftModeAuditLog(auth, frame, "on");
-  }
-
   return buildAndPublishFramePublication(auth, {
     frame,
     manifest,
@@ -995,13 +965,11 @@ async function publishFrameV2FromSourceWithSourceLockHeld(
     frame,
     manifestPath,
     publishedByAgentConfigurationId,
-    draftRequested,
   }: {
     conversation: ConversationWithoutContentType;
     frame: FileResource;
     manifestPath: string;
     publishedByAgentConfigurationId?: string;
-    draftRequested?: boolean;
   }
 ): Promise<
   Result<
@@ -1022,7 +990,6 @@ async function publishFrameV2FromSourceWithSourceLockHeld(
     manifest: source.value.manifest,
     sourceFiles: source.value.sourceFiles,
     publishedByAgentConfigurationId,
-    draftRequested,
   });
 }
 
@@ -1033,13 +1000,11 @@ export async function publishFrameV2FromSource(
     frame,
     manifestPath,
     publishedByAgentConfigurationId,
-    draftRequested,
   }: {
     conversation: ConversationWithoutContentType;
     frame: FileResource;
     manifestPath: string;
     publishedByAgentConfigurationId?: string;
-    draftRequested?: boolean;
   }
 ): Promise<
   Result<
@@ -1068,7 +1033,6 @@ export async function publishFrameV2FromSource(
       frame: freshFrame,
       manifestPath,
       publishedByAgentConfigurationId,
-      draftRequested,
     });
   });
   if (publication.isErr()) {
