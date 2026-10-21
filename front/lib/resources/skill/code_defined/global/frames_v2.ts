@@ -138,8 +138,8 @@ reads the local manifest, so the function does not need to be published yet.
 
 Each function is a TypeScript module that:
 
-- exports a \`schema\` object with a description and Zod \`input\` and \`output\` schemas, plus an
-  optional \`userIdentity\` policy;
+- exports a \`schema\` object with a description and Zod \`input\` and \`output\` schemas, plus a
+  \`userIdentity\` policy that defaults to \`workspace_user_required\`;
 - default-exports an object with a \`fetch(request: Request): Promise<Response>\` method. A bare
   default-exported function is invalid.
 
@@ -303,8 +303,8 @@ conversation alone.
 
 The \`schema.userIdentity\` policy decides whether the function may run:
 
-- \`optional\` is the default and allows calls without a user.
-- \`workspace_user_required\` requires a current member of the owning workspace.
+- \`workspace_user_required\` is the default and requires a current member of the owning
+  workspace.
 - \`interactive_workspace_user_required\` additionally requires the member's live Dust session;
   delegated agents, schedules, and API clients are refused.
 - \`frame_author_required\` requires the caller to be able to modify the Frame v2 source files (same
