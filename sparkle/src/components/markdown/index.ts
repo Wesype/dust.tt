@@ -12,6 +12,7 @@ export {
 export * from "./Markdown";
 export * from "./MarkdownContentContext";
 export * from "./MarkdownStyleContext";
+export { markdownHeaderClasses, markdownTableClasses } from "./markdownSizes";
 export * from "./PrettyJsonViewer";
 export * from "./QuickReplyBlock";
 export * from "./TableBlock";

@@ -1,4 +1,4 @@
-import { cn } from "@dust-tt/sparkle";
+import { cn, markdownTableClasses } from "@dust-tt/sparkle";
 import type {
   CommandProps,
   JSONContent,
@@ -235,7 +235,7 @@ export const DocumentTableRow = TableRow.extend({
 });
 
 const HEADER_CELL_CLASS = cn(
-  "bg-muted-background text-xs font-semibold text-muted-foreground",
+  markdownTableClasses.headerCell,
   "first:rounded-tl-2xl last:rounded-tr-2xl",
   "[tr:only-child>&]:first:rounded-bl-2xl [tr:only-child>&]:last:rounded-br-2xl"
 );

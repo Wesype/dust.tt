@@ -21,7 +21,7 @@ import {
 import { createDocumentMarked } from "@app/components/editor/document/marked_instance";
 import { codeFence } from "@app/lib/markdown/code_fence";
 import { isNumber } from "@app/types/shared/utils/general";
-import { cn } from "@dust-tt/sparkle";
+import { cn, markdownTableClasses } from "@dust-tt/sparkle";
 import type { AnyExtension } from "@tiptap/core";
 import { Code } from "@tiptap/extension-code";
 import { CodeBlock } from "@tiptap/extension-code-block";
@@ -211,19 +211,18 @@ export const buildSchemaExtensions = ({
         "my-6 overflow-x-auto whitespace-pre rounded-xl border border-border bg-muted-background px-5 py-4 font-mono text-sm leading-relaxed [tab-size:2] [&>code]:font-mono",
     },
   }),
-  // Mirrors the conversation's table card (Sparkle's `TableBlock`), with a line between rows so
-  // empty cells stay visible while editing.
   DocumentTable.configure({
     HTMLAttributes: {
-      class:
-        "my-6 w-full table-fixed border-separate border-spacing-0 rounded-2xl border border-border-dark bg-background text-sm",
+      class: cn(
+        "my-6 w-full table-fixed border-separate border-spacing-0 bg-background text-sm",
+        markdownTableClasses.frame
+      ),
     },
   }),
   DocumentTableRow,
   DocumentTableCell.configure({
     HTMLAttributes: {
-      class:
-        "border-border-dark px-4 py-3 align-top [tr+tr>&]:border-t [&>p]:my-0",
+      class: cn(markdownTableClasses.cell, "[tr+tr>&]:border-t [&>p]:my-0"),
     },
   }),
   DocumentMarkdown,
