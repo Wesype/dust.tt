@@ -103,7 +103,7 @@ function buildPdfFormData(options: PdfOptions): FormData {
 
 /**
  * DocumentRenderer abstracts the underlying rendering service (Gotenberg) for generating
- * PDFs and screenshots from URLs.
+ * PDFs and screenshots from URLs or HTML.
  */
 export class DocumentRenderer {
   constructor(
@@ -130,6 +130,24 @@ export class DocumentRenderer {
     formData.append("waitForExpression", target.waitForExpression);
 
     return this.convertToPdf("/forms/chromium/convert/url", formData);
+  }
+
+  /**
+   * Export a self-contained HTML string to PDF.
+   * The HTML is uploaded directly to Gotenberg so no public URL is required.
+   */
+  async exportHtmlToPdf(
+    html: string,
+    options: PdfOptions = {}
+  ): Promise<Result<Buffer, DocumentRendererError>> {
+    const formData = buildPdfFormData(options);
+    formData.append(
+      "files",
+      new Blob([html], { type: "text/html" }),
+      "index.html"
+    );
+
+    return this.convertToPdf("/forms/chromium/convert/html", formData);
   }
 
   private async convertToPdf(

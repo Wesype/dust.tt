@@ -20,6 +20,7 @@ import { MarkdownFilePreviewViewModeSwitch } from "@app/components/file_explorer
 import type { FileEntry } from "@app/components/file_explorer/types";
 import { useMarkdownFileEditor } from "@app/components/file_explorer/useMarkdownFileEditor";
 import { useConversationSandboxFiles } from "@app/hooks/conversations/useConversationSandboxFiles";
+import { useDownloadPdf } from "@app/hooks/useDownloadPdf";
 import { useFeatureFlags } from "@app/lib/auth/AuthContext";
 import { useClientType } from "@app/lib/context/clientType";
 import { getFileTypeIcon } from "@app/lib/file_icon_utils";
@@ -36,7 +37,7 @@ import type {
   FileSystemFileEntry,
 } from "@app/types/api/file_system/types";
 import type { ConversationWithoutContentType } from "@app/types/assistant/conversation";
-import { contentTypeFromFileName } from "@app/types/files";
+import { contentTypeFromFileName, stripFileExtension } from "@app/types/files";
 import { resolveCanonicalScopedPath } from "@app/types/mount_path";
 import type { LightWorkspaceType } from "@app/types/user";
 import {
@@ -140,6 +141,8 @@ export function FilePreviewPanelView({
   const [documentStatus, setDocumentStatus] = useState<HTMLSpanElement | null>(
     null
   );
+  const downloadPdf = useDownloadPdf();
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
   const fileId = target?.kind === "id" ? target.fileId : null;
   const filePath = target?.kind === "path" ? target.filePath : null;
   const openCommentId = target?.kind === "path" ? target.commentId : undefined;
@@ -252,6 +255,22 @@ export function FilePreviewPanelView({
   }
 
   const { recordCounts } = preview;
+
+  const handleExportAsPdf = async (documentPath: string) => {
+    if (isExportingPdf) {
+      return;
+    }
+    setIsExportingPdf(true);
+    try {
+      await downloadPdf({
+        url: getFilePathDownloadUrl(owner, documentPath, { format: "pdf" }),
+        fileName: `${stripFileExtension(fileName)}.pdf`,
+      });
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   const FileIcon = getFileTypeIcon(contentType, fileName);
 
   return (
@@ -300,6 +319,7 @@ export function FilePreviewPanelView({
                     size="sm"
                     icon={Download01}
                     tooltip={t({ message: "Download", context: "action" })}
+                    isLoading={isExportingPdf}
                   />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -316,6 +336,11 @@ export function FilePreviewPanelView({
                     href={urls.downloadUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                  />
+                  <DropdownMenuItem
+                    label={t`PDF`}
+                    disabled={isExportingPdf}
+                    onClick={() => void handleExportAsPdf(path)}
                   />
                 </DropdownMenuContent>
               </DropdownMenu>

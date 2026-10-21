@@ -116,6 +116,10 @@ msgid "Markdown with comments"
 msgstr "Markdown with comments"
 
 #: front/components/assistant/conversation/files_panel/FilePreviewPanel.tsx
+msgid "PDF"
+msgstr "PDF"
+
+#: front/components/assistant/conversation/files_panel/FilePreviewPanel.tsx
 msgid "Exit full screen mode"
 msgstr "Exit full screen mode"
 

@@ -43,6 +43,7 @@ import { flattenExtensions, getExtensionField, getSchema } from "@tiptap/core";
 import { MarkdownManager } from "@tiptap/markdown";
 import type { Mark, Node } from "@tiptap/pm/model";
 import { Fragment } from "@tiptap/pm/model";
+import { renderToHTMLString } from "@tiptap/static-renderer/pm/html-string";
 import isEqual from "lodash/isEqual";
 
 export const documentSchema = getSchema(documentExtensions);
@@ -702,6 +703,10 @@ export const serializeDocumentMarkdown = (
     ? commented
     : serializeReadingBack(content, anchorOrder, "shared");
 };
+
+// Resolves no image source: images render as their alt text, and Frames as their path.
+export const serializeDocumentHtml = (document: JSONContent): string =>
+  renderToHTMLString({ extensions: documentExtensions, content: document });
 
 const INLINE_NODE_TYPES = new Set(["text", "hardBreak"]);
 
