@@ -124,12 +124,16 @@ export const commentServerMessageSchema = z.discriminatedUnion("type", [
 
 export type CommentServerMessage = z.infer<typeof commentServerMessageSchema>;
 
-/** The agent at work in a live document and the user it works for, as editors show them. */
+/**
+ * The agent at work in a live document, the user it works for and, when a comment mentioned it,
+ * the thread it answers, as editors show them.
+ */
 export const collabAgentSchema = z.object({
   agentId: z.string().min(1),
   name: z.string().min(1),
   userId: z.string().min(1).nullable().default(null),
   userName: z.string().default(""),
+  commentId: z.string().min(1).nullable().default(null),
 });
 
 export type CollabAgent = z.infer<typeof collabAgentSchema>;
@@ -137,11 +141,27 @@ export type CollabAgent = z.infer<typeof collabAgentSchema>;
 /**
  * What an agent is doing in a live document, pushed to its editors as a stateless message.
  * `editing` goes out just before the agent's change is applied: Hocuspocus may batch document
- * updates but sends stateless messages at once, so an editor receives it first.
+ * updates but sends stateless messages at once, so an editor receives it first. An agent a comment
+ * mentioned is `waiting` while another run holds its conversation, then `thinking` until its
+ * reply in the thread.
  */
-export const AGENT_ACTIVITIES = ["reading", "editing"] as const;
+export const AGENT_ACTIVITIES = [
+  "waiting",
+  "thinking",
+  "reading",
+  "editing",
+] as const;
 
 export type AgentActivity = (typeof AGENT_ACTIVITIES)[number];
+
+export type WorkingAgentActivity = Exclude<AgentActivity, "waiting">;
+
+export type DocumentActivity = Extract<AgentActivity, "reading" | "editing">;
+
+export const isDocumentActivity = (
+  activity: AgentActivity
+): activity is DocumentActivity =>
+  activity === "reading" || activity === "editing";
 
 export const agentActivityMessageSchema = z.object({
   type: z.literal("agent_activity"),
