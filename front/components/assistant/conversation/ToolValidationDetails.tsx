@@ -30,10 +30,6 @@ import {
   UPDATE_TASKS_TOOL_NAME,
 } from "@app/lib/api/actions/servers/pod_tasks/metadata";
 import {
-  isPodTasksCreateTasksInput,
-  isPodTasksUpdateTasksInput,
-} from "@app/lib/api/actions/servers/pod_tasks/types";
-import {
   SKILL_AUTHORING_SERVER_NAME,
   UPDATE_SKILL_TOOL_NAME,
 } from "@app/lib/api/actions/servers/skill_authoring/metadata";
@@ -189,7 +185,11 @@ export function ToolValidationDetails({
   if (
     blockedAction.metadata.mcpServerName === POD_TASKS_SERVER_NAME &&
     blockedAction.metadata.toolName === CREATE_TASKS_TOOL_NAME &&
-    isPodTasksCreateTasksInput(blockedAction.inputs)
+    validateToolInputs(
+      POD_TASKS_SERVER_NAME,
+      CREATE_TASKS_TOOL_NAME,
+      blockedAction.inputs
+    )
   ) {
     return (
       <PodTasksCreateValidationDetails
@@ -204,7 +204,11 @@ export function ToolValidationDetails({
   if (
     blockedAction.metadata.mcpServerName === POD_TASKS_SERVER_NAME &&
     blockedAction.metadata.toolName === UPDATE_TASKS_TOOL_NAME &&
-    isPodTasksUpdateTasksInput(blockedAction.inputs)
+    validateToolInputs(
+      POD_TASKS_SERVER_NAME,
+      UPDATE_TASKS_TOOL_NAME,
+      blockedAction.inputs
+    )
   ) {
     return (
       <PodTasksUpdateValidationDetails
