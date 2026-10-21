@@ -174,13 +174,13 @@ export const POD_MANAGER_TOOLS_METADATA = [
               .max(MAX_POD_FILE_TAB_TITLE_LENGTH)
               .optional()
               .describe(
-                "Display title for the tab. Defaults to the file basename when omitted."
+                "Plain-text display title for the tab (no emojis or symbols; the UI already shows the tab's icon). Defaults to the file basename when omitted."
               ),
             icon: z
               .string()
               .optional()
               .describe(
-                "Action icon name (e.g. ActionDocumentIcon, ActionDashboardIcon). Defaults to ActionDocumentIcon."
+                "Action icon name (e.g. ActionDocumentIcon, ActionDashboardIcon). Pick an icon that fits the file's content so tabs are visually distinct. Defaults to ActionDocumentIcon."
               ),
           })
         )
