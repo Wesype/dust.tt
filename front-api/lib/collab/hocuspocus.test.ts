@@ -999,6 +999,7 @@ describe("comment threads in a live session", () => {
       expect.anything(),
       expect.objectContaining({ type: "add", commentId: "c2" }),
       CREATED.messages[0],
+      expect.any(Function),
     ]);
 
     const invalid = await mine.send({
@@ -1051,6 +1052,31 @@ describe("comment threads in a live session", () => {
     expect(refused.isErr() && refused.error).toBe("unanchored");
     expect(mine.getThreads()).toEqual([THREAD, CREATED]);
     expect(yDocCommentedTexts(myProvider.document).has("c3")).toBe(false);
+  }, 15_000);
+
+  it("shows every connection the agent a comment's mentions run", async () => {
+    const { writer, url } = await start();
+    const { channel: mine, provider: myProvider } = await join(url, writer);
+    const { provider: theirs } = await join(url, writer);
+    const seen: string[] = [];
+    const listen = (who: string, provider: HocuspocusProvider) =>
+      onAgentActivity(provider, ({ agent, activity }) =>
+        seen.push(`${who}: ${agent.name} ${agent.commentId} ${activity}`)
+      );
+    listen("mine", myProvider);
+    listen("theirs", theirs);
+
+    await mine.send({ type: "add", commentId: "c2", body: "Ship it." });
+    const [, , , , show] = vi.mocked(dispatchSessionCommentMentions).mock
+      .calls[0];
+    show(CollabAgentFactory.build({ commentId: "c2" }), "waiting");
+
+    await vi.waitFor(() =>
+      expect(seen.sort()).toEqual([
+        "mine: Writer c2 waiting",
+        "theirs: Writer c2 waiting",
+      ])
+    );
   }, 15_000);
 
   it("saves comments through the latest commenter when nobody changed the text", async () => {

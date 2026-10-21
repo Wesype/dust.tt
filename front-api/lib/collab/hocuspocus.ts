@@ -36,6 +36,7 @@ import {
   storeSessionState,
   toSaveState,
   serverMessage,
+  showAgentActivity,
   startSession,
   stopWrites,
 } from "@front-api/lib/collab/session";
@@ -141,7 +142,8 @@ function logUnexpected(
  * the new threads MUST be sent to every connection of the document and the document stored, so
  * the save writes them, through the connection that last changed its text, or through the latest
  * commenter's when none did, and the message it added handed to `dispatchSessionCommentMentions`
- * without waiting for it. A command its document unloaded before it finished MUST change nothing.
+ * without waiting for it, which shows every connection the agent it runs. A command its document
+ * unloaded before it finished MUST change nothing.
  * Every command carrying a request id MUST be answered, refused as `unavailable` when it is
  * invalid, failed, outlived its document, found the document's last save failed at its turn, or
  * did not finish within `COMMENT_COMMAND_TIMEOUT_MS` of its arrival, then never applied, and a
@@ -483,7 +485,9 @@ export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
             file,
             document,
             command,
-            result.value.added
+            result.value.added,
+            (agent, activity) =>
+              showAgentActivity(hocuspocus, documentName, agent, activity)
           ).catch((err) =>
             logger.error(
               {

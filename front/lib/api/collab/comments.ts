@@ -1,17 +1,24 @@
 import type { CollabAccess } from "@app/lib/api/collab/access";
 import { yDocCommentedTexts } from "@app/lib/api/collab/ydoc";
-import { dispatchCommentMentions } from "@app/lib/api/documents/comment_mentions";
+import {
+  dispatchCommentMentions,
+  getCommentMentionStart,
+} from "@app/lib/api/documents/comment_mentions";
 import { signDfmCommentMessage } from "@app/lib/api/documents/comment_signatures";
 import type { DfmCommentSignatureError } from "@app/lib/api/documents/comment_signatures";
 import type { DfmComment, DfmMessage } from "@app/lib/markdown/dfm";
 import { extractFromString } from "@app/lib/mentions/format";
+import logger from "@app/logger/logger";
 import type {
+  AgentActivity,
+  CollabAgent,
   CommentRequest,
   CommentRequestErrorCode,
 } from "@app/types/collab";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
 import { assertNever } from "@app/types/shared/utils/assert_never";
+import { normalizeError } from "@app/types/shared/utils/error_utils";
 import type * as Y from "yjs";
 
 const signatureRefusal = ({
@@ -138,13 +145,16 @@ export async function applyCommentRequest(
  * carries, as the browser anchors its thread only once it is accepted, and for a `reply` the
  * text its thread's anchors cover in `doc` as `yDocCommentedTexts` gives it, so agents get the
  * editor's text either way, and none only when the body cannot be read. A message without
- * mentions MUST NOT read `doc`, as that converts the whole document.
+ * mentions MUST NOT read `doc`, as that converts the whole document. Before it is handed over, the
+ * agent it runs MUST be given to `show` as `getCommentMentionStart` finds it, if any; a failure to
+ * find it MUST be logged and MUST NOT keep the message from being handed over.
  */
 export async function dispatchSessionCommentMentions(
   file: CollabAccess,
   doc: Y.Doc,
   command: CommentRequest,
-  message: DfmMessage
+  message: DfmMessage,
+  show: (agent: CollabAgent, activity: AgentActivity) => void
 ): Promise<void> {
   if (extractFromString(message.body).length === 0) {
     return;
@@ -153,8 +163,26 @@ export async function dispatchSessionCommentMentions(
     command.type === "add"
       ? (command.quote ?? null)
       : (yDocCommentedTexts(doc).get(command.commentId) ?? null);
+  const newMessage = { commentId: command.commentId, quote, message };
+  const start = await getCommentMentionStart(file.auth, {
+    documentPath: file.canonicalPath,
+    newMessage,
+  }).catch((err) => {
+    logger.warn(
+      {
+        err: normalizeError(err),
+        workspaceId: file.workspaceId,
+        commentId: command.commentId,
+      },
+      "Could not find the agent a document comment runs"
+    );
+    return null;
+  });
+  if (start) {
+    show(start.agent, start.activity);
+  }
   await dispatchCommentMentions(file.auth, {
     scopedPath: file.canonicalPath,
-    newMessages: [{ commentId: command.commentId, quote, message }],
+    newMessages: [newMessage],
   });
 }

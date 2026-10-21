@@ -6,16 +6,21 @@ import {
 } from "@app/lib/api/collab/comments";
 import { dfmToYDoc } from "@app/lib/api/collab/ydoc";
 import config from "@app/lib/api/config";
-import { dispatchCommentMentions } from "@app/lib/api/documents/comment_mentions";
+import {
+  dispatchCommentMentions,
+  getCommentMentionStart,
+} from "@app/lib/api/documents/comment_mentions";
 import { DustFileSystem } from "@app/lib/api/file_system/dust_file_system";
 import type { DfmComment } from "@app/lib/markdown/dfm";
 import { serializeDfm } from "@app/lib/markdown/dfm";
+import { CollabAgentFactory } from "@app/tests/utils/CollabAgentFactory";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock(import("@app/lib/api/documents/comment_mentions"), () => ({
   dispatchCommentMentions: vi.fn(),
+  getCommentMentionStart: vi.fn(async () => null),
 }));
 
 const { privateKey } = generateKeyPairSync("ed25519");
@@ -221,6 +226,7 @@ describe("dispatchSessionCommentMentions", () => {
 
   beforeEach(async () => {
     vi.mocked(dispatchCommentMentions).mockReset();
+    vi.mocked(getCommentMentionStart).mockClear();
     const { authenticator: auth, workspace } = await createResourceTest({});
     const dustFs = await DustFileSystem.forUser(auth);
     if (dustFs.isErr()) {
@@ -243,7 +249,8 @@ describe("dispatchSessionCommentMentions", () => {
       file,
       live.doc,
       { type: "reply", commentId: "c1", position: 1, body: message.body },
-      message
+      message,
+      vi.fn()
     );
 
     expect(dispatchCommentMentions).toHaveBeenCalledWith(file.auth, {
@@ -260,12 +267,61 @@ describe("dispatchSessionCommentMentions", () => {
       file,
       live.doc,
       { type: "add", commentId: "c2", body: message.body, quote: "Ship it" },
-      message
+      message,
+      vi.fn()
     );
 
     expect(
       vi.mocked(dispatchCommentMentions).mock.calls[0][1].newMessages
     ).toEqual([{ commentId: "c2", quote: "Ship it", message }]);
+  });
+
+  it("shows the agent it runs before handing it over", async () => {
+    const live = loadLive();
+    const message = live.comments[1].messages[0];
+    const agent = CollabAgentFactory.build({ commentId: "c2" });
+    vi.mocked(getCommentMentionStart).mockResolvedValueOnce({
+      agent,
+      activity: "waiting",
+    });
+    const show = vi.fn(() =>
+      expect(dispatchCommentMentions).not.toHaveBeenCalled()
+    );
+
+    await dispatchSessionCommentMentions(
+      file,
+      live.doc,
+      { type: "add", commentId: "c2", body: message.body, quote: "Ship it" },
+      message,
+      show
+    );
+
+    expect(vi.mocked(getCommentMentionStart).mock.calls[0][1]).toEqual({
+      documentPath: file.canonicalPath,
+      newMessage: { commentId: "c2", quote: "Ship it", message },
+    });
+    expect(show).toHaveBeenCalledWith(agent, "waiting");
+    expect(dispatchCommentMentions).toHaveBeenCalledOnce();
+  });
+
+  it("hands the message over even when its agent cannot be found", async () => {
+    const live = loadLive();
+    const message = live.comments[1].messages[0];
+    vi.mocked(getCommentMentionStart).mockRejectedValueOnce(
+      new Error("Connection terminated")
+    );
+    const show = vi.fn();
+
+    await dispatchSessionCommentMentions(
+      file,
+      live.doc,
+      { type: "add", commentId: "c2", body: message.body, quote: "Ship it" },
+      message,
+      show
+    );
+
+    expect(show).not.toHaveBeenCalled();
+    expect(dispatchCommentMentions).toHaveBeenCalledOnce();
   });
 
   it("dispatches nothing for a message without mentions", async () => {
@@ -276,7 +332,8 @@ describe("dispatchSessionCommentMentions", () => {
       file,
       live.doc,
       { type: "reply", commentId: "c1", position: 1, body: message.body },
-      message
+      message,
+      vi.fn()
     );
 
     expect(dispatchCommentMentions).not.toHaveBeenCalled();
