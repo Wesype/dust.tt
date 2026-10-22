@@ -69,14 +69,15 @@ msgstr ""
 msgid "Verify"
 msgstr ""
 
-#: front/components/pages/share/SharedFramePage.tsx
+#: front/components/pages/share/ShareNotFoundPage.tsx
 msgid "404: Page not found"
 msgstr ""
 
-#: front/components/pages/share/SharedFramePage.tsx
+#: front/components/pages/share/ShareNotFoundPage.tsx
 msgid "If you have access to this page, sign in to open it."
 msgstr ""
 
+#: front/components/pages/share/ShareNotFoundPage.tsx
 #: front/components/pages/share/SharedFramePage.tsx
 msgid "Sign in"
 msgstr ""

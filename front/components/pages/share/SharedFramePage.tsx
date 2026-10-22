@@ -3,9 +3,12 @@ import { useFrameTracking } from "@app/components/assistant/conversation/interac
 import Custom404 from "@app/components/pages/Custom404";
 import CustomErrorPage from "@app/components/pages/CustomErrorPage";
 import { EmailVerificationFlow } from "@app/components/pages/share/EmailVerificationFlow";
+import {
+  buildLoginUrl,
+  ShareNotFoundPage,
+} from "@app/components/pages/share/ShareNotFoundPage";
 import { ThemeProvider } from "@app/components/sparkle/ThemeContext";
 import { useDocumentTitle } from "@app/hooks/useDocumentTitle";
-import config from "@app/lib/api/config";
 import { DUST_HAS_SESSION, hasSessionIndicator } from "@app/lib/cookies";
 import { useAppRouter, usePathParam } from "@app/lib/platform";
 import { usePublicFrame } from "@app/lib/swr/frames";
@@ -22,11 +25,6 @@ import { useCookies } from "react-cookie";
 // Origins from which the share frame is considered as embedded.
 // We hide the header for embedded origins.
 const EMBEDDED_ORIGINS = ["https://dust.tt/blog/"];
-
-function buildLoginUrl() {
-  const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-  return `${config.getApiBaseUrl()}/api/workos/login?returnTo=${encodeURIComponent(returnTo)}`;
-}
 
 // Shown once the share metadata and the frame have loaded.
 // Takes the objects as returned by their hooks so the null checks stay out of SharedFramePage.
@@ -64,7 +62,6 @@ function useTrackSharedFrameOpen({
  * string props.
  */
 export function SharedFramePage() {
-  const { t } = useLingui();
   const token = usePathParam("token");
   const { query } = useAppRouter();
 
@@ -130,20 +127,7 @@ export function SharedFramePage() {
   }
 
   if (!token || shareMetadataError || !shareMetadata) {
-    // A Frame hidden from this viewer and a token that never existed must render the same page,
-    // so the sign-in affordance has to live on the 404 rather than replace it: a logged-out
-    // workspace member reaches a Frame with functions only by signing in from here.
-    return hasSession ? (
-      <Custom404 />
-    ) : (
-      <CustomErrorPage
-        title={t`404: Page not found`}
-        description={t`If you have access to this page, sign in to open it.`}
-        href={buildLoginUrl()}
-        label={t`Sign in`}
-        icon={LogIn01}
-      />
-    );
+    return <ShareNotFoundPage />;
   }
 
   // Show email verification form when scope requires it and user isn't authorized yet.

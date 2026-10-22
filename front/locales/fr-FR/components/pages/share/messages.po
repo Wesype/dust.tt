@@ -69,14 +69,15 @@ msgstr "Renvoyer le code"
 msgid "Verify"
 msgstr "Vérifier"
 
-#: front/components/pages/share/SharedFramePage.tsx
+#: front/components/pages/share/ShareNotFoundPage.tsx
 msgid "404: Page not found"
 msgstr "404 : page introuvable"
 
-#: front/components/pages/share/SharedFramePage.tsx
+#: front/components/pages/share/ShareNotFoundPage.tsx
 msgid "If you have access to this page, sign in to open it."
 msgstr "Si vous avez accès à cette page, connectez-vous pour l’ouvrir."
 
+#: front/components/pages/share/ShareNotFoundPage.tsx
 #: front/components/pages/share/SharedFramePage.tsx
 msgid "Sign in"
 msgstr "Se connecter"
