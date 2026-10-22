@@ -9,7 +9,10 @@ import { storeTestFramePublication } from "@app/tests/utils/FramePublicationFact
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import { fileStorageMock } from "@app/tests/utils/mocks/file_storage";
 import { SpaceFactory } from "@app/tests/utils/SpaceFactory";
-import { getFramePublicationUiBundlePath } from "@app/types/api/frame_storage";
+import {
+  getFramePublicationSourceArchivePath,
+  getFramePublicationUiBundlePath,
+} from "@app/types/api/frame_storage";
 import { ONE_DAY_MS } from "@app/types/shared/utils/date_utils";
 import { Op } from "sequelize";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -103,6 +106,26 @@ describe("purgeStaleFramePublications", () => {
     expect(hasUiBundle(workspaceId, frame, stale)).toBe(false);
     expect(hasUiBundle(workspaceId, frame, active)).toBe(true);
     expect(await publicationRowIds(frame)).toEqual([active]);
+  });
+
+  it("deletes a stale publication's source archive with its prefix", async () => {
+    const { auth, frame, workspaceId } = await setupFrame();
+    const stale = await storeTestFramePublication(auth, frame, {
+      publishedDaysAgo: 30,
+    });
+    const sourceArchivePath = getFramePublicationSourceArchivePath({
+      workspaceId,
+      frameId: frame.sId,
+      publicationId: stale,
+    });
+    fileStorageMock.setObject(sourceArchivePath, "archive");
+
+    await purgeStaleFramePublications(auth, {
+      frame,
+      retentionMs: RETENTION_MS,
+    });
+
+    expect(fileStorageMock.getObject(sourceArchivePath)).toBeUndefined();
   });
 
   it("deletes every stale publication of the Frame in one sweep", async () => {

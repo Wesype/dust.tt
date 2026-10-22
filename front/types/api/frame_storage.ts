@@ -5,6 +5,8 @@ const SAFE_FRAME_STORAGE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 export const FRAME_PUBLICATION_FILE = "publication.json";
 /** Uncompressed tar of every published function bundle (`<name>.ts`). */
 export const FRAME_PUBLICATION_FUNCTIONS_ARCHIVE_FILE = "functions.tar";
+/** Uncompressed tar of the source tree a publication was built from (see `source_archive.ts`). */
+export const FRAME_PUBLICATION_SOURCE_ARCHIVE_FILE = "source.tar";
 
 /**
  * Whether `value` may be used as a Frame storage path segment. Callers that discover segments
@@ -124,4 +126,13 @@ export function getFramePublicationFunctionsArchivePath(args: {
   publicationId: string;
 }): string {
   return `${getFramePublicationBasePath(args)}${FRAME_PUBLICATION_FUNCTIONS_ARCHIVE_FILE}`;
+}
+
+/** Uncompressed tar of the source tree a publication was built from. */
+export function getFramePublicationSourceArchivePath(args: {
+  workspaceId: string;
+  frameId: string;
+  publicationId: string;
+}): string {
+  return `${getFramePublicationBasePath(args)}${FRAME_PUBLICATION_SOURCE_ARCHIVE_FILE}`;
 }

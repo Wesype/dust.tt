@@ -10,6 +10,7 @@ import {
   storeFramePublication,
 } from "@app/lib/api/frames/publication_storage";
 import { seedFramePublicationFunctionsArchive } from "@app/lib/api/frames/seed_functions_archive";
+import { parseFrameSourceArchive } from "@app/lib/api/frames/source_archive";
 import { getRedisStreamClient } from "@app/lib/api/redis";
 import { computeFrameContentHash } from "@app/lib/api/viz/authorized_file_access_policy";
 import type { Authenticator } from "@app/lib/auth";
@@ -39,6 +40,7 @@ import { FramePublicationDescriptorSchema } from "@app/types/api/frame_publicati
 import {
   getFramePublicationDescriptorPath,
   getFramePublicationFunctionsArchivePath,
+  getFramePublicationSourceArchivePath,
   getFramePublicationUiBundlePath,
 } from "@app/types/api/frame_storage";
 import type { SandboxFunctionUserIdentityPolicy } from "@app/types/api/sandbox_functions";
@@ -218,7 +220,7 @@ function getStoredDescriptor(path: string) {
 }
 
 describe("storeFramePublication", () => {
-  it("stores runtime artifacts without source before the publication commit marker", async () => {
+  it("stores runtime artifacts and the source archive before the publication commit marker", async () => {
     const { auth, frame, workspaceId } = await setupFrame();
 
     const result = await storeFramePublication(auth, {
@@ -238,8 +240,22 @@ describe("storeFramePublication", () => {
     const savedPaths = fileStorageMock.saveFileCalls.map(
       ({ filePath }) => filePath
     );
+    const sourceArchivePath = getFramePublicationSourceArchivePath(identity);
     expect(new Set(savedPaths.slice(0, -1))).toEqual(
-      new Set([getFramePublicationUiBundlePath(identity)])
+      new Set([getFramePublicationUiBundlePath(identity), sourceArchivePath])
+    );
+    const storedArchive = fileStorageMock.getObject(sourceArchivePath);
+    assert(storedArchive !== undefined, "source archive is stored");
+    const archived = await parseFrameSourceArchive(Buffer.from(storedArchive));
+    assert(archived.isOk(), "source archive parses");
+    expect(
+      archived.value
+        .map((f) => [f.relativePath, f.content.toString("utf8")])
+        .sort()
+    ).toEqual(
+      sourceFiles
+        .map((f) => [f.relativePath, f.content.toString("utf8")])
+        .sort()
     );
     expect(savedPaths.at(-1)).toBe(getFramePublicationDescriptorPath(identity));
     expect(fileStorageMock.saveFileCalls.at(-1)?.contentType).toBe(

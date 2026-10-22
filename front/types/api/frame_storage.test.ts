@@ -5,6 +5,7 @@ import {
   getFramePersistentFilesBasePath,
   getFramePublicationDescriptorPath,
   getFramePublicationFunctionsArchivePath,
+  getFramePublicationSourceArchivePath,
   getFramePublicationUiBundlePath,
 } from "@app/types/api/frame_storage";
 import { describe, expect, it } from "vitest";
@@ -45,6 +46,14 @@ describe("Frames v2 GCS paths", () => {
   it("keeps the persistent files folder beside the SQLite replicas", () => {
     expect(getFramePersistentFilesBasePath(IDS)).toBe(
       "w/w_123/frames/fil_456/state/files/"
+    );
+  });
+
+  it("puts the source archive in the publication prefix", () => {
+    const args = { workspaceId: "w1", frameId: "f1", publicationId: "p1" };
+
+    expect(getFramePublicationSourceArchivePath(args)).toBe(
+      "w/w1/frames/f1/publications/p1/source.tar"
     );
   });
 

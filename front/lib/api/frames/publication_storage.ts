@@ -16,6 +16,8 @@ import {
 import { withFramePublishLock } from "@app/lib/api/frames/operation_lock";
 import { withFramePublishTimingResult } from "@app/lib/api/frames/publish_timing";
 import { seedFramePublicationFunctionsArchive } from "@app/lib/api/frames/seed_functions_archive";
+import { FRAME_SOURCE_ARCHIVE_CONTENT_TYPE } from "@app/lib/api/frames/source_archive";
+import { buildFrameSourceTarArchive } from "@app/lib/api/frames/source_staging";
 import { SANDBOX_HTTPS_SECRET_ENV_VAR_PREFIX } from "@app/lib/api/sandbox/env_vars";
 import { SandboxFunctionError } from "@app/lib/api/sandbox_functions/errors";
 import { computeAuthorizedFileAccessForShare } from "@app/lib/api/viz/authorized_file_access";
@@ -56,6 +58,7 @@ import {
 import {
   getFramePublicationDescriptorPath,
   getFramePublicationFunctionsArchivePath,
+  getFramePublicationSourceArchivePath,
   getFramePublicationUiBundlePath,
 } from "@app/types/api/frame_storage";
 import type {
@@ -412,6 +415,11 @@ export function buildFramePublicationContracts({
 }
 
 /**
+ * @cc [owner:davidebbo,label:product;security] publication-stores-its-source
+ * Every publication stored after this change MUST have a source archive (`source.tar` in its
+ * prefix) whose files match its descriptor's `sourceFiles`.
+ */
+/**
  * @cc [owner:davidebbo,label:backend] publication-row-before-objects
  * The publication's `frame_publications` row MUST be committed before any of its objects is
  * written to GCS, so that no stored publication lacks a row. A failure after the insert leaves a
@@ -503,6 +511,11 @@ export async function storeFramePublication(
       filePath: getFramePublicationUiBundlePath(identity),
       content: uiBundleCode,
       contentType: frameContentType,
+    },
+    {
+      filePath: getFramePublicationSourceArchivePath(identity),
+      content: await buildFrameSourceTarArchive(sourceFiles),
+      contentType: FRAME_SOURCE_ARCHIVE_CONTENT_TYPE,
     },
   ];
 

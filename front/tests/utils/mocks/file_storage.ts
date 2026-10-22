@@ -358,8 +358,14 @@ class FileStorageMock {
         return Promise.resolve(undefined);
       }),
       download: vi.fn().mockImplementation(() => {
-        const content = this._objectStore.get(filePath ?? "unknown") ?? "";
-        return Promise.resolve([Buffer.from(content, "utf-8")]);
+        const path = filePath ?? "unknown";
+        const stored = this._objectStore.get(path);
+        if (stored === undefined && this._fetchNotFoundPredicate(path)) {
+          return Promise.reject(
+            new MockGcsError(404, `No such object: ${path}`)
+          );
+        }
+        return Promise.resolve([Buffer.from(stored ?? "", "utf-8")]);
       }),
       exists: vi.fn(() =>
         Promise.resolve([this._existsPredicate(filePath ?? "")])
