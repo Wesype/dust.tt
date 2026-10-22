@@ -189,9 +189,10 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: extension/office
+          # Not extension/office: npx runs from the nearest package.json, so from extension/ anyway.
+          workingDirectory: extension
           # version id is a lowercase UUID.
-          command: versions deploy ${{ steps.version.outputs.id }}@100% --config wrangler.toml -y
+          command: versions deploy ${{ steps.version.outputs.id }}@100% --config office/wrangler.toml -y
           wranglerVersion: "4.80.0"
 
       - name: Notify Deploy Success

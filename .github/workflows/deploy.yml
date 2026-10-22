@@ -410,9 +410,10 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: extension/office
+          # Not extension/office: npx runs from the nearest package.json, so from extension/ anyway.
+          workingDirectory: extension
           # Tagging with the commit lets a rollback find the version to promote.
-          command: versions upload --config wrangler.toml --tag ${{ needs.prepare.outputs.short_sha }}
+          command: versions upload --config office/wrangler.toml --tag ${{ needs.prepare.outputs.short_sha }}
           wranglerVersion: "4.80.0"
 
       - name: Extract version ID
