@@ -346,9 +346,6 @@ export const AdminActionsList = ({
             }
           );
         },
-        meta: {
-          className: "w-28 @2xl:w-32",
-        },
       },
       {
         id: "usedBy",
@@ -368,7 +365,7 @@ export const AdminActionsList = ({
           </div>
         ),
         meta: {
-          className: "hidden px-0 @sm:w-32 @sm:table-cell",
+          className: "hidden w-32 px-0 @xxs-table:table-cell",
         },
       },
       {
@@ -402,7 +399,7 @@ export const AdminActionsList = ({
           );
         },
         meta: {
-          className: "hidden w-28 @2xl:w-10 @sm:table-cell",
+          className: "hidden w-36 @sm-table:table-cell",
         },
       },
       {
@@ -424,7 +421,7 @@ export const AdminActionsList = ({
           return compareStrings(accountA, accountB);
         },
         meta: {
-          className: "hidden @sm:w-5 @sm:table-cell",
+          className: "hidden w-28 @lg-table:table-cell",
         },
       },
       {
@@ -446,7 +443,7 @@ export const AdminActionsList = ({
           );
         },
         meta: {
-          className: "hidden @sm:w-2 @sm:table-cell",
+          className: "hidden w-16 @lg-table:table-cell",
         },
       },
       {
@@ -468,7 +465,7 @@ export const AdminActionsList = ({
           />
         ),
         meta: {
-          className: "hidden @sm:w-5 @sm:table-cell @2xl:w-5",
+          className: "hidden w-48 @md-table:table-cell",
         },
       }
     );
