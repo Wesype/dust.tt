@@ -540,17 +540,21 @@ message RemoveOperation {
 enum SearchField {
   NAME = 0;
   CONTENT = 1;
+  ATTRIBUTES = 2;
 }
 
 // @cc [owner:spolu,label:api] dfs-search-request-limits
-// Query MUST NOT exceed 4,096 UTF-8 bytes. Limit MUST be between 1 and 100, inclusive; an omitted
-// limit MUST default to 20.
+// Query MUST NOT exceed 4,096 UTF-8 bytes or 32 clauses. Limit MUST be between 1 and 100 inclusive.
+// An omitted limit MUST default to 20.
 message SearchRequest {
   required string query = 1;
+  // Empty searches name, content, and selected attributes.
   repeated SearchField fields = 2;
   optional SearchScope scope = 3;
   optional SearchFilter filter = 4;
   optional uint32 limit = 5 [default = 20];
+  // Complete the final positive unquoted word, unless followed by whitespace.
+  optional bool as_you_type = 6 [default = false];
 }
 
 message SearchScope {

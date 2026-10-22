@@ -6,6 +6,7 @@ import type { DfsMethod, DfsWireMessage } from "@app/lib/dfs/proto";
 import { DfsWireFactory } from "@app/tests/utils/dfs/DfsWireFactory";
 import type { FakeDfsAnswer } from "@app/tests/utils/dfs/FakeDfsTransport";
 import { FakeDfsTransport } from "@app/tests/utils/dfs/FakeDfsTransport";
+import type { DfsSearchRequest } from "@app/types/dfs";
 import { DfsError, isDfsObjectId } from "@app/types/dfs";
 import { Err, Ok } from "@app/types/shared/result";
 import { describe, expect, it } from "vitest";
@@ -596,7 +597,8 @@ describe("DfsClient", () => {
 
     const res = await client.search({
       query: "hello",
-      fields: ["content"],
+      fields: ["content", "attributes"],
+      asYouType: true,
       scope: { directoryId: ROOT_ID, recursive: false },
       filter: {
         kind: "file",
@@ -609,7 +611,8 @@ describe("DfsClient", () => {
 
     expect(transport.calls[0].request).toEqual({
       query: "hello",
-      fields: ["CONTENT"],
+      fields: ["CONTENT", "ATTRIBUTES"],
+      asYouType: true,
       scope: { directoryId: wireId(ROOT_ID), recursive: false },
       filter: {
         kind: "FILE",
@@ -633,6 +636,93 @@ describe("DfsClient", () => {
       ],
       partial: false,
     });
+  });
+
+  it.each<{ description: string; request: DfsSearchRequest }>([
+    { description: "33 words", request: { query: "word ".repeat(33) } },
+    {
+      description: "33 quoted phrases",
+      request: { query: '"two words" '.repeat(33) },
+    },
+    {
+      description: "33 clauses with escaped spaces",
+      request: { query: "two\\ words ".repeat(33) },
+    },
+    {
+      description: "33 clauses separated by Unicode whitespace",
+      request: { query: "word\u0085".repeat(33) },
+    },
+    {
+      description: "more than 4096 UTF-8 bytes",
+      request: { query: "é".repeat(2049) },
+    },
+    { description: "a zero limit", request: { query: "word", limit: 0 } },
+    {
+      description: "a limit above 100",
+      request: { query: "word", limit: 101 },
+    },
+    {
+      description: "a fractional limit",
+      request: { query: "word", limit: 1.5 },
+    },
+  ])(
+    "rejects $description before sending a search RPC",
+    async ({ request }) => {
+      const { client, transport } = setup({
+        Search: new Err(
+          new DfsError("unsupported", "Search is not available.")
+        ),
+      });
+
+      const result = await client.search(request);
+
+      expect(result.isErr() && result.error.code).toBe("invalid_input");
+      expect(transport.calls).toHaveLength(0);
+    }
+  );
+
+  it.each<{ description: string; request: DfsSearchRequest }>([
+    {
+      description: "32 clauses and a limit of 100",
+      request: { query: "word ".repeat(32), limit: 100 },
+    },
+    {
+      description: "a quoted phrase containing more than 32 words",
+      request: { query: `"${"word ".repeat(40)}"` },
+    },
+    {
+      description: "a quoted modifier containing more than 32 words",
+      request: { query: `tag:"${"word ".repeat(40)}"` },
+    },
+    {
+      description: "escaped spaces within a single clause",
+      request: { query: `${"word\\ ".repeat(40)}last` },
+    },
+    {
+      description: "escaped quotes within the last of 32 clauses",
+      request: { query: `${"word ".repeat(31)}"annual \\"reports\\""` },
+    },
+    {
+      description: "an open phrase while typing the last of 32 clauses",
+      request: {
+        query: `${"word ".repeat(31)}"annual report`,
+        asYouType: true,
+      },
+    },
+    {
+      description: "4096 UTF-8 bytes and a limit of 1",
+      request: { query: "é".repeat(2048), limit: 1 },
+    },
+  ])("sends a search with $description", async ({ request }) => {
+    const { client, transport } = setup({
+      Search: new Ok({ hits: [], partial: false }),
+    });
+
+    const result = await client.search(request);
+
+    expect(result.isOk() && result.value).toEqual({ hits: [], partial: false });
+    expect(transport.calls).toHaveLength(1);
+    expect(transport.calls[0].request.query).toBe(request.query);
   });
 
   it("lists every grant across pages", async () => {

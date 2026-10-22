@@ -272,7 +272,7 @@ export interface DfsOperationBatch {
 
 // Search.
 
-export type DfsSearchField = "name" | "content";
+export type DfsSearchField = "name" | "content" | "attributes";
 
 export interface DfsSearchScope {
   directoryId: DfsObjectId;
@@ -300,11 +300,13 @@ export interface DfsSearchFilter {
 
 export interface DfsSearchRequest {
   query: string;
-  // Empty or omitted searches both name and content.
+  // Empty or omitted searches name, content, and selected attributes.
   fields?: DfsSearchField[];
   scope?: DfsSearchScope;
   filter?: DfsSearchFilter;
   limit?: number;
+  // Complete the last unquoted word. Defaults to false.
+  asYouType?: boolean;
 }
 
 // Index-backed attributes: not a cache-validation result nor evidence of current permissions.

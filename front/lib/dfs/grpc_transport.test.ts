@@ -112,6 +112,19 @@ const implementation: UntypedServiceImplementation = {
   RevokeSession: (_call: UnaryCall, callback: Callback) => {
     callback(null, {});
   },
+  Search: (call: UnaryCall, callback: Callback) => {
+    const { fields, asYouType } = call.request;
+    if (
+      asYouType !== true ||
+      !Array.isArray(fields) ||
+      fields.length !== 1 ||
+      fields[0] !== "ATTRIBUTES"
+    ) {
+      callback(dfsStatusError(status.INVALID_ARGUMENT, "INVALID_INPUT"));
+      return;
+    }
+    callback(null, { hits: [], partial: false });
+  },
   // Replies with a payload of the response budget plus `offset` bytes.
   Read: (call: UnaryCall, callback: Callback) => {
     const excess = Number(call.request.offset);
@@ -255,6 +268,16 @@ describe("DfsGrpcTransport", () => {
     });
 
     expect(res.isErr() && res.error.code).toBe("unavailable");
+  });
+
+  it("preserves attribute selection and typing mode on the search wire", async () => {
+    const res = await new DfsClient(transport, SESSION_KEY).search({
+      query: "repo",
+      fields: ["attributes"],
+      asYouType: true,
+    });
+
+    expect(res.isOk() && res.value).toEqual({ hits: [], partial: false });
   });
 
   it("returns unavailable when the server cannot be reached", async () => {

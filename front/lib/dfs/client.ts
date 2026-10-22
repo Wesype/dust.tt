@@ -56,6 +56,44 @@ const LIST_GRANTS_PAGE_LIMIT = 512;
 // `dfs-read-data-limit`: a read never returns more than 1 MiB.
 const MAX_READ_BYTES = 1024 * 1024;
 
+// `dfs-search-request-limits` in dfs/protocol/proto/dfs.proto.
+const MAX_SEARCH_QUERY_BYTES = 4096;
+const MAX_SEARCH_QUERY_CLAUSES = 32;
+const MAX_SEARCH_RESULT_LIMIT = 100;
+const SEARCH_WHITESPACE_REGEX = /\p{White_Space}/u;
+
+function countSearchClauses(query: string): number {
+  let count = 0;
+  let inClause = false;
+  let quoted = false;
+  let escaped = false;
+
+  for (const character of query) {
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (!quoted && SEARCH_WHITESPACE_REGEX.test(character)) {
+      inClause = false;
+      continue;
+    }
+
+    if (!inClause) {
+      count += 1;
+      inClause = true;
+    }
+
+    if (character === "\\") {
+      escaped = true;
+    } else if (character === '"') {
+      quoted = !quoted;
+    }
+  }
+
+  return count;
+}
+
 // A successful attribute result matches `expected` if it reports that object; virtual references
 // resolve to ids the client does not know, so any object matches them.
 function attrMatchesRef(
@@ -467,9 +505,47 @@ export class DfsClient {
 
   // Search. Requires the session key.
 
+  /**
+   * @cc [owner:flvndvd,label:api] client-search-request-limits
+   * Queries above 4096 UTF-8 bytes or 32 clauses MUST return invalid_input without an RPC.
+   * Quoted phrases and escaped whitespace MUST stay within the same clause when counting.
+   * Explicit result limits MUST be integers from 1 to 100 inclusive.
+   */
   async search(
     request: DfsSearchRequest
   ): Promise<Result<DfsSearchResults, DfsError>> {
+    if (Buffer.byteLength(request.query, "utf8") > MAX_SEARCH_QUERY_BYTES) {
+      return new Err(
+        new DfsError(
+          "invalid_input",
+          `Search query exceeds ${MAX_SEARCH_QUERY_BYTES} UTF-8 bytes.`
+        )
+      );
+    }
+
+    if (countSearchClauses(request.query) > MAX_SEARCH_QUERY_CLAUSES) {
+      return new Err(
+        new DfsError(
+          "invalid_input",
+          `Search query exceeds ${MAX_SEARCH_QUERY_CLAUSES} clauses.`
+        )
+      );
+    }
+
+    if (
+      request.limit !== undefined &&
+      (!Number.isInteger(request.limit) ||
+        request.limit < 1 ||
+        request.limit > MAX_SEARCH_RESULT_LIMIT)
+    ) {
+      return new Err(
+        new DfsError(
+          "invalid_input",
+          `Search limit must be an integer from 1 to ${MAX_SEARCH_RESULT_LIMIT}.`
+        )
+      );
+    }
+
     return this.call(
       "Search",
       () => encodeSearchRequest(request),

@@ -512,6 +512,8 @@ function encodeSearchField(field: DfsSearchField): string {
       return "NAME";
     case "content":
       return "CONTENT";
+    case "attributes":
+      return "ATTRIBUTES";
     default:
       assertNever(field);
   }
@@ -521,6 +523,7 @@ export function encodeSearchRequest(request: DfsSearchRequest): DfsWireMessage {
   const { scope, filter } = request;
   return {
     query: request.query,
+    asYouType: request.asYouType,
     fields: (request.fields ?? []).map(encodeSearchField),
     scope: scope && {
       directoryId: encodeObjectId(scope.directoryId),

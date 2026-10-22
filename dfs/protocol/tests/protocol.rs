@@ -296,6 +296,7 @@ fn search_preserves_defaults_filters_and_optional_hit_metadata() -> Result<()> {
         fields: vec![
             rpc::SearchField::Name as i32,
             rpc::SearchField::Content as i32,
+            rpc::SearchField::Attributes as i32,
         ],
         scope: Some(rpc::SearchScope {
             directory_id: ID.parse()?,
@@ -315,7 +316,13 @@ fn search_preserves_defaults_filters_and_optional_hit_metadata() -> Result<()> {
     assert_eq!(decoded.limit(), 20);
     let scope = decoded.scope.as_ref().context("missing scope")?;
     assert!(scope.recursive());
-    assert_eq!(decoded.fields, vec![0, 1]);
+    assert_eq!(decoded.fields, vec![0, 1, 2]);
+    assert!(!decoded.as_you_type());
+    let typing = rpc::SearchRequest {
+        as_you_type: Some(true),
+        ..request.clone()
+    };
+    assert!(rpc::SearchRequest::decode(typing.encode_to_vec().as_slice())?.as_you_type());
     let filter = decoded.filter.as_ref().context("missing filter")?;
     assert_eq!(filter.modified_after, Some(0));
     assert_eq!(filter.xattrs[0].value, Some(vec![]));
