@@ -10,6 +10,7 @@ import { z } from "zod";
 
 const HEARTBEAT_INTERVAL_MS = 5 * 60 * 1_000;
 const RECONNECT_DELAY_MS = 5_000;
+const REGISTRATION_TIMEOUT_MS = 15_000;
 const RegistrationResponseSchema = z.object({ serverId: z.string() });
 const HeartbeatResponseSchema = z.object({ success: z.boolean() });
 const RequestEventSchema = z.object({
@@ -20,9 +21,10 @@ const RequestEventSchema = z.object({
 /**
  * @cc [owner:id13,label:concurrency;architecture] browser-mcp-managed-lifecycle
  * Each browser MCP registration MUST use one managed stream with polling fallback. Closing during
- * registration MUST deregister a late result without opening a stream. Recovery MUST preserve the
- * cursor within a registration and reset it when the registration changes. Closing from the registration
- * callback MUST NOT leave heartbeat timers running.
+ * registration MUST deregister a late result that arrives before the register request times out,
+ * without opening a stream. Recovery MUST preserve the cursor within a registration and reset it
+ * when the registration changes. Closing from the registration callback MUST NOT leave heartbeat
+ * timers running.
  */
 export class BrowserMCPTransport implements Transport {
   private unsubscribeStream: (() => void) | null = null;
@@ -96,6 +98,13 @@ export class BrowserMCPTransport implements Transport {
     return this.registrationPromise;
   }
 
+  /**
+   * @cc [owner:philipperolet,label:performance] register-request-times-out
+   * The register request MUST get a signal that aborts `REGISTRATION_TIMEOUT_MS` after it starts,
+   * so that a request or response read still pending then fails and registration returns false.
+   * Neither resolving the request's credentials (which may refresh a token) nor deregistering a
+   * previous server is bounded.
+   */
   private async performRegistration(): Promise<boolean> {
     try {
       if (this.isClosing) {
@@ -118,6 +127,7 @@ export class BrowserMCPTransport implements Transport {
           },
           credentials: "include",
           body: JSON.stringify({ serverName: this.serverName }),
+          signal: AbortSignal.timeout(REGISTRATION_TIMEOUT_MS),
         }
       );
 

@@ -47,6 +47,13 @@ export abstract class McpService {
     }
   }
 
+  /**
+   * @cc [owner:philipperolet,label:concurrency] failed-connect-keeps-newer-claim
+   * When `server.connect` fails, `connectServer` MUST clear `server` and `transport` only if
+   * `this.transport` is still this attempt's transport, so a connection started after a
+   * `disconnect` stays returned by `getOrCreateServer` and closable by `disconnect`. It MUST
+   * close this attempt's transport either way.
+   */
   private async connectServer(
     server: McpServer,
     owner: WorkspaceType,
@@ -77,9 +84,12 @@ export abstract class McpService {
       await server.connect(transport);
     } catch (error) {
       // Roll back the claim and tear down the half-open transport so a later
-      // attempt can retry cleanly.
-      this.server = null;
-      this.transport = null;
+      // attempt can retry cleanly. Skip the rollback if `disconnect` released
+      // the claim meanwhile: a newer connection may now hold it.
+      if (this.transport === transport) {
+        this.server = null;
+        this.transport = null;
+      }
       await transport.close();
       logger.error({ err: error }, "Failed to connect MCP server.");
       throw error;

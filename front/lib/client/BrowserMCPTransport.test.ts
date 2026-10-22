@@ -138,4 +138,35 @@ describe("browser MCP stream lifecycle", () => {
       vi.useRealTimers();
     }
   });
+  it("fails registration when the register request never answers", async () => {
+    vi.useFakeTimers();
+    // Fake timers don't drive `AbortSignal.timeout`: route it through `setTimeout`.
+    const timeoutSpy = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation((ms: number) => {
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(new Error("Timed out")), ms);
+        return controller.signal;
+      });
+    clientFetch.mockImplementation(
+      (_url: string, options: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          options.signal?.addEventListener("abort", () =>
+            reject(options.signal?.reason)
+          );
+        })
+    );
+    const transport = new BrowserMCPTransport("w_mcp", "test", vi.fn());
+    try {
+      const started = expect(transport.start()).rejects.toThrow(
+        "Failed to register MCP server"
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+      await started;
+    } finally {
+      await transport.close();
+      timeoutSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
 });
