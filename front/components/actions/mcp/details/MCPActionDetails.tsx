@@ -3,6 +3,11 @@ import {
   ActionExecutionProvider,
 } from "@app/components/actions/ActionDetailsWrapper";
 import {
+  EXCEL_READ_WORKBOOK_TOOL_NAME,
+  EXCEL_WRITE_WORKBOOK_TOOL_NAME,
+  getExcelCellsFromParams,
+} from "@app/components/actions/mcp/details/excel_workbook_cells";
+import {
   makeQueryTextForDataSourceSearch,
   makeQueryTextForFind,
   makeQueryTextForInclude,
@@ -447,6 +452,22 @@ function MCPActionDetailsInner({
     return <MCPAskUserQuestionActionDetails {...toolOutputDetailsProps} />;
   }
 
+  if (
+    internalMCPServerName === null &&
+    (toolName === EXCEL_READ_WORKBOOK_TOOL_NAME ||
+      toolName === EXCEL_WRITE_WORKBOOK_TOOL_NAME)
+  ) {
+    return (
+      <MCPExcelWorkbookActionDetails
+        owner={owner}
+        lastNotification={lastNotification}
+        messageStatus={messageStatus}
+        displayContext={displayContext}
+        action={{ ...action, params, output }}
+      />
+    );
+  }
+
   return (
     <GenericActionDetails
       owner={owner}
@@ -530,6 +551,33 @@ export function GenericActionDetails({
         </div>
       )}
     </ActionDetailsWrapper>
+  );
+}
+
+const MAX_TITLE_CELLS = 3;
+
+// Puts the cells that an Excel add-in tool reads or writes in the action title, e.g. "Reading
+// Sheet1!A1:C10", reusing the generic renderer otherwise. Keeps the tool's own labels when its
+// expressions name no cells.
+function MCPExcelWorkbookActionDetails(props: MCPActionDetailsProps) {
+  const { action } = props;
+  const { t } = useLingui();
+
+  const cells = getExcelCellsFromParams(action.params);
+  if (cells.length === 0) {
+    return <GenericActionDetails {...props} />;
+  }
+
+  const shownCells = cells.slice(0, MAX_TITLE_CELLS).join(", ");
+  const cellsText =
+    cells.length > MAX_TITLE_CELLS ? `${shownCells}, …` : shownCells;
+  const displayLabels =
+    action.toolName === EXCEL_WRITE_WORKBOOK_TOOL_NAME
+      ? { running: t`Writing to ${cellsText}`, done: t`Wrote to ${cellsText}` }
+      : { running: t`Reading ${cellsText}`, done: t`Read ${cellsText}` };
+
+  return (
+    <GenericActionDetails {...props} action={{ ...action, displayLabels }} />
   );
 }
 

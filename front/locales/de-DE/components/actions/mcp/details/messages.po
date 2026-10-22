@@ -93,6 +93,22 @@ msgid "Generated files"
 msgstr "Generierte Dateien"
 
 #: front/components/actions/mcp/details/MCPActionDetails.tsx
+msgid "Writing to {cellsText}"
+msgstr "Schreiben in {cellsText}"
+
+#: front/components/actions/mcp/details/MCPActionDetails.tsx
+msgid "Wrote to {cellsText}"
+msgstr "Schreiben in {cellsText}"
+
+#: front/components/actions/mcp/details/MCPActionDetails.tsx
+msgid "Reading {cellsText}"
+msgstr "Lesen von {cellsText}"
+
+#: front/components/actions/mcp/details/MCPActionDetails.tsx
+msgid "Read {cellsText}"
+msgstr "Lesen von {cellsText}"
+
+#: front/components/actions/mcp/details/MCPActionDetails.tsx
 msgid "Loading…"
 msgstr "Wird geladen…"
 
