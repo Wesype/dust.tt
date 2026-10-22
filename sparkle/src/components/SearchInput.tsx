@@ -3,7 +3,6 @@ import { useLingui } from "@lingui/react/macro";
 import { Button } from "@sparkle/components/Button";
 import type { ContentMessageProps } from "@sparkle/components/ContentMessage";
 import { ContentMessage } from "@sparkle/components/ContentMessage";
-import { Icon } from "@sparkle/components/Icon";
 import type {
   InputSizeType,
   InputVariantType,
@@ -111,6 +110,11 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
           size={size}
           variant={variant}
           icon={iconPosition === "left" ? SearchMd : undefined}
+          iconRight={
+            iconPosition === "right" && !isLoading && !value
+              ? SearchMd
+              : undefined
+          }
           ref={ref}
         />
         <div className="absolute inset-y-0 right-0 flex items-center pr-1">
@@ -126,19 +130,6 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(
               size="xs"
               onClick={clearInputField}
             />
-          ) : iconPosition === "right" ? (
-            <div
-              className={cn(
-                "px-2",
-                disabled ? "text-muted-foreground" : "text-foreground"
-              )}
-            >
-              <Icon
-                visual={SearchMd}
-                size="xs"
-                className="text-muted-foreground"
-              />
-            </div>
           ) : null}
         </div>
       </div>

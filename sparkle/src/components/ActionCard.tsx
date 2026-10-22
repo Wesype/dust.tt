@@ -154,7 +154,7 @@ export const ActionCard = React.forwardRef<HTMLDivElement, ActionCardProps>(
       >
         <div className="flex h-full w-full flex-col justify-between">
           <div className="flex flex-col">
-            <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
                 <Avatar
                   icon={icon}

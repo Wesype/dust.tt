@@ -140,7 +140,7 @@ const contentMessageSizeConfig: Record<
   sm: {
     iconSize: "xs",
     headerGap: "gap-1",
-    headerHeight: "h-5",
+    headerHeight: "min-h-5",
     stackGap: "gap-1.5",
     titleClassName: "heading-xs",
     textClassName: "text-xs",
@@ -148,7 +148,7 @@ const contentMessageSizeConfig: Record<
   md: {
     iconSize: "sm",
     headerGap: "gap-1.5",
-    headerHeight: "h-6",
+    headerHeight: "min-h-6",
     stackGap: "gap-2",
     titleClassName: "heading-sm",
     textClassName: "text-sm",
@@ -156,7 +156,7 @@ const contentMessageSizeConfig: Record<
   lg: {
     iconSize: "sm",
     headerGap: "gap-1.5",
-    headerHeight: "h-6",
+    headerHeight: "min-h-6",
     stackGap: "gap-2",
     titleClassName: "heading-sm",
     textClassName: "text-sm",

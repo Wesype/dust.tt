@@ -260,6 +260,7 @@ const SheetHeader = ({
     <div
       className={cn(
         "z-50 flex flex-none flex-col p-5 text-left",
+        !hideButton && "pr-12",
         "bg-modal-background",
         className
       )}
