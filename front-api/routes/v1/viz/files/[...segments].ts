@@ -12,11 +12,11 @@ import { WorkspaceResource } from "@app/lib/resources/workspace_resource";
 import logger from "@app/logger/logger";
 import { isSafeFrameRelativePath } from "@app/types/api/frame_manifest";
 import { parseRawVizScope } from "@app/types/mount_path";
+import { readableToReadableStream } from "@app/types/shared/utils/streams";
 import { unauthedApp } from "@front-api/middlewares/ctx";
 import { apiError } from "@front-api/middlewares/utils";
 import { validate } from "@front-api/middlewares/validator";
 import path from "path";
-import type { Readable } from "stream";
 import { z } from "zod";
 
 const ParamsSchema = z.object({
@@ -200,23 +200,12 @@ app.get("/:scope/:rel{.+}", validate("param", ParamsSchema), async (ctx) => {
     });
   }
 
-  const { contentType } = allowlistedFileResult.value;
-  const nodeStream: Readable = allowlistedFileResult.value.stream;
-  const webStream = new ReadableStream({
-    start(controller) {
-      nodeStream.on("data", (chunk) => controller.enqueue(chunk));
-      nodeStream.on("end", () => controller.close());
-      nodeStream.on("error", (err) => {
-        logger.error({ err, canonicalScopedPath }, "Error streaming viz file");
-        controller.error(err);
-      });
-    },
-    cancel() {
-      nodeStream.destroy();
-    },
-  });
+  const { contentType, stream } = allowlistedFileResult.value;
+  stream.on("error", (err) =>
+    logger.error({ err, canonicalScopedPath }, "Error streaming viz file")
+  );
 
-  return new Response(webStream, {
+  return new Response(readableToReadableStream(stream), {
     status: 200,
     headers: { "Content-Type": contentType },
   });
