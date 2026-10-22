@@ -516,6 +516,7 @@ export function isUserMessageContextValid(
     case "cli":
     case "cli_programmatic":
       return authMethod === "oauth" && userAgent === "Dust CLI";
+    case "excel_addin":
     case "extension":
       return authMethod === "oauth" && !!extensionVersion;
     case "raycast":
@@ -656,7 +657,8 @@ export async function postUserMessage(
   // visibility decisions downstream depend on user intent, not on server-injected mentions.
   const explicitAgentMentions = mentions.filter(isAgentMention);
 
-  // Auto-inject @dust for mention-less web/extension messages in single-user conversations.
+  // Auto-inject @dust for mention-less messages from the interactive clients (web, extension and
+  // Excel add-in) in single-user conversations.
   // Must run before the plan rate-limit check so the resulting agent message is counted.
   // Inject into the mentions side-channel only, do not prepend into content.
   // Note: the per-pod default agent is applied client-side via the input bar sticky mention,
@@ -664,7 +666,9 @@ export async function postUserMessage(
   if (
     !skipDustAutoMention &&
     mentions.length === 0 &&
-    (context.origin === "web" || context.origin === "extension")
+    (context.origin === "web" ||
+      context.origin === "extension" ||
+      context.origin === "excel_addin")
   ) {
     const hasOtherHumans =
       await conversationResource.hasUserMessageFromOtherUser(auth, {

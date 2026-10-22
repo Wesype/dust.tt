@@ -114,6 +114,10 @@ export const USER_MESSAGE_ORIGIN_LABELS: Record<
     label: SOURCE_ORIGIN_LABELS.excel,
     color: buildColorClass("rose", 500),
   },
+  excel_addin: {
+    label: SOURCE_ORIGIN_LABELS.excel_addin,
+    color: buildColorClass("rose", 500),
+  },
   teams: {
     label: SOURCE_ORIGIN_LABELS.teams,
     color: buildColorClass("blue", 300),

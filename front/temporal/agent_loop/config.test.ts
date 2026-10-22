@@ -40,6 +40,7 @@ describe("getQueueForUserMessageOrigin", () => {
   it("routes interactive integration origins to the interactive queue", () => {
     const origins: UserMessageOrigin[] = [
       "extension",
+      "excel_addin",
       "raycast",
       "zendesk",
       "excel",

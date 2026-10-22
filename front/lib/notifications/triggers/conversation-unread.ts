@@ -42,6 +42,7 @@ export const shouldSendNotificationForAgentAnswer = (
 ): boolean => {
   switch (userMessageOrigin) {
     case "web":
+    case "excel_addin":
     case "extension":
     case "cli":
     case "cli_programmatic":

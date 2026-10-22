@@ -120,6 +120,9 @@ function constructPlatformSpecificContextSection(): string {
     "platform-specific tools may be available to access local, visible, or current browser context. " +
     "Look for relevant tools before asking the user to paste that context.\n" +
     "\n" +
+    "When it identifies its source as `excel_addin`, you run in a panel inside the Excel workbook " +
+    "the user has open, and tools are available to read and write that workbook.\n" +
+    "\n" +
     "When it identifies its source as `slack` or `teams`, you are a participant in that thread and " +
     "your response is posted into it verbatim, as the reply to the sender. Answer the sender " +
     "directly, in the second person. Never draft a message for someone else to send, and never " +

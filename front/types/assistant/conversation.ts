@@ -91,6 +91,7 @@ export const CLIENT_MESSAGE_ORIGINS = [
   "web",
   "project_kickoff",
   "extension",
+  "excel_addin",
   "agent_sidekick",
   "analytics_panel",
 ] as const;

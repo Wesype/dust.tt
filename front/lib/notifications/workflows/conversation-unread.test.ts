@@ -75,6 +75,7 @@ describe("conversation-unread workflow business logic", () => {
   // This ensures all origins are tested as it is a record
   const userMessageOriginRecord: Record<UserMessageOrigin, boolean> = {
     web: true,
+    excel_addin: true,
     extension: true,
     cli: true,
     cli_programmatic: true,

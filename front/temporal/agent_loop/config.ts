@@ -59,6 +59,7 @@ export function getQueueForUserMessageOrigin(
     case "agent_sidekick":
     case "analytics_panel":
     case "document_comment":
+    case "excel_addin":
     case "extension":
     case "onboarding_conversation":
     case "project_kickoff":

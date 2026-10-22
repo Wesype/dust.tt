@@ -8,6 +8,7 @@ import type { UserMessageOrigin } from "@app/types/assistant/conversation";
 const CREDIT_SPEND_CHECKPOINT_RESUMABLE_ORIGINS: UserMessageOrigin[] = [
   "web",
   "extension",
+  "excel_addin",
 ];
 
 export function isExemptFromCreditSpendCheckpoint(

@@ -510,6 +510,7 @@ const USER_MESSAGE_ORIGINS = [
   "document_comment",
   "email",
   "excel",
+  "excel_addin",
   "extension",
   "gsheet",
   "make",

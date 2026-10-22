@@ -184,9 +184,21 @@ describe("constructPromptMultiActions - system prompt stability", () => {
       },
     });
 
+    const excelAddinPrompt = constructPromptMultiActions(authenticator1, {
+      ...baseParams,
+      userMessage: {
+        ...userMessage1,
+        context: { ...userMessage1.context, origin: "excel_addin" },
+      },
+    });
+
     expect(extensionPrompt).toEqual(webPrompt);
+    expect(excelAddinPrompt).toEqual(webPrompt);
     expect(systemPromptToText(webPrompt)).toContain(
       "When the current user message's `<dust_system>` metadata identifies its source as `extension`"
+    );
+    expect(systemPromptToText(webPrompt)).toContain(
+      "When it identifies its source as `excel_addin`"
     );
   });
 

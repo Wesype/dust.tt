@@ -18,6 +18,7 @@ export const USAGE_ORIGINS_CLASSIFICATION: Record<
   document_comment: "user",
   email: "user",
   excel: "programmatic",
+  excel_addin: "user",
   extension: "user",
   gsheet: "programmatic",
   make: "programmatic",
