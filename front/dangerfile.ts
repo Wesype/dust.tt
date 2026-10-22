@@ -83,8 +83,8 @@ function checkSSEEndpointLabel() {
 
 function failSSESharedFilesAck() {
   fail(
-    "`front/lib/auth.ts` (Authenticator) has been modified. This code runs " +
-      "on `front-sse` pods as well.\n\n" +
+    "`front/lib/auth.ts` (Authenticator) or `front/config/cors.ts` (CORS allowlist) " +
+      "has been modified. This code runs on `front-sse` pods as well.\n\n" +
       `Please add the \`${sseAckLabel}\` label to acknowledge ` +
       "that a `front-sse` deploy is required alongside the `front` deploy."
   );
@@ -92,7 +92,8 @@ function failSSESharedFilesAck() {
 
 function warnSSESharedFilesAck(sseAckLabel: string) {
   warn(
-    "`front/lib/auth.ts` (Authenticator) has been modified and the PR has the `" +
+    "`front/lib/auth.ts` (Authenticator) or `front/config/cors.ts` (CORS allowlist) " +
+      "has been modified and the PR has the `" +
       sseAckLabel +
       "` label. Don't forget to deploy `front-sse` alongside `front`."
   );
@@ -659,7 +660,7 @@ async function checkDiffFiles() {
   }
 
   // Shared code used by front-sse — changes here require a front-sse deploy too.
-  const sseSharedFiles = ["front/lib/auth.ts"];
+  const sseSharedFiles = ["front/config/cors.ts", "front/lib/auth.ts"];
   const modifiedSseSharedFiles = diffFiles.filter((path) =>
     sseSharedFiles.includes(path)
   );
