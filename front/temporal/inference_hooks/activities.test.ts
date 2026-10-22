@@ -19,6 +19,7 @@ describe("evaluateInferenceHookActivity", () => {
     authType = authenticator.toJSON();
     execution = {
       hookId: "hook",
+      hookVersion: 1,
       checkpoint: {
         lifecycleEvent: "before_model_call",
         workspaceId: workspace.sId,

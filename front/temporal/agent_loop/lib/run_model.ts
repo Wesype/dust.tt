@@ -61,7 +61,7 @@ import {
   makeInferenceHookDeniedError,
   runInferenceHooks,
 } from "@app/lib/inference_hook";
-import type { EnforcedInferenceHook } from "@app/lib/inference_hook";
+import { resolveInferenceHooks } from "@app/lib/inference_hook/resolve";
 import {
   AgentMessageContentParser,
   getDelimitersConfiguration,
@@ -362,7 +362,7 @@ export function buildSpecificationsWithReplayPlaceholders(
 // generate its inputs.
 /**
  * @cc [owner:frankaloia,label:product] after-model-denial-does-not-persist-output
- * On an enforced `after_model_call` denial, the current attempt MUST NOT persist the model output as
+ * On a blocking `after_model_call` denial, the current attempt MUST NOT persist the model output as
  * AgentStepContent or create actions, and MUST persist the policy error on the current step.
  */
 export async function runModel(
@@ -375,8 +375,6 @@ export async function runModel(
     durationRecorder,
     activityTimeoutDeadlineMs,
     forceDisableToolUse = false,
-    enforcedInferenceHooks = [],
-    monitoredInferenceHookIds = [],
   }: {
     contextProvider: AgentLoopContextProvider;
     runIds: string[];
@@ -386,10 +384,6 @@ export async function runModel(
     activityTimeoutDeadlineMs: number;
     // Set when the previous step came back empty: force the final generation.
     forceDisableToolUse?: boolean;
-    // TODO(inference-hooks tasks#11317): We will read this from a table and not pass via a function parameter.
-    enforcedInferenceHooks?: readonly EnforcedInferenceHook[];
-    // TODO(inference-hooks tasks#11317): Read from the inference_hooks table instead.
-    monitoredInferenceHookIds?: readonly string[];
   }
 ): Promise<{
   actions: AgentActionsEvent["actions"];
@@ -951,9 +945,12 @@ export async function runModel(
     Context.current().cancellationSignal,
     getShutdownSignal(),
   ]);
+  const inferenceHooks = await resolveInferenceHooks(auth, { featureFlags });
+
   const beforeModelCall = await runInferenceHooks({
-    featureFlags,
-    hooks: enforcedInferenceHooks,
+    hooks: inferenceHooks.before_model_call.filter(
+      ({ enforcement }) => enforcement === "block"
+    ),
     input: { ...hookInputBase, lifecycleEvent: "before_model_call" },
     signal: hookCancellationSignal,
   });
@@ -971,7 +968,9 @@ export async function runModel(
   await launchInferenceHookWorkflows({
     authType: auth.toJSON(),
     featureFlags,
-    hookIds: monitoredInferenceHookIds,
+    hooks: inferenceHooks.before_model_call.filter(
+      ({ enforcement }) => enforcement === "monitor"
+    ),
     checkpoint: {
       ...hookCheckpointIdentity,
       lifecycleEvent: "before_model_call",
@@ -1112,8 +1111,9 @@ export async function runModel(
   }
 
   const afterModelCall = await runInferenceHooks({
-    featureFlags,
-    hooks: enforcedInferenceHooks,
+    hooks: inferenceHooks.after_model_call.filter(
+      ({ enforcement }) => enforcement === "block"
+    ),
     input: {
       ...hookInputBase,
       lifecycleEvent: "after_model_call",
@@ -1162,13 +1162,15 @@ export async function runModel(
     }
   }
 
-  // Enforced hooks run before the step contents are saved, so a denial can drop the output and
-  // skip actions. Monitored hook workflows start after that save: they read the persisted step in
+  // Block hooks run before the step contents are saved, so a denial can drop the output and skip
+  // actions. Monitor hook workflows start after that save: they read the persisted step in
   // another process, and their verdict must not change this run.
   await launchInferenceHookWorkflows({
     authType: auth.toJSON(),
     featureFlags,
-    hookIds: monitoredInferenceHookIds,
+    hooks: inferenceHooks.after_model_call.filter(
+      ({ enforcement }) => enforcement === "monitor"
+    ),
     checkpoint: {
       ...hookCheckpointIdentity,
       lifecycleEvent: "after_model_call",

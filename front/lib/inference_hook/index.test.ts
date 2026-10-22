@@ -10,21 +10,17 @@ import { describe, expect, it, vi } from "vitest";
 const notCancelled = new AbortController().signal;
 
 describe("runInferenceHooks", () => {
-  it("does no hook work when inference hooks are disabled", async () => {
+  it("does no work when there are no hooks", async () => {
     const { authenticator } = await createResourceTest({ role: "admin" });
     const input =
       await InferenceHookInputFactory.beforeModelCall(authenticator);
-    const provider = InferenceHookProviderFactory.allow();
-
     const result = await runInferenceHooks({
-      featureFlags: [],
-      hooks: [InferenceHookProviderFactory.enforced(provider)],
+      hooks: [],
       input,
       signal: notCancelled,
     });
 
     expect(result).toEqual({ action: "allow" });
-    expect(provider.inputs).toHaveLength(0);
   });
 
   it("returns an explicit denial from any provider", async () => {
@@ -34,10 +30,9 @@ describe("runInferenceHooks", () => {
     const denyProvider = InferenceHookProviderFactory.deny("Policy denied");
 
     const result = await runInferenceHooks({
-      featureFlags: ["inference_hooks"],
       hooks: [
-        InferenceHookProviderFactory.enforced(allowProvider),
-        InferenceHookProviderFactory.enforced(denyProvider),
+        InferenceHookProviderFactory.hook(allowProvider),
+        InferenceHookProviderFactory.hook(denyProvider),
       ],
       input,
       signal: notCancelled,
@@ -55,10 +50,9 @@ describe("runInferenceHooks", () => {
     const pending = InferenceHookProviderFactory.slow({ delayMs: 60_000 });
 
     const result = await runInferenceHooks({
-      featureFlags: ["inference_hooks"],
       hooks: [
-        InferenceHookProviderFactory.enforced(pending, { timeoutMs: 60_000 }),
-        InferenceHookProviderFactory.enforced(
+        InferenceHookProviderFactory.hook(pending, { timeoutMs: 60_000 }),
+        InferenceHookProviderFactory.hook(
           InferenceHookProviderFactory.deny("Policy denied")
         ),
       ],
@@ -88,10 +82,9 @@ describe("runInferenceHooks", () => {
     });
 
     const run = runInferenceHooks({
-      featureFlags: ["inference_hooks"],
       hooks: [
-        InferenceHookProviderFactory.enforced(first),
-        InferenceHookProviderFactory.enforced(second),
+        InferenceHookProviderFactory.hook(first),
+        InferenceHookProviderFactory.hook(second),
       ],
       input,
       signal: notCancelled,
@@ -113,9 +106,8 @@ describe("runInferenceHooks", () => {
 
     await expect(
       runInferenceHooks({
-        featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookProviderFactory.enforced(
+          InferenceHookProviderFactory.hook(
             InferenceHookProviderFactory.failing(),
             { onError: "allow" }
           ),
@@ -127,9 +119,8 @@ describe("runInferenceHooks", () => {
 
     await expect(
       runInferenceHooks({
-        featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookProviderFactory.enforced(
+          InferenceHookProviderFactory.hook(
             InferenceHookProviderFactory.failing(),
             { onError: "deny" }
           ),
@@ -150,9 +141,8 @@ describe("runInferenceHooks", () => {
 
     await expect(
       runInferenceHooks({
-        featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookProviderFactory.enforced(
+          InferenceHookProviderFactory.hook(
             InferenceHookProviderFactory.slow({ delayMs: 100 }),
             { timeoutMs: 1, onError: "allow" }
           ),
@@ -164,9 +154,8 @@ describe("runInferenceHooks", () => {
 
     await expect(
       runInferenceHooks({
-        featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookProviderFactory.enforced(
+          InferenceHookProviderFactory.hook(
             InferenceHookProviderFactory.slow({ delayMs: 100 }),
             { timeoutMs: 1, onError: "deny" }
           ),
@@ -187,13 +176,12 @@ describe("runInferenceHooks", () => {
 
     await expect(
       runInferenceHooks({
-        featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookProviderFactory.enforced(
+          InferenceHookProviderFactory.hook(
             InferenceHookProviderFactory.hanging(),
             { timeoutMs: 10, onError: "allow" }
           ),
-          InferenceHookProviderFactory.enforced(
+          InferenceHookProviderFactory.hook(
             InferenceHookProviderFactory.slow({
               delayMs: 50,
               verdict: { action: "deny", reason: "Long hook denied" },
@@ -208,13 +196,12 @@ describe("runInferenceHooks", () => {
 
     await expect(
       runInferenceHooks({
-        featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookProviderFactory.enforced(
+          InferenceHookProviderFactory.hook(
             InferenceHookProviderFactory.slow({ delayMs: 50 }),
             { timeoutMs: 10, onError: "deny" }
           ),
-          InferenceHookProviderFactory.enforced(
+          InferenceHookProviderFactory.hook(
             InferenceHookProviderFactory.allow(),
             { timeoutMs: 500, onError: "allow" }
           ),
@@ -235,9 +222,8 @@ describe("runInferenceHooks", () => {
 
     await expect(
       runInferenceHooks({
-        featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookProviderFactory.enforced(
+          InferenceHookProviderFactory.hook(
             InferenceHookProviderFactory.hanging(),
             { timeoutMs: 10, onError: "allow" }
           ),
@@ -249,9 +235,8 @@ describe("runInferenceHooks", () => {
 
     await expect(
       runInferenceHooks({
-        featureFlags: ["inference_hooks"],
         hooks: [
-          InferenceHookProviderFactory.enforced(
+          InferenceHookProviderFactory.hook(
             InferenceHookProviderFactory.hanging(),
             { timeoutMs: 10, onError: "deny" }
           ),
@@ -272,15 +257,14 @@ describe("runInferenceHooks", () => {
     const queued = InferenceHookProviderFactory.allow();
 
     const result = await runInferenceHooks({
-      featureFlags: ["inference_hooks"],
       hooks: [
         ...Array.from({ length: 8 }, () =>
-          InferenceHookProviderFactory.enforced(
+          InferenceHookProviderFactory.hook(
             InferenceHookProviderFactory.hanging(),
             { timeoutMs: 20, onError: "allow" }
           )
         ),
-        InferenceHookProviderFactory.enforced(queued, {
+        InferenceHookProviderFactory.hook(queued, {
           timeoutMs: 5,
           onError: "deny",
         }),
@@ -305,8 +289,7 @@ describe("runInferenceHooks", () => {
     controller.abort();
 
     const result = await runInferenceHooks({
-      featureFlags: ["inference_hooks"],
-      hooks: [InferenceHookProviderFactory.enforced(provider)],
+      hooks: [InferenceHookProviderFactory.hook(provider)],
       input,
       signal: controller.signal,
     });
@@ -326,9 +309,8 @@ describe("runInferenceHooks", () => {
     setTimeout(() => controller.abort(), 10);
 
     const result = await runInferenceHooks({
-      featureFlags: ["inference_hooks"],
       hooks: [
-        InferenceHookProviderFactory.enforced(provider, { timeoutMs: 60_000 }),
+        InferenceHookProviderFactory.hook(provider, { timeoutMs: 60_000 }),
       ],
       input,
       signal: controller.signal,

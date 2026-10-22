@@ -116,6 +116,37 @@ export class InferenceHookResource extends BaseResource<InferenceHookModel> {
     return this.hookVersion.version;
   }
 
+  get events(): InferenceHookLifecycleEvent[] {
+    return this.hookVersion.events;
+  }
+
+  get enforcement(): InferenceHookEnforcement | null {
+    return this.hookVersion.enforcement;
+  }
+
+  get onError(): InferenceHookOnError {
+    return this.hookVersion.onError;
+  }
+
+  get timeoutMs(): number {
+    return this.hookVersion.timeoutMs;
+  }
+
+  private get hasGroupExclusions(): boolean {
+    return this.hookVersion.excludedGroupIds.length > 0;
+  }
+
+  private isExcludedFor(userGroupIds: ReadonlySet<string>): boolean {
+    return this.hookVersion.excludedGroupIds.some((groupModelId) =>
+      userGroupIds.has(
+        GroupResource.modelIdToSId({
+          id: groupModelId,
+          workspaceId: this.workspaceId,
+        })
+      )
+    );
+  }
+
   static modelIdToSId({
     id,
     workspaceId,
@@ -277,6 +308,28 @@ export class InferenceHookResource extends BaseResource<InferenceHookModel> {
   }
 
   /**
+   * Current hooks that apply to this auth. A run with no user keeps every hook.
+   */
+  static async listApplicable(
+    auth: Authenticator
+  ): Promise<InferenceHookResource[]> {
+    return this.withoutExcluded(auth, await this.listByWorkspace(auth));
+  }
+
+  private static async withoutExcluded(
+    auth: Authenticator,
+    hooks: InferenceHookResource[]
+  ): Promise<InferenceHookResource[]> {
+    if (!auth.user() || hooks.every((hook) => !hook.hasGroupExclusions)) {
+      return hooks;
+    }
+
+    const userGroupIds = new Set(await auth.listGroupIds());
+
+    return hooks.filter((hook) => !hook.isExcludedFor(userGroupIds));
+  }
+
+  /**
    * Defaults to the current version. A given `version` is returned even if no longer current.
    */
   static async fetchById(
@@ -373,10 +426,10 @@ export class InferenceHookResource extends BaseResource<InferenceHookModel> {
       name: this.name,
       provider: this.provider,
       version: this.version,
-      events: this.hookVersion.events,
-      enforcement: this.hookVersion.enforcement,
-      onError: this.hookVersion.onError,
-      timeoutMs: this.hookVersion.timeoutMs,
+      events: this.events,
+      enforcement: this.enforcement,
+      onError: this.onError,
+      timeoutMs: this.timeoutMs,
       excludedGroupIds: this.hookVersion.excludedGroupIds.map((id) =>
         GroupResource.modelIdToSId({ id, workspaceId: this.workspaceId })
       ),

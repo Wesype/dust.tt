@@ -9,13 +9,9 @@ export class InferenceHookInputFactory {
   static async beforeModelCall(
     auth: Authenticator
   ): Promise<BeforeModelCallHookInput> {
-    const fullAgentConfiguration =
-      await AgentConfigurationFactory.createTestAgent(auth);
-    const { model: _model, ...agentConfiguration } = fullAgentConfiguration;
-
     return {
       lifecycleEvent: "before_model_call",
-      agentConfiguration,
+      agentConfiguration: await this.agentConfiguration(auth),
       conversationWindow: { messages: [] },
       workspaceId: auth.getNonNullableWorkspace().sId,
       conversationId: "conversation-id",
@@ -28,13 +24,9 @@ export class InferenceHookInputFactory {
   static async afterModelCall(
     auth: Authenticator
   ): Promise<AfterModelCallHookInput> {
-    const fullAgentConfiguration =
-      await AgentConfigurationFactory.createTestAgent(auth);
-    const { model: _model, ...agentConfiguration } = fullAgentConfiguration;
-
     return {
       lifecycleEvent: "after_model_call",
-      agentConfiguration,
+      agentConfiguration: await this.agentConfiguration(auth),
       conversationWindow: { messages: [] },
       workspaceId: auth.getNonNullableWorkspace().sId,
       conversationId: "conversation-id",
@@ -47,6 +39,15 @@ export class InferenceHookInputFactory {
         contents: [],
       },
       dustRunId: "dust-run-id",
+    };
+  }
+
+  private static async agentConfiguration(auth: Authenticator) {
+    const configuration = await AgentConfigurationFactory.createTestAgent(auth);
+    return {
+      sId: configuration.sId,
+      name: configuration.name,
+      description: configuration.description,
     };
   }
 }

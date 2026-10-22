@@ -1,15 +1,15 @@
 import type { InferenceHookCheckpointRef } from "@app/lib/inference_hook";
 import { evaluateInferenceHookAtCheckpoint } from "@app/lib/inference_hook/checkpoint_evaluation";
 import { loadInferenceHookInputFromCheckpoint } from "@app/lib/inference_hook/checkpoint_input";
-import { getInferenceHook } from "@app/lib/inference_hook/registry";
+import { loadInferenceHook } from "@app/lib/inference_hook/resolve";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import { InferenceHookInputFactory } from "@app/tests/utils/InferenceHookInputFactory";
 import { InferenceHookProviderFactory } from "@app/tests/utils/InferenceHookProviderFactory";
 import { Err, Ok } from "@app/types/shared/result";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@app/lib/inference_hook/registry", () => ({
-  getInferenceHook: vi.fn(),
+vi.mock("@app/lib/inference_hook/resolve", () => ({
+  loadInferenceHook: vi.fn(),
 }));
 
 vi.mock("@app/lib/inference_hook/checkpoint_input", () => ({
@@ -35,16 +35,20 @@ describe("evaluateInferenceHookAtCheckpoint", () => {
     const { authenticator: auth } = await createResourceTest({ role: "admin" });
     const input = await InferenceHookInputFactory.afterModelCall(auth);
     const provider = InferenceHookProviderFactory.deny("Flagged");
-    vi.mocked(getInferenceHook).mockReturnValue({
-      provider,
-      timeoutMs: 1_000,
-    });
+    vi.mocked(loadInferenceHook).mockResolvedValue(
+      new Ok(
+        InferenceHookProviderFactory.hook(provider, {
+          enforcement: "monitor",
+        })
+      )
+    );
     vi.mocked(loadInferenceHookInputFromCheckpoint).mockResolvedValue(
       new Ok(input)
     );
 
     const result = await evaluateInferenceHookAtCheckpoint(auth, {
       hookId: "hook_a",
+      hookVersion: 1,
       checkpoint,
     });
 
@@ -59,37 +63,49 @@ describe("evaluateInferenceHookAtCheckpoint", () => {
     });
   });
 
-  it("returns an error when the provider exceeds its timeout", async () => {
+  it("applies onError when the provider exceeds its timeout", async () => {
     const { authenticator: auth } = await createResourceTest({ role: "admin" });
-    vi.mocked(getInferenceHook).mockReturnValue({
-      provider: InferenceHookProviderFactory.hanging(),
-      timeoutMs: 10,
-    });
+    vi.mocked(loadInferenceHook).mockResolvedValue(
+      new Ok(
+        InferenceHookProviderFactory.hook(
+          InferenceHookProviderFactory.hanging(),
+          { enforcement: "monitor", timeoutMs: 10 }
+        )
+      )
+    );
     vi.mocked(loadInferenceHookInputFromCheckpoint).mockResolvedValue(
       new Ok(await InferenceHookInputFactory.afterModelCall(auth))
     );
 
     const result = await evaluateInferenceHookAtCheckpoint(auth, {
       hookId: "hook_a",
+      hookVersion: 1,
       checkpoint,
     });
 
-    expect(result.isErr()).toBe(true);
+    expect(result.isOk() && result.value).toEqual({
+      action: "deny",
+      reason: "Inference hook evaluation failed",
+    });
   });
 
   it("returns an error without evaluating when the input cannot be loaded", async () => {
     const { authenticator: auth } = await createResourceTest({ role: "admin" });
     const provider = InferenceHookProviderFactory.allow();
-    vi.mocked(getInferenceHook).mockReturnValue({
-      provider,
-      timeoutMs: 1_000,
-    });
+    vi.mocked(loadInferenceHook).mockResolvedValue(
+      new Ok(
+        InferenceHookProviderFactory.hook(provider, {
+          enforcement: "monitor",
+        })
+      )
+    );
     vi.mocked(loadInferenceHookInputFromCheckpoint).mockResolvedValue(
       new Err(new Error("Checkpoint not found"))
     );
 
     const result = await evaluateInferenceHookAtCheckpoint(auth, {
       hookId: "hook_a",
+      hookVersion: 1,
       checkpoint,
     });
 
@@ -99,10 +115,13 @@ describe("evaluateInferenceHookAtCheckpoint", () => {
 
   it("returns an error for an unknown hook", async () => {
     const { authenticator: auth } = await createResourceTest({ role: "admin" });
-    vi.mocked(getInferenceHook).mockReturnValue(null);
+    vi.mocked(loadInferenceHook).mockResolvedValue(
+      new Err(new Error("Unknown inference hook version: missing v1"))
+    );
 
     const result = await evaluateInferenceHookAtCheckpoint(auth, {
       hookId: "missing",
+      hookVersion: 1,
       checkpoint,
     });
 

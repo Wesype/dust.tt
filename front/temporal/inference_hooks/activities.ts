@@ -37,6 +37,7 @@ export async function evaluateInferenceHookActivity(
   logger.info(
     {
       hookId: execution.hookId,
+      hookVersion: execution.hookVersion,
       ...execution.checkpoint,
       verdict: result.value,
     },

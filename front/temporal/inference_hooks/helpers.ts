@@ -1,16 +1,20 @@
 import { createHash } from "node:crypto";
-import type { InferenceHookExecutionRef } from "@app/lib/inference_hook";
+import type { InferenceHookCheckpointRef } from "@app/lib/inference_hook";
 
 /**
  * @cc [owner:frankaloia,label:concurrency;product] inference-hook-workflow-id
  * The workflow ID MUST be a deterministic function of the hook ID and every checkpoint field, so
  * repeated starts for one checkpoint resolve to a single execution and distinct checkpoints never
- * share one.
+ * share one. It MUST NOT depend on the hook version, so a step retried after a hook edit does not
+ * evaluate the same checkpoint twice.
  */
 export function makeInferenceHookWorkflowId({
   hookId,
   checkpoint,
-}: InferenceHookExecutionRef): string {
+}: {
+  hookId: string;
+  checkpoint: InferenceHookCheckpointRef;
+}): string {
   const hash = createHash("sha256")
     .update(
       JSON.stringify([

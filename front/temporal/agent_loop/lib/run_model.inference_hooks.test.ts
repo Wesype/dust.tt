@@ -1,6 +1,7 @@
 import { isFreeUsageBlocked } from "@app/lib/api/llm/free_usage";
 import { getLlmCredentials } from "@app/lib/api/provider_credentials";
 import { DurationRecorder } from "@app/lib/duration_recorder";
+import { resolveInferenceHooks } from "@app/lib/inference_hook/resolve";
 import { AgentMessageModel } from "@app/lib/models/agent/conversation";
 import { AgentMCPActionResource } from "@app/lib/resources/agent_mcp_action_resource";
 import { AgentStepContentResource } from "@app/lib/resources/agent_step_content_resource";
@@ -39,6 +40,10 @@ vi.mock("@app/temporal/inference_hooks/client", () => ({
   launchInferenceHookWorkflows: vi.fn(),
 }));
 
+vi.mock("@app/lib/inference_hook/resolve", () => ({
+  resolveInferenceHooks: vi.fn(),
+}));
+
 vi.mock("@langfuse/tracing", () => ({
   startActiveObservation: vi.fn(
     async (_name: string, callback: () => Promise<unknown>) => callback()
@@ -70,6 +75,12 @@ describe("runModel inference hooks", () => {
     await FeatureFlagFactory.basic(auth, "inference_hooks");
     const provider = InferenceHookProviderFactory.deny("Blocked before model");
 
+    vi.mocked(resolveInferenceHooks).mockResolvedValue(
+      InferenceHookProviderFactory.plan([
+        InferenceHookProviderFactory.hook(provider),
+      ])
+    );
+
     const result = await runModel(auth, {
       contextProvider,
       runIds: [],
@@ -77,7 +88,6 @@ describe("runModel inference hooks", () => {
       functionCallStepContentIds: {},
       durationRecorder: DurationRecorder.create(),
       activityTimeoutDeadlineMs: Date.now() + 60_000,
-      enforcedInferenceHooks: [InferenceHookProviderFactory.enforced(provider)],
     });
 
     expect(result).toBeNull();
@@ -100,6 +110,12 @@ describe("runModel inference hooks", () => {
       }
     );
 
+    vi.mocked(resolveInferenceHooks).mockResolvedValue(
+      InferenceHookProviderFactory.plan([
+        InferenceHookProviderFactory.hook(provider),
+      ])
+    );
+
     await expect(
       runModel(auth, {
         contextProvider,
@@ -108,9 +124,6 @@ describe("runModel inference hooks", () => {
         functionCallStepContentIds: {},
         durationRecorder: DurationRecorder.create(),
         activityTimeoutDeadlineMs: Date.now() + 60_000,
-        enforcedInferenceHooks: [
-          InferenceHookProviderFactory.enforced(provider),
-        ],
       })
     ).rejects.toMatchObject({ type: "ModelInterruption", nonRetryable: false });
     expect(getOutputFromLLMStream).not.toHaveBeenCalled();
@@ -138,6 +151,12 @@ describe("runModel inference hooks", () => {
       })
     );
 
+    vi.mocked(resolveInferenceHooks).mockResolvedValue(
+      InferenceHookProviderFactory.plan([
+        InferenceHookProviderFactory.hook(provider),
+      ])
+    );
+
     await expect(
       runModel(auth, {
         contextProvider,
@@ -146,9 +165,6 @@ describe("runModel inference hooks", () => {
         functionCallStepContentIds: {},
         durationRecorder: DurationRecorder.create(),
         activityTimeoutDeadlineMs: Date.now() + 60_000,
-        enforcedInferenceHooks: [
-          InferenceHookProviderFactory.enforced(provider),
-        ],
       })
     ).rejects.toMatchObject({ type: "ModelInterruption", nonRetryable: false });
 
@@ -190,6 +206,12 @@ describe("runModel inference hooks", () => {
       })
     );
 
+    vi.mocked(resolveInferenceHooks).mockResolvedValue(
+      InferenceHookProviderFactory.plan([
+        InferenceHookProviderFactory.hook(provider),
+      ])
+    );
+
     const result = await runModel(auth, {
       contextProvider,
       runIds: [],
@@ -197,7 +219,6 @@ describe("runModel inference hooks", () => {
       functionCallStepContentIds: {},
       durationRecorder: DurationRecorder.create(),
       activityTimeoutDeadlineMs: Date.now() + 60_000,
-      enforcedInferenceHooks: [InferenceHookProviderFactory.enforced(provider)],
     });
 
     const stepContents =
@@ -237,7 +258,7 @@ describe("runModel inference hooks", () => {
     expect(actions).toEqual([]);
   });
 
-  it("launches monitored hook workflows for both checkpoints of the current step", async () => {
+  it("launches monitor hook workflows for both checkpoints of the current step", async () => {
     const { auth, agentMessage, contextProvider } =
       await InferenceHookRunModelFactory.create();
     await FeatureFlagFactory.basic(auth, "inference_hooks");
@@ -253,6 +274,19 @@ describe("runModel inference hooks", () => {
       })
     );
 
+    vi.mocked(resolveInferenceHooks).mockResolvedValue(
+      InferenceHookProviderFactory.plan([
+        InferenceHookProviderFactory.hook(
+          InferenceHookProviderFactory.allow(),
+          {
+            hookId: "hook_a",
+            hookVersion: 1,
+            enforcement: "monitor",
+          }
+        ),
+      ])
+    );
+
     await runModel(auth, {
       contextProvider,
       runIds: [],
@@ -260,7 +294,6 @@ describe("runModel inference hooks", () => {
       functionCallStepContentIds: {},
       durationRecorder: DurationRecorder.create(),
       activityTimeoutDeadlineMs: Date.now() + 60_000,
-      monitoredInferenceHookIds: ["hook_a"],
     });
 
     const checkpointIdentity = {
@@ -283,14 +316,30 @@ describe("runModel inference hooks", () => {
       },
     ]);
     expect(launchInferenceHookWorkflows).toHaveBeenCalledWith(
-      expect.objectContaining({ hookIds: ["hook_a"] })
+      expect.objectContaining({
+        hooks: [expect.objectContaining({ hookId: "hook_a", hookVersion: 1 })],
+      })
     );
   });
 
-  it("does not launch monitored hook workflows for a checkpoint an enforced hook denied", async () => {
+  it("does not launch monitor hook workflows after a block hook denies", async () => {
     const { auth, contextProvider } =
       await InferenceHookRunModelFactory.create();
     await FeatureFlagFactory.basic(auth, "inference_hooks");
+
+    vi.mocked(resolveInferenceHooks).mockResolvedValue(
+      InferenceHookProviderFactory.plan([
+        InferenceHookProviderFactory.hook(InferenceHookProviderFactory.deny()),
+        InferenceHookProviderFactory.hook(
+          InferenceHookProviderFactory.allow(),
+          {
+            hookId: "hook_a",
+            hookVersion: 1,
+            enforcement: "monitor",
+          }
+        ),
+      ])
+    );
 
     await runModel(auth, {
       contextProvider,
@@ -299,12 +348,6 @@ describe("runModel inference hooks", () => {
       functionCallStepContentIds: {},
       durationRecorder: DurationRecorder.create(),
       activityTimeoutDeadlineMs: Date.now() + 60_000,
-      enforcedInferenceHooks: [
-        InferenceHookProviderFactory.enforced(
-          InferenceHookProviderFactory.deny()
-        ),
-      ],
-      monitoredInferenceHookIds: ["hook_a"],
     });
 
     expect(launchInferenceHookWorkflows).not.toHaveBeenCalled();
@@ -337,6 +380,11 @@ describe("runModel server-side fallback", () => {
         servedModel: "claude-opus-4-8",
       })
     );
+    vi.mocked(resolveInferenceHooks).mockResolvedValue(
+      InferenceHookProviderFactory.plan([
+        InferenceHookProviderFactory.hook(provider),
+      ])
+    );
 
     await runModel(auth, {
       contextProvider,
@@ -345,7 +393,6 @@ describe("runModel server-side fallback", () => {
       functionCallStepContentIds: {},
       durationRecorder: DurationRecorder.create(),
       activityTimeoutDeadlineMs: Date.now() + 60_000,
-      enforcedInferenceHooks: [InferenceHookProviderFactory.enforced(provider)],
     });
 
     const row = await AgentMessageModel.findOne({

@@ -1,5 +1,6 @@
 import type { ConversationWindowCheckpointIdentity } from "@app/lib/api/assistant/conversation_rendering/conversation_window_checkpoint";
 import { concurrentExecutor } from "@app/lib/utils/async_utils";
+import logger from "@app/logger/logger";
 import type {
   AgentConfigurationBaseType,
   GenericErrorContent,
@@ -9,10 +10,10 @@ import type {
   NormalizedModelOutput,
 } from "@app/types/assistant/generation";
 import type {
+  InferenceHookEnforcement,
   InferenceHookLifecycleEvent,
   InferenceHookOnError,
 } from "@app/types/inference_hook";
-import type { WhitelistableFeature } from "@app/types/shared/feature_flags";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
 import { normalizeError } from "@app/types/shared/utils/error_utils";
@@ -41,14 +42,18 @@ export type InferenceHookCheckpointRef =
   | BeforeModelCallCheckpointRef
   | AfterModelCallCheckpointRef;
 
-export type InferenceHookExecutionRef = {
+export type InferenceHookVersionRef = {
   hookId: string;
+  hookVersion: number;
+};
+
+export type InferenceHookExecutionRef = InferenceHookVersionRef & {
   checkpoint: InferenceHookCheckpointRef;
 };
 
 /**
  * @cc [owner:frankaloia,label:security;product] hook-agent-configuration-excludes-instructions
- * Enforced and monitored hooks MUST receive the same `agentConfiguration` fields, and those fields
+ * Block and monitor hooks MUST receive the same `agentConfiguration` fields, and those fields
  * MUST NOT include the agent's instructions.
  */
 type InferenceHookInputContext = {
@@ -108,12 +113,11 @@ export type InferenceHookEvaluationErrorCode =
   | "provider_error"
   | "invalid_response";
 
-export type InferenceHook = {
+// `block` runs inside the model step and can stop it. `monitor` runs in a workflow and cannot.
+export type InferenceHook = InferenceHookVersionRef & {
+  enforcement: InferenceHookEnforcement;
   provider: InferenceHookProvider;
   timeoutMs: number;
-};
-
-export type EnforcedInferenceHook = InferenceHook & {
   onError: InferenceHookOnError;
 };
 
@@ -122,9 +126,9 @@ export type InferenceHookCheckpointResult =
   | { action: "cancelled" };
 
 /**
- * @cc [owner:frankaloia,label:product;performance] disabled-inference-hooks-have-no-effects
- * When `featureFlags` excludes `inference_hooks` or no hooks are configured, the checkpoint MUST
- * return an `allow` verdict without invoking providers.
+ * @cc [owner:frankaloia,label:product;performance] empty-inference-hooks-have-no-effects
+ * When no hooks are configured, the checkpoint MUST return an `allow` verdict without invoking
+ * providers.
  */
 /**
  * @cc [owner:frankaloia,label:concurrency;product] inference-hook-cancellation-wins
@@ -139,17 +143,15 @@ export type InferenceHookCheckpointResult =
  * normalized output from that model call and its matching Dust run ID.
  */
 export async function runInferenceHooks({
-  featureFlags,
   hooks,
   input,
   signal,
 }: {
-  featureFlags: readonly WhitelistableFeature[];
-  hooks: readonly EnforcedInferenceHook[];
+  hooks: readonly InferenceHook[];
   input: InferenceHookInput;
   signal: AbortSignal;
 }): Promise<InferenceHookCheckpointResult> {
-  if (!featureFlags.includes("inference_hooks") || hooks.length === 0) {
+  if (hooks.length === 0) {
     return { action: "allow" };
   }
 
@@ -189,8 +191,8 @@ export function makeInferenceHookDeniedError(
  * explicit denial ends the evaluation of the other providers. An explicit denial, or an error from
  * any provider configured with `onError: "deny"`, MUST deny the checkpoint.
  */
-async function evaluateInferenceHooks(
-  hooks: readonly EnforcedInferenceHook[],
+export async function evaluateInferenceHooks(
+  hooks: readonly InferenceHook[],
   input: InferenceHookInput,
   cancellationSignal: AbortSignal
 ): Promise<InferenceHookVerdict> {
@@ -223,6 +225,21 @@ async function evaluateInferenceHooks(
   for (const { result } of results) {
     if (result.isOk() && result.value.action === "deny") {
       return result.value;
+    }
+  }
+
+  for (const { hook, result } of results) {
+    if (result.isErr() && !cancellationSignal.aborted) {
+      logger.warn(
+        {
+          hookId: hook.hookId,
+          hookVersion: hook.hookVersion,
+          lifecycleEvent: input.lifecycleEvent,
+          onError: hook.onError,
+          error: result.error,
+        },
+        "Inference hook evaluation failed"
+      );
     }
   }
 

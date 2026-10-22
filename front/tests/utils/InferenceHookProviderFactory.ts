@@ -1,10 +1,14 @@
 import type {
-  EnforcedInferenceHook,
-  InferenceHookProvider,
+  InferenceHook,
   InferenceHookInput,
+  InferenceHookProvider,
   InferenceHookVerdict,
 } from "@app/lib/inference_hook";
-import type { InferenceHookOnError } from "@app/types/inference_hook";
+import type { InferenceHookPlan } from "@app/lib/inference_hook/resolve";
+import type {
+  InferenceHookEnforcement,
+  InferenceHookOnError,
+} from "@app/types/inference_hook";
 
 export interface FakeInferenceHookProvider extends InferenceHookProvider {
   readonly inputs: InferenceHookInput[];
@@ -91,16 +95,37 @@ export class InferenceHookProviderFactory {
     });
   }
 
-  static enforced(
+  static hook(
     provider: InferenceHookProvider,
     {
+      hookId = "test_hook",
+      hookVersion = 1,
+      enforcement = "block",
       timeoutMs = 1_000,
       onError = "deny",
     }: {
+      hookId?: string;
+      hookVersion?: number;
+      enforcement?: InferenceHookEnforcement;
       timeoutMs?: number;
       onError?: InferenceHookOnError;
     } = {}
-  ): EnforcedInferenceHook {
-    return { provider, timeoutMs, onError };
+  ): InferenceHook {
+    return {
+      hookId,
+      hookVersion,
+      enforcement,
+      provider,
+      timeoutMs,
+      onError,
+    };
+  }
+
+  // The same hooks at both checkpoints.
+  static plan(hooks: InferenceHook[] = []): InferenceHookPlan {
+    return {
+      before_model_call: hooks,
+      after_model_call: hooks,
+    };
   }
 }

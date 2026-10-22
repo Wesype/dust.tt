@@ -98,7 +98,7 @@ describe("launchInferenceHookWorkflows", () => {
     await launchInferenceHookWorkflows({
       authType,
       featureFlags: [],
-      hookIds: ["hook_a"],
+      hooks: [{ hookId: "hook_a", hookVersion: 1 }],
       checkpoint: beforeCheckpoint,
     });
 
@@ -109,7 +109,7 @@ describe("launchInferenceHookWorkflows", () => {
     await launchInferenceHookWorkflows({
       authType,
       featureFlags: ["inference_hooks"],
-      hookIds: [],
+      hooks: [],
       checkpoint: beforeCheckpoint,
     });
 
@@ -120,7 +120,10 @@ describe("launchInferenceHookWorkflows", () => {
     await launchInferenceHookWorkflows({
       authType,
       featureFlags: ["inference_hooks"],
-      hookIds: ["hook_a", "hook_b"],
+      hooks: [
+        { hookId: "hook_a", hookVersion: 1 },
+        { hookId: "hook_b", hookVersion: 1 },
+      ],
       checkpoint: afterCheckpoint,
     });
 
@@ -129,7 +132,10 @@ describe("launchInferenceHookWorkflows", () => {
       expect(mockWorkflowStart).toHaveBeenCalledWith(
         evaluateInferenceHookWorkflow,
         expect.objectContaining({
-          args: [authType, { hookId, checkpoint: afterCheckpoint }],
+          args: [
+            authType,
+            { hookId, hookVersion: 1, checkpoint: afterCheckpoint },
+          ],
           workflowId: makeInferenceHookWorkflowId({
             hookId,
             checkpoint: afterCheckpoint,
@@ -154,7 +160,7 @@ describe("launchInferenceHookWorkflows", () => {
     await launchInferenceHookWorkflows({
       authType,
       featureFlags: ["inference_hooks"],
-      hookIds: ["hook_a"],
+      hooks: [{ hookId: "hook_a", hookVersion: 1 }],
       checkpoint: beforeCheckpoint,
     });
 
@@ -172,7 +178,10 @@ describe("launchInferenceHookWorkflows", () => {
       launchInferenceHookWorkflows({
         authType,
         featureFlags: ["inference_hooks"],
-        hookIds: ["hook_a", "hook_b"],
+        hooks: [
+          { hookId: "hook_a", hookVersion: 1 },
+          { hookId: "hook_b", hookVersion: 1 },
+        ],
         checkpoint: beforeCheckpoint,
       })
     ).resolves.toBeUndefined();
