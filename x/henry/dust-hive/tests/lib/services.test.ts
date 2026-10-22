@@ -18,6 +18,7 @@ describe("services", () => {
       expect(ALL_SERVICES).toContain("viz");
       expect(ALL_SERVICES).toContain("storybook");
       expect(ALL_SERVICES).toContain("sqlite-worker");
+      expect(ALL_SERVICES).toContain("gotenberg");
       expect(ALL_SERVICES).toContain("collab");
     });
 
@@ -26,8 +27,8 @@ describe("services", () => {
       expect(ALL_SERVICES).not.toContain("front" as ServiceName);
     });
 
-    it("has 16 services total", () => {
-      expect(ALL_SERVICES).toHaveLength(16);
+    it("has 17 services total", () => {
+      expect(ALL_SERVICES).toHaveLength(17);
     });
 
     it("has sdk as first service (start order)", () => {
@@ -86,6 +87,7 @@ describe("services", () => {
         "viz",
         "storybook",
         "sqlite-worker",
+        "gotenberg",
         "collab",
       ];
 

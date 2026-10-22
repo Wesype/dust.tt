@@ -239,6 +239,7 @@ const TAB_NAMES: Record<ServiceName, string> = {
   viz: "viz",
   storybook: "storybook",
   "sqlite-worker": "sqlite-worker",
+  gotenberg: "gotenberg",
   collab: "collab",
   dfs: "dfs",
 };

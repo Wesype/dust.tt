@@ -96,6 +96,12 @@ export DFS_API_URL=http://127.0.0.1:${ports.dfs}
 export DFS_API_MASTER_KEY=$DFS_MASTER_KEY
 export TEXT_EXTRACTION_URL=http://localhost:${ports.apacheTika}
 
+# === Document renderer (Gotenberg) ===
+export DOCUMENT_RENDERER_URL=http://localhost:${ports.gotenberg}
+# Gotenberg's Chromium runs in Docker, where localhost is the container.
+export DOCUMENT_RENDERER_APP_URL=http://host.docker.internal:${ports.frontSpaApp}
+export DOCUMENT_RENDERER_API_URL=http://host.docker.internal:${ports.front}
+
 # === Viz service ===
 export VIZ_PUBLIC_URL=http://localhost:${ports.viz}
 export ALLOWED_VISUALIZATION_ORIGIN=http://localhost:3000,http://localhost:3011,http://localhost:${ports.front},http://localhost:${ports.frontSpaApp}

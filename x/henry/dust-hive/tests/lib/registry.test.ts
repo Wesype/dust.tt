@@ -120,6 +120,10 @@ describe("registry", () => {
       expect(warm).toContain("core");
     });
 
+    it("leaves gotenberg to be started on demand", () => {
+      expect(getWarmServices({})).not.toContain("gotenberg");
+    });
+
     it("always includes the proxy", () => {
       expect(getWarmServices({ autoStartServices: { proxy: false } })).toContain("proxy");
     });

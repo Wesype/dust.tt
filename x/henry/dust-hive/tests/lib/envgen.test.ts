@@ -121,6 +121,17 @@ describe("envgen", () => {
       expect(content).toContain("export TEXT_EXTRACTION_URL=http://localhost:10998");
     });
 
+    it("points the document renderer at the env's Gotenberg, and Gotenberg at the host", () => {
+      const content = generateEnvSh("test", ports);
+      expect(content).toContain("export DOCUMENT_RENDERER_URL=http://localhost:10997");
+      expect(content).toContain(
+        "export DOCUMENT_RENDERER_APP_URL=http://host.docker.internal:10011"
+      );
+      expect(content).toContain(
+        "export DOCUMENT_RENDERER_API_URL=http://host.docker.internal:10000"
+      );
+    });
+
     it("uses different ports for second environment", () => {
       const secondEnvPorts = calculatePorts(11000);
       const content = generateEnvSh("second", secondEnvPorts);

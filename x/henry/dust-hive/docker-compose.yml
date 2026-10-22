@@ -114,3 +114,22 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # PDF export, Office previews and screenshots, run on demand as the `gotenberg` service.
+  # Chromium loads the env's front-spa and API through host.docker.internal, which Linux only
+  # resolves with the host-gateway entry.
+  gotenberg:
+    profiles: ["gotenberg"]
+    image: gotenberg/gotenberg:8
+    command:
+      - gotenberg
+      - --chromium-disable-javascript=false
+      - --chromium-allow-list=.*
+      - --chromium-deny-list=
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf http://localhost:3000/health || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10

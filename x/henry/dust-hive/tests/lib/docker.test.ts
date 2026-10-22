@@ -18,6 +18,7 @@ describe("docker", () => {
       expect(override.services.elasticsearch.ports).toEqual(["10200:9200"]);
       expect(override.services.kibana.ports).toEqual(["10601:5601"]);
       expect(override.services["apache-tika"].ports).toEqual(["10998:9998"]);
+      expect(override.services.gotenberg.ports).toEqual(["10997:3000"]);
     });
 
     it("publishes fdb on the same port number it listens on", () => {

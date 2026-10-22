@@ -1,14 +1,15 @@
 // Service registry - centralized configuration for all services
 
 import { stat } from "node:fs/promises";
+import { getDockerProjectName } from "./docker";
 import { type Environment, getEnvironmentWorktreeDir } from "./environment";
 import { logger } from "./logger";
-import { getEnvFilePath, getLogPath } from "./paths";
+import { getDockerComposePath, getDockerOverridePath, getEnvFilePath, getLogPath } from "./paths";
 import type { PortAllocation } from "./ports";
 import { isServiceRunning, readFileTail, spawnShellDaemon } from "./process";
 import { ALL_SERVICES, COLD_STATE_SERVICES, type ServiceName } from "./services";
 import type { Settings } from "./settings";
-import { buildShell } from "./shell";
+import { buildShell, shellQuote } from "./shell";
 
 // Readiness check types - how to determine if a service is ready
 export type ReadinessCheck =
@@ -194,6 +195,26 @@ export const SERVICE_REGISTRY: Record<ServiceName, ServiceConfig> = {
       url: (ports) => `http://localhost:${ports.sqliteWorker}/`,
     },
     portKey: "sqliteWorker",
+  },
+  gotenberg: {
+    cwd: ".",
+    needsNvm: false,
+    needsEnvSh: false,
+    // The document renderer behind PDF export, Office previews and OG images. Started on demand:
+    // compose runs in the foreground, so stopping the service stops the container.
+    buildCommand: (env) =>
+      [
+        "docker compose",
+        `-f ${shellQuote(getDockerComposePath())}`,
+        `-f ${shellQuote(getDockerOverridePath(env.name))}`,
+        `-p ${getDockerProjectName(env.name)}`,
+        "--profile gotenberg up gotenberg",
+      ].join(" "),
+    readinessCheck: {
+      type: "http",
+      url: (ports) => `http://localhost:${ports.gotenberg}/health`,
+    },
+    portKey: "gotenberg",
   },
   dfs: {
     cwd: "dfs/server",

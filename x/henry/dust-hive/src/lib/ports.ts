@@ -37,6 +37,7 @@ export const PORT_OFFSETS = {
   fdb: 500,
   dfs: 501,
   apacheTika: 998,
+  gotenberg: 997,
 } as const;
 
 export const BASE_PORT = 10000;
@@ -69,6 +70,7 @@ const PortAllocationSchema = z
     fdb: z.number().optional(),
     dfs: z.number().optional(),
     apacheTika: z.number(),
+    gotenberg: z.number().optional(),
   })
   .transform((data) => ({
     ...data,
@@ -83,6 +85,7 @@ const PortAllocationSchema = z
     kibana: data.kibana ?? data.base + PORT_OFFSETS.kibana,
     fdb: data.fdb ?? data.base + PORT_OFFSETS.fdb,
     dfs: data.dfs ?? data.base + PORT_OFFSETS.dfs,
+    gotenberg: data.gotenberg ?? data.base + PORT_OFFSETS.gotenberg,
   }));
 
 export type PortAllocation = z.output<typeof PortAllocationSchema>;
@@ -112,6 +115,7 @@ export function calculatePorts(base: number): PortAllocation {
     fdb: base + PORT_OFFSETS.fdb,
     dfs: base + PORT_OFFSETS.dfs,
     apacheTika: base + PORT_OFFSETS.apacheTika,
+    gotenberg: base + PORT_OFFSETS.gotenberg,
   };
   for (const port of Object.values(ports)) {
     if (port < 1 || port > 65535) {

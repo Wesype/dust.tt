@@ -35,6 +35,9 @@ export interface DockerComposeOverride {
     "apache-tika": {
       ports: string[];
     };
+    gotenberg: {
+      ports: string[];
+    };
   };
   volumes: Record<string, null>;
 }
@@ -88,6 +91,9 @@ export function generateDockerComposeOverride(
       },
       "apache-tika": {
         ports: [`${ports.apacheTika}:9998`],
+      },
+      gotenberg: {
+        ports: [`${ports.gotenberg}:3000`],
       },
     },
     volumes: Object.fromEntries(getVolumeNames(name).map((volume) => [volume, null] as const)),
@@ -230,6 +236,8 @@ export async function pauseDocker(envName: string): Promise<boolean> {
     "compose",
     "--profile",
     "kibana",
+    "--profile",
+    "gotenberg",
     "-f",
     basePath,
     "-f",
@@ -272,6 +280,8 @@ export async function stopDocker(
     "compose",
     "--profile",
     "kibana",
+    "--profile",
+    "gotenberg",
     "-f",
     basePath,
     "-f",

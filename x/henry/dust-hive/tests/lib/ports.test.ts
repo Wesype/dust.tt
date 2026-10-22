@@ -26,6 +26,7 @@ describe("ports", () => {
       expect(ports.fdb).toBe(10500);
       expect(ports.dfs).toBe(10501);
       expect(ports.apacheTika).toBe(10998);
+      expect(ports.gotenberg).toBe(10997);
     });
 
     it("calculates correct ports for second environment", () => {
@@ -67,6 +68,7 @@ describe("ports", () => {
       expect(ports.fdb).toBe(base + PORT_OFFSETS.fdb);
       expect(ports.dfs).toBe(base + PORT_OFFSETS.dfs);
       expect(ports.apacheTika).toBe(base + PORT_OFFSETS.apacheTika);
+      expect(ports.gotenberg).toBe(base + PORT_OFFSETS.gotenberg);
     });
   });
 });
