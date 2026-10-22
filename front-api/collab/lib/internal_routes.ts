@@ -25,13 +25,13 @@ import {
   collabSourceWriteRequestSchema,
 } from "@app/types/collab_internal";
 import { assertNever } from "@app/types/shared/utils/assert_never";
-import { collabAccessErrorToApiError } from "@front-api/lib/collab/collab_access_errors";
 import {
   editSessionSource,
   readSessionSource,
   showAgentActivity,
   writeSessionSource,
-} from "@front-api/lib/collab/session";
+} from "@front-api/collab/lib/session";
+import { collabAccessErrorToApiError } from "@front-api/lib/collab_access_errors";
 import { createHono } from "@front-api/lib/hono";
 import { apiError } from "@front-api/middlewares/utils";
 import { validate } from "@front-api/middlewares/validator";
@@ -54,7 +54,7 @@ function isAuthorized(authorization: string | undefined): boolean {
 }
 
 /**
- * @cc [owner:tdraier,label:security] collab-internal-routes
+ * @cc [owner:PopDaph;tdraier,label:security] collab-internal-routes
  * Every internal route MUST answer 401 unless the request carries the configured internal secret,
  * and MUST answer 401 to every request when none is configured. A read MUST return a document's
  * source only for the file `checkCollabReadAccess` opens for the request's user, workspace and path,

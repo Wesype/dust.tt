@@ -1,14 +1,8 @@
 import type { CollabAccess } from "@app/lib/api/collab/access";
 import {
-  applyCommentRequest,
-  dispatchSessionCommentMentions,
-} from "@app/lib/api/collab/comments";
-import { loadCollabSession } from "@app/lib/api/collab/session_file";
-import {
   anchorYDocComment,
   getYDocUnsavableBodyReason,
 } from "@app/lib/api/collab/ydoc";
-import { YDOC_STATE_TIMEOUT_MS } from "@app/lib/api/collab/ydoc_state";
 import type { DfmMessage } from "@app/lib/markdown/dfm";
 import {
   concurrentExecutor,
@@ -16,6 +10,12 @@ import {
   setTimeoutAsync,
 } from "@app/lib/utils/async_utils";
 import logger from "@app/logger/logger";
+import {
+  applyCommentRequest,
+  dispatchSessionCommentMentions,
+} from "@front-api/collab/lib/comments";
+import { loadCollabSession } from "@front-api/collab/lib/session_file";
+import { YDOC_STATE_TIMEOUT_MS } from "@front-api/collab/lib/ydoc_state";
 
 import type {
   CommentRequest,
@@ -30,8 +30,8 @@ import type { Result } from "@app/types/shared/result";
 import { Err } from "@app/types/shared/result";
 import { normalizeError } from "@app/types/shared/utils/error_utils";
 import { safeParseJSON } from "@app/types/shared/utils/json_utils";
-import { authenticateConnection } from "@front-api/lib/collab/connection_access";
-import type { CollabSession } from "@front-api/lib/collab/session";
+import { authenticateConnection } from "@front-api/collab/lib/connection_access";
+import type { CollabSession } from "@front-api/collab/lib/session";
 import {
   epochMessage,
   getSession,
@@ -44,7 +44,7 @@ import {
   showAgentActivity,
   startSession,
   stopWrites,
-} from "@front-api/lib/collab/session";
+} from "@front-api/collab/lib/session";
 import type { Document, LocalTransactionOrigin } from "@hocuspocus/server";
 import { Hocuspocus } from "@hocuspocus/server";
 
@@ -114,7 +114,7 @@ function logUnexpected(
  * first, without the token.
  */
 /**
- * @cc [owner:tdraier,label:product;concurrency] collab-document-lifecycle
+ * @cc [owner:PopDaph;tdraier,label:product;concurrency] collab-document-lifecycle
  * Every load MUST go through `loadCollabSession`, and once loaded, the document MUST be stored with
  * `storeSessionState` when the load asks it (`shouldStoreState`). Every connection MUST be sent the
  * session's epoch once connected. A store MUST save the document with the session's threads and
@@ -494,7 +494,7 @@ async function runCommand(queued: QueuedCommand): Promise<void> {
 }
 
 /**
- * @cc [owner:tdraier,label:security;product] collab-comment-threads
+ * @cc [owner:PopDaph;tdraier,label:security;product] collab-comment-threads
  * `file` MUST be the sending connection's access, and `reply` the only way back to it. A threads
  * request MUST get the session's threads. A command MUST be applied with `applyCommentRequest`, one
  * at a time per document, and always answered: `accepted`, refused with its error, or

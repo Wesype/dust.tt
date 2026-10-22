@@ -2,7 +2,6 @@ import path from "node:path";
 import type { CollabAccess } from "@app/lib/api/collab/access";
 import type { SessionContent } from "@app/lib/api/collab/ydoc";
 import { dfmToYDoc, yDocToDfm } from "@app/lib/api/collab/ydoc";
-import { fetchYDocState, newYDocEpoch } from "@app/lib/api/collab/ydoc_state";
 import { readStoredText } from "@app/lib/api/documents/comment_signatures";
 import { DustFileSystem } from "@app/lib/api/file_system/dust_file_system";
 import {
@@ -20,6 +19,7 @@ import logger from "@app/logger/logger";
 import { toSessionName } from "@app/types/collab";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
+import { fetchYDocState, newYDocEpoch } from "@front-api/collab/lib/ydoc_state";
 
 /** The file as the session last read or saved it. */
 export interface CollabSave {
@@ -49,14 +49,14 @@ function readSessionText(
 }
 
 /**
- * @cc [owner:tdraier,label:product;concurrency] collab-session-load
+ * @cc [owner:PopDaph;tdraier,label:product;concurrency] collab-session-load
  * The save returned MUST carry the revision of the bytes read, and as source what `yDocToDfm`
  * gives for the document those bytes load, so a load alone never counts as a change, or the text
  * read when the editor cannot load them and the stored state is returned. A read without a
  * revision MUST fail the load, since none of the session's saves could be conditional.
  */
 /**
- * @cc [owner:tdraier,label:product;concurrency] collab-session-load-state
+ * @cc [owner:PopDaph;tdraier,label:product;concurrency] collab-session-load-state
  * When `yDocToDfm` accepts the Yjs state stored for the file (`fetchYDocState`) and that state
  * continues from the revision read, or gives the source of the returned save, the load MUST return
  * that state's document, threads and epoch, so its Yjs ids survive a reload, even when the editor
@@ -140,7 +140,7 @@ export class CollabSaveError extends Error {
 }
 
 /**
- * @cc [owner:tdraier,label:product;concurrency] collab-session-save
+ * @cc [owner:PopDaph;tdraier,label:product;concurrency] collab-session-save
  * The save MUST write `yDocToDfm` of the session, its threads included, only when it
  * differs from `last.source`, and conditional on `last.revision`: a file changed since then MUST
  * be left unchanged and the save MUST fail. It MUST return the file as now stored: `last` when

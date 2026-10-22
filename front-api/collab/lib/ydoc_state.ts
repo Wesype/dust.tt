@@ -52,7 +52,7 @@ async function runOnStateRedis<T>(
 }
 
 /**
- * @cc [owner:tdraier,label:product;performance] collab-ydoc-state-store
+ * @cc [owner:PopDaph;tdraier,label:product;performance] collab-ydoc-state-store
  * The stored state MUST hold the whole Yjs state of `doc`, with `epoch`, `revision` and
  * `comments`, and expire `YDOC_STATE_TTL_SECONDS` after this call. A state larger than
  * `YDOC_STATE_MAX_BYTES` once serialized MUST NOT be stored, and MUST delete the one stored
@@ -81,7 +81,7 @@ export async function storeYDocState(
 }
 
 /**
- * @cc [owner:tdraier,label:product] collab-ydoc-state-fetch
+ * @cc [owner:PopDaph;tdraier,label:product] collab-ydoc-state-fetch
  * MUST return the state `storeYDocState` last stored for `documentName`, as a new `Y.Doc` holding
  * the same Yjs ids, or null when none is stored or what is stored cannot be read, which MUST be
  * logged. A state found

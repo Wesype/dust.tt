@@ -1,14 +1,14 @@
 import { dfmToYDoc } from "@app/lib/api/collab/ydoc";
+import { runOnRedisCollab } from "@app/lib/api/redis";
+import type { DfmComment } from "@app/lib/markdown/dfm";
+import logger from "@app/logger/logger";
+import { BODY_FRAGMENT_NAME } from "@app/types/collab";
 import {
   fetchYDocState,
   storeYDocState,
   YDOC_STATE_MAX_BYTES,
   YDOC_STATE_TIMEOUT_MS,
-} from "@app/lib/api/collab/ydoc_state";
-import { runOnRedisCollab } from "@app/lib/api/redis";
-import type { DfmComment } from "@app/lib/markdown/dfm";
-import logger from "@app/logger/logger";
-import { BODY_FRAGMENT_NAME } from "@app/types/collab";
+} from "@front-api/collab/lib/ydoc_state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 

@@ -14,8 +14,8 @@ import { Err } from "@app/types/shared/result";
 import {
   authenticateConnection,
   recheckAllConnections,
-} from "@front-api/lib/collab/connection_access";
-import { createCollabHocuspocus } from "@front-api/lib/collab/hocuspocus";
+} from "@front-api/collab/lib/connection_access";
+import { createCollabHocuspocus } from "@front-api/collab/lib/hocuspocus";
 import { Connection } from "@hocuspocus/server";
 import { describe, expect, it, vi } from "vitest";
 

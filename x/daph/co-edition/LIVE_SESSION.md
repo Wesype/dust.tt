@@ -62,7 +62,7 @@ document model, the stored state, the checkpoint, the agent tools, the comment m
 
 ## The service
 
-**What it is.** One long-running Node process, `front-api/collab_server.ts`, built by
+**What it is.** One long-running Node process, `front-api/collab/server.ts`, built by
 front-api's esbuild as a second target next to `server.ts`, so it imports front's code through
 `@app/*` like front-api does: the DFM codec, the server-safe document model, workspace auth and
 file system permissions. It is not a separate codebase and not a Hocuspocus program: Hocuspocus
@@ -202,7 +202,7 @@ header shows the agent's avatar with what it does. `reading` goes out once the a
 the access check; it lasts a fixed 20 s, since the service learns nothing between the read and the
 write. After applying an agent's change, the service flushes its update to browsers, then sends
 `agent_edit` with the Yjs item ids the change inserted (`insertedRanges` in
-`front-api/lib/collab/session.ts`). A browser glows the text of those items in the agent's color,
+`front-api/collab/lib/session.ts`). A browser glows the text of those items in the agent's color,
 then fades it (`AgentEdits.ts`). Only ids are matched, never text: diffing the document before and
 after a remote change, tried first, showed someone typing at the same moment as the agent. Follow-ups:
 end the status on the agent message's own stream, then stream the tool's arguments to show the edit

@@ -16,8 +16,8 @@ import {
   COLLAB_SOURCE_WRITE_PATH,
 } from "@app/types/collab_internal";
 import { Err } from "@app/types/shared/result";
-import { createCollabHocuspocus } from "@front-api/lib/collab/hocuspocus";
-import { createInternalRoutes } from "@front-api/lib/collab/internal_routes";
+import { createCollabHocuspocus } from "@front-api/collab/lib/hocuspocus";
+import { createInternalRoutes } from "@front-api/collab/lib/internal_routes";
 import { createHono } from "@front-api/lib/hono";
 import { unhandledErrorHandler } from "@front-api/middlewares/utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

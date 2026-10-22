@@ -1,11 +1,11 @@
 import type { CollabAccess } from "@app/lib/api/collab/access";
-import { saveCollabSession } from "@app/lib/api/collab/session_file";
 import { dfmToYDoc, yDocToDfm } from "@app/lib/api/collab/ydoc";
 import { DustFileSystem } from "@app/lib/api/file_system/dust_file_system";
 import type { DfmComment } from "@app/lib/markdown/dfm";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import { BODY_FRAGMENT_NAME } from "@app/types/collab";
 import { Ok } from "@app/types/shared/result";
+import { saveCollabSession } from "@front-api/collab/lib/session_file";
 import { vi } from "vitest";
 import * as Y from "yjs";
 

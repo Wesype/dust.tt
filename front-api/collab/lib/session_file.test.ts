@@ -1,10 +1,4 @@
 import { openCollabAccess } from "@app/lib/api/collab/access";
-import {
-  keepConflictingFile,
-  loadCollabSession,
-  saveCollabSession,
-} from "@app/lib/api/collab/session_file";
-import { fetchYDocState, storeYDocState } from "@app/lib/api/collab/ydoc_state";
 import { readStoredText } from "@app/lib/api/documents/comment_signatures";
 import { DustFileSystem } from "@app/lib/api/file_system/dust_file_system";
 import {
@@ -23,6 +17,15 @@ import {
   toSessionName,
 } from "@app/types/collab";
 import { Err, Ok } from "@app/types/shared/result";
+import {
+  keepConflictingFile,
+  loadCollabSession,
+  saveCollabSession,
+} from "@front-api/collab/lib/session_file";
+import {
+  fetchYDocState,
+  storeYDocState,
+} from "@front-api/collab/lib/ydoc_state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 

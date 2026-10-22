@@ -1,7 +1,3 @@
-import {
-  loadCollabSession,
-  saveCollabSession,
-} from "@app/lib/api/collab/session_file";
 import { dfmToYDoc } from "@app/lib/api/collab/ydoc";
 import { INPUT_LIMITS } from "@app/lib/markdown/dfm";
 import { toSessionName } from "@app/types/collab";
@@ -12,13 +8,17 @@ import {
   loadSource,
   SOURCE,
   typeInto,
-} from "@front-api/lib/collab/collab.test_utils";
-import { createCollabHocuspocus } from "@front-api/lib/collab/hocuspocus";
+} from "@front-api/collab/lib/collab.test_utils";
+import { createCollabHocuspocus } from "@front-api/collab/lib/hocuspocus";
 import {
   editSessionSource,
   readSessionSource,
   writeSessionSource,
-} from "@front-api/lib/collab/session";
+} from "@front-api/collab/lib/session";
+import {
+  loadCollabSession,
+  saveCollabSession,
+} from "@front-api/collab/lib/session_file";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -32,12 +32,12 @@ vi.mock("@app/lib/api/collab/access", async (importActual) => {
   };
 });
 
-vi.mock("@app/lib/api/collab/session_file", () => ({
+vi.mock("@front-api/collab/lib/session_file", () => ({
   loadCollabSession: vi.fn(),
   saveCollabSession: vi.fn(),
 }));
 
-vi.mock("@app/lib/api/collab/comments", () => ({
+vi.mock("@front-api/collab/lib/comments", () => ({
   applyCommentRequest: vi.fn(),
   dispatchSessionCommentMentions: vi.fn(async () => undefined),
 }));

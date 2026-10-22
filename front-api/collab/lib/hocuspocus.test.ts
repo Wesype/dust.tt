@@ -1,26 +1,12 @@
 import { createServer } from "node:http";
 import type { CollabAccess } from "@app/lib/api/collab/access";
 import { checkCollabReadAccess } from "@app/lib/api/collab/access";
-import {
-  applyCommentRequest,
-  dispatchSessionCommentMentions,
-} from "@app/lib/api/collab/comments";
-import {
-  CollabSaveError,
-  keepConflictingFile,
-  loadCollabSession,
-  saveCollabSession,
-} from "@app/lib/api/collab/session_file";
 import { mintCollabTicket } from "@app/lib/api/collab/tickets";
 import {
   dfmToYDoc,
   yDocCommentedTexts,
   yDocToDfm,
 } from "@app/lib/api/collab/ydoc";
-import {
-  fetchYDocState,
-  YDOC_STATE_TIMEOUT_MS,
-} from "@app/lib/api/collab/ydoc_state";
 import { runOnRedisCollab } from "@app/lib/api/redis";
 import { Authenticator } from "@app/lib/auth";
 import { onAgentActivity, onAgentEdit } from "@app/lib/client/collab/agents";
@@ -43,21 +29,35 @@ import {
   loadSource,
   SOURCE,
   typeInto,
-} from "@front-api/lib/collab/collab.test_utils";
+} from "@front-api/collab/lib/collab.test_utils";
+import {
+  applyCommentRequest,
+  dispatchSessionCommentMentions,
+} from "@front-api/collab/lib/comments";
 import {
   saveAllSessions,
   COMMENT_COMMAND_TIMEOUT_MS,
   createCollabHocuspocus,
   handleClientMessage,
   UNLOAD_GRACE_PERIOD_MS,
-} from "@front-api/lib/collab/hocuspocus";
+} from "@front-api/collab/lib/hocuspocus";
 import {
   SAVE_RETRY_DELAY_MS,
   getSession,
   readSessionSource,
   showAgentActivity,
   writeSessionSource,
-} from "@front-api/lib/collab/session";
+} from "@front-api/collab/lib/session";
+import {
+  CollabSaveError,
+  keepConflictingFile,
+  loadCollabSession,
+  saveCollabSession,
+} from "@front-api/collab/lib/session_file";
+import {
+  fetchYDocState,
+  YDOC_STATE_TIMEOUT_MS,
+} from "@front-api/collab/lib/ydoc_state";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import type { Document, WebSocketLike } from "@hocuspocus/server";
 import { Connection } from "@hocuspocus/server";
@@ -85,14 +85,16 @@ vi.mock("@app/lib/api/collab/access", async (importActual) => {
   };
 });
 
-vi.mock("@app/lib/api/collab/session_file", async (importActual) => ({
-  ...(await importActual<typeof import("@app/lib/api/collab/session_file")>()),
+vi.mock("@front-api/collab/lib/session_file", async (importActual) => ({
+  ...(await importActual<
+    typeof import("@front-api/collab/lib/session_file")
+  >()),
   loadCollabSession: vi.fn(),
   saveCollabSession: vi.fn(),
   keepConflictingFile: vi.fn(),
 }));
 
-vi.mock("@app/lib/api/collab/comments", () => ({
+vi.mock("@front-api/collab/lib/comments", () => ({
   applyCommentRequest: vi.fn(),
   dispatchSessionCommentMentions: vi.fn(async () => undefined),
 }));

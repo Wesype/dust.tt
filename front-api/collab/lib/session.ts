@@ -1,12 +1,5 @@
 import type { CollabAccess } from "@app/lib/api/collab/access";
-import type { CollabSave } from "@app/lib/api/collab/session_file";
-import {
-  CollabSaveError,
-  keepConflictingFile,
-  saveCollabSession,
-} from "@app/lib/api/collab/session_file";
 import { replaceYDocContent, yDocToDfm } from "@app/lib/api/collab/ydoc";
-import { storeYDocState } from "@app/lib/api/collab/ydoc_state";
 import type { EditSourceFailure } from "@app/lib/api/documents/agent_edit_source";
 import {
   DfmAgentDocumentError,
@@ -17,6 +10,13 @@ import { WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES } from "@app/lib/api/files/file_
 import type { DfmComment } from "@app/lib/markdown/dfm";
 import { setTimeoutAsync } from "@app/lib/utils/async_utils";
 import logger from "@app/logger/logger";
+import type { CollabSave } from "@front-api/collab/lib/session_file";
+import {
+  CollabSaveError,
+  keepConflictingFile,
+  saveCollabSession,
+} from "@front-api/collab/lib/session_file";
+import { storeYDocState } from "@front-api/collab/lib/ydoc_state";
 
 import type {
   SaveState,
@@ -172,7 +172,7 @@ export async function getLoadedSession(
 }
 
 /**
- * @cc [owner:tdraier,label:product;concurrency] collab-session-source-read
+ * @cc [owner:PopDaph;tdraier,label:product;concurrency] collab-session-source-read
  * A document MUST be reported open while Hocuspocus holds it, after waiting for a load or an
  * unload in progress, with as source what `yDocToDfm` gives for it and the session's threads.
  */
@@ -213,7 +213,7 @@ export function showAgentActivity(
 }
 
 /**
- * @cc [owner:tdraier,label:product;concurrency;security] collab-session-source-write
+ * @cc [owner:PopDaph;tdraier,label:product;concurrency;security] collab-session-source-write
  * A write MUST only target the document named after `file`'s workspace and path, so its save
  * writes the file the document was loaded from. It MUST answer `closed`, changing nothing, when
  * `readSessionSource` would report the document closed, and `changed`, changing nothing, unless the
@@ -657,7 +657,7 @@ export async function saveSession(
 }
 
 /**
- * @cc [owner:tdraier,label:product;concurrency] collab-session-state-store
+ * @cc [owner:PopDaph;tdraier,label:product;concurrency] collab-session-state-store
  * The document MUST be stored with `storeYDocState`, with the session's threads and epoch, as
  * continuing from the revision of the session's last save, all read when its write starts. A
  * session MUST have at most one write pending, so a Redis that does not answer holds one state

@@ -1,9 +1,5 @@
 import { generateKeyPairSync } from "node:crypto";
 import type { CollabAccess } from "@app/lib/api/collab/access";
-import {
-  applyCommentRequest,
-  dispatchSessionCommentMentions,
-} from "@app/lib/api/collab/comments";
 import { dfmToYDoc } from "@app/lib/api/collab/ydoc";
 import config from "@app/lib/api/config";
 import {
@@ -16,6 +12,10 @@ import { serializeDfm } from "@app/lib/markdown/dfm";
 import { CollabAgentFactory } from "@app/tests/utils/CollabAgentFactory";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
+import {
+  applyCommentRequest,
+  dispatchSessionCommentMentions,
+} from "@front-api/collab/lib/comments";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock(import("@app/lib/api/documents/comment_mentions"), () => ({

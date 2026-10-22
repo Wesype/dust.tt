@@ -1,6 +1,6 @@
 // The live session server: one Hocuspocus instance holding open documents in memory, next to a
 // Hono app for plain HTTP. Design: x/daph/co-edition/LIVE_SESSION.md.
-import "./lib/startup-log";
+import "@front-api/lib/startup-log";
 
 import config from "@app/lib/api/config";
 import logger from "@app/logger/logger";
@@ -11,21 +11,18 @@ import { serve } from "@hono/node-server";
 import type { Peer } from "crossws";
 import crossws from "crossws/adapters/node";
 
+import { createHono } from "@front-api/lib/hono";
+import { unhandledErrorHandler } from "@front-api/middlewares/utils";
+import { healthzApp } from "@front-api/routes/healthz";
 import {
   ACCESS_RECHECK_INTERVAL_MS,
   recheckAllConnections,
-} from "./lib/collab/connection_access";
-import {
-  saveAllSessions,
-  createCollabHocuspocus,
-} from "./lib/collab/hocuspocus";
-import { createInternalRoutes } from "./lib/collab/internal_routes";
-import { createHono } from "./lib/hono";
-import { unhandledErrorHandler } from "./middlewares/utils";
-import { healthzApp } from "./routes/healthz";
+} from "./lib/connection_access";
+import { saveAllSessions, createCollabHocuspocus } from "./lib/hocuspocus";
+import { createInternalRoutes } from "./lib/internal_routes";
 
 /**
- * @cc [owner:tdraier,label:product;concurrency] collab-server-internal-secret
+ * @cc [owner:PopDaph;tdraier,label:product;concurrency] collab-server-internal-secret
  * The server MUST refuse to start without `COLLAB_INTERNAL_SECRET`: front reports every document
  * closed when it has no collab server configured, so a server front cannot ask MUST hold no
  * session.
