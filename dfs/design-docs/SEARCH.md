@@ -5,31 +5,25 @@
 | Concern | Requirement |
 | --- | --- |
 | Latency | First useful result batch: p95 ≤350 ms, p99 <500 ms, including authorization and enabled rescoring under concurrent ingestion. Measure 20-hit completion separately. |
-| Freshness | Ten seconds without another relevant change, then indexing within 30 minutes, including imports and fan-out. Continuously changing objects have no completion bound. Include ES refresh in lag measurements. |
+| Freshness | With healthy dependencies and backlog within capacity, ten seconds without another relevant change, then indexing within 30 minutes, including imports and fan-out. Continuously changing objects have no completion bound. Expose lag during outages and recovery; include ES refresh in measurements. |
 | Delivery | Stream bounded result batches with backpressure, cancellation, and final completion status. |
-| Outages | Continue filesystem writes during ES outages. Serve existing index; resume durable work after worker recovery. |
-| Backlog | Alert on pending objects, Temporal backlog/failures, and source-to-searchable lag. Limit incoming work when storage cannot keep up. |
+| Outages | Continue filesystem writes during Temporal or ES outages. Retain durable pending work in FDB and drain after recovery. Serve existing index when ES is available. |
+| Backlog | Alert on pending objects, backlog bytes/age, Temporal failures, and source-to-searchable lag. Bound background dispatch and processing; Temporal outages alone must not reject filesystem writes. |
 
 ## Architecture
 
-**Signal-With-Start MUST run inside `with_idempotent_transaction`, alongside the source mutation and its needs-indexing marker. On rollback, the transaction MUST cancel the Temporal workflow.** Dispatch must not be deferred until after commit.
+Source mutations and object-ID events commit together in `with_idempotent_transaction`. Events are
+partitioned by tenant. A Temporal Schedule discovers nonempty partitions and signals each tenant's
+router workflow. Its activities resolve MIME type and object-local exclusion, write extract/search
+dirty keys, signal the stage workflows, then remove acknowledged events.
 
-**Debounce relevant `Apply` mutations per object with a 10-second buffer.** Each new mutation moves the processing deadline to its source-change timestamp +10 seconds. Signal-With-Start wakes an existing workflow or starts one; the workflow coalesces changes and processes the latest committed state after the buffer expires.
+Each tenant has separate router, extract, and search workflows. Activities handle up to 100
+objects; search sends approximately 1 MB encoded bulks. Dirty keys remain until work completes.
+Extraction atomically publishes output and marks search dirty, then signals search before completing.
+[Transactional outbound](TRANSACTIONAL_OUTBOUND.md) defines the keys, API, and delivery protocol.
 
-```mermaid
-flowchart LR
-    S["DFS server: with_idempotent_transaction"] -->|Source + needs-indexing marker| F[(FoundationDB)]
-    S -->|Signal-With-Start; cancel on rollback| T[Temporal workflows]
-    T --> A[Extraction and indexing activities]
-    A <--> F
-    A --> E[(Elasticsearch)]
-```
-
-- Two workflow types: `preprocess` extracts text, then starts `indexFile`, which owns ES publication. Temporal owns waits, retries, progress, and worker recovery.
-- Use separate Temporal task queues and independently sized worker pools for preprocessing and indexing so slow extractors cannot block direct text indexing.
-- FDB owns source data, permissions, extraction generations, and a per-object needs-indexing marker.
-- Preprocessing runs inside awaited activities. `preprocess` completes once text is durably stored and the `indexFile` start is acknowledged; it does not wait for indexing to finish. API adjustments follow separately.
-- DFS owns orchestration and calls processors directly. Awaiting processor completion provides durable sequencing; the filesystem request waits for transaction-scoped dispatch, not for extraction or ES publication.
+Debounce relevant `Apply` mutations per object with a 10-second buffer. Workers derive eligibility
+from current source-change timestamps; event delivery and duplicate signals do not extend the wait.
 
 ## Authorization
 
@@ -76,10 +70,10 @@ budget.pdf: root_id = reports_id
 
 ### Language-aware indexing
 
-- Detect language from native or extracted text before ES publication. The meeting proposed a Google language-detection library; confirm the exact library, supported languages, and Rust integration before implementation.
+- Detect language from native or extracted text before ES publication. A Google language-detection library is a candidate; confirm the exact library, supported languages, and Rust integration before implementation.
 - Support English and French language-specific fields/analyzers initially, with a neutral fallback for unsupported, uncertain, short, or mixed-language content. Final field names, confidence thresholds, and mixed-language handling belong in the mapping proposal.
 - Query the supported language fields and fallback without requiring users to select a language. Define scoring and excerpt selection across fields in the mapping proposal; preserve the existing `NAME`/`CONTENT` distinction.
-- Validate detection and relevance on representative English, French, mixed-language, and code-heavy files. Analyzer or mapping changes require a versioned index rebuild. The meeting's projected French share is not a measured sizing input.
+- Validate detection and relevance on representative English, French, mixed-language, and code-heavy files. Analyzer or mapping changes require a versioned index rebuild. Measure the French share of the corpus before using it for sizing.
 
 ### Xattr
 
@@ -94,64 +88,50 @@ budget.pdf: root_id = reports_id
 ## Index eligibility and updates
 
 - Presence of `dfs.search.exclude`, including an empty value, excludes the object from all search.
-- Directory exclusion applies to every descendant; children cannot override it. Removal re-enables indexing.
-- Setting or removing exclusion creates subtree work where needed.
+- Exclusion is not inherited. On a directory, it excludes only the directory itself; descendants retain their own eligibility.
+- Setting exclusion removes that object from search. Removing it re-evaluates that object for indexing. Neither change creates descendant work.
 - MIME policy controls text indexing independently of exclusion. Only `text/*` MIME types are indexed natively; preserve their text without transformation.
 - Eligibility follows the declared MIME type, not the filename extension. JSON, JavaScript, or TSX files are not exceptions: `application/json` is not indexed natively.
 
 | MIME range | Text policy |
 | --- | --- |
 | `text/*` | Aggregate native content. |
-| Binary MIME with configured extractor | Index metadata first; add matching extracted text when available. |
-| Other MIME types | Metadata only. |
+| Binary MIME with configured extractor | Mark extract dirty; successful extraction hands off to search. |
+| Other MIME types | Processing resolves the content policy, then hands off to search for metadata-only publication when appropriate. |
 
 | Change | Indexing work |
 | --- | --- |
 | File bytes, attributes, xattrs | Rewrite current content and metadata. Extract again only when processor input/configuration changes; drop obsolete extracted text. |
-| Extraction completed | `preprocess` starts `indexFile` to index the original document with extracted text. |
+| Extraction completed | Extract activity atomically marks the original object search-dirty, then signals the tenant search workflow before completing. |
 | User/group read grant | Update FDB grants and forward index; invalidate root cache. |
 | File move | Recompute root and ancestry. |
 | Read `DENY` insertion/removal | Recompute affected roots on object and descendants. |
 | Directory move | Recompute roots and ancestry throughout subtree. |
 | Directory rename | Rewrite its name only; paths are not indexed. |
-| Directory metadata | Rewrite directory; traverse descendants only for inherited fields. |
+| Directory metadata and xattrs | Reconcile the directory itself, including its own exclusion flag. |
 | Object removal/replacement | Tombstone removed document; schedule parent metadata and replacement separately. |
 | Current extraction removed | Clear current generation and rebuild without extracted text. |
 
-## Temporal workflows
+## Tenant workflows and activity stages
 
-| Workflow | Input | Steps | Completion |
-| --- | --- | --- | --- |
-| `indexFile` | Native or extracted text, directories, metadata-only files, exclusions, removals. | Wait for stable input; read current state; write or tombstone ES document. Traverse descendants when required. | Required ES writes acknowledged; descendant work durably marked. |
-| `preprocess` | MIME type with configured processor, e.g. PDF, DOCX, PPTX. | Wait for stable input; extract or reuse matching text; persist generation; start `indexFile`. | Complete text durably stored and `indexFile` start acknowledged. Processor acceptance alone never completes the workflow. |
+`dfs-router/<tenant_id>` routes object events to `dfs-extract/<tenant_id>` and
+`dfs-search/<tenant_id>`. Signals have no payload; tenant identity is a workflow start argument.
+Activities discover work from FDB. See [routing and recovery](TRANSACTIONAL_OUTBOUND.md#discovery-and-tenant-routing).
 
-### Deployment and signal volume
+| Stage | Input | Completion |
+| --- | --- | --- |
+| `extract` | Up to 100 extract-dirty objects. | Atomically publish output, clear matching extract keys, and mark search dirty; signal search before completing the activity. |
+| `search` | Up to 100 search-dirty objects. | Publish approximately 1 MB bulks or tombstones; clear only successful objects with matching dirty stamps. |
 
-- Configure DFS Temporal namespaces, credentials, retention, and task-queue routing per deployment environment/region. Namespace provisioning and the initial indexing worker are implementation follow-ups.
-- Debouncing reduces processing passes, not incoming signals or history events. Load-test bursts exceeding 1,024 mutations in 30 seconds on one object, including Continue-As-New and completion races. This is a meeting-reported workload, not a verified Temporal limit.
-- Verify the deployed service's signal, history, and namespace rate limits; monitor throttling, dispatch latency, queue delay, and history growth. See [Temporal limits](https://docs.temporal.io/cloud/limits).
-- Estimate Temporal cost from measured starts, signals, activities, timers, and retention. The meeting's $1,000/month/region figure is an estimate to validate, not a guaranteed ceiling.
-
-### Start and reconcile
-
-- Inside `with_idempotent_transaction`, mutate the source and update `search/dirty/<objectId>` under the tenant prefix: revision, change time, removal/traversal flags.
-- Keep one marker per object; combine changes. Preserve removal state until the ES tombstone succeeds.
-- **Before commit, await Signal-With-Start inside `with_idempotent_transaction`** for `indexFile` and, when extraction is needed, `preprocess`. `indexFile` publishes metadata while matching extracted text is unavailable; `preprocess` signals or starts it again when extraction completes. A dispatch failure fails the transaction; Temporal unavailability can block source writes, while ES unavailability does not.
-- **On rollback, cancel the affected Temporal execution.** Provide this through an extension to `with_idempotent_transaction` or a higher-level helper built on it; target the execution so delayed cancellation cannot cancel a replacement run. Surface cancellation failures and retry cleanup.
-- Keep the mutation identity stable across transaction retries. Resolve an ambiguous FDB commit through idempotency state before deciding to cancel; an unknown commit result is not a confirmed rollback.
-- Activities must verify committed FDB state before extracting or publishing. A signal can arrive before commit; rolled-back mutations must never become indexing input.
-- Use distinct IDs: `dfs-search/index/<tenantId>/<objectId>` and `dfs-search/preprocess/<tenantId>/<objectId>`. Only one execution of each workflow type runs per object. Ignore duplicate/older revisions; extraction completion must wake `indexFile` even when the source revision is unchanged.
-- Periodically scan committed dirty markers in bounded batches and repair interrupted work using the same transaction-scoped dispatch and rollback rules. If rollback cancels a workflow that also held earlier committed work, the marker preserves that work for restart.
-- FDB and Temporal cannot commit atomically. Markers and committed-state checks cover crashes where rollback compensation cannot run; reconciliation is a repair path, not normal post-commit dispatch.
-- Keep the marker until `indexFile` publishes the required content successfully. Neither preprocessing completion nor metadata-only publication while extraction is pending clears it. Clear only the completed revision in a conditional FDB transaction; preserve concurrent changes.
-- Before processing, recheck MIME/configuration. If preprocessing is no longer required, exit without clearing the marker; `indexFile` handles the current content policy. Reconciliation restarts preprocessing only when matching extracted text is missing; otherwise it starts indexing directly.
-- Transient outages retain work. Terminal failures stay visible; retry unchanged terminal failures only through explicit repair.
-- Build on the existing [`fdb::with_idempotent_transaction`](../server/src/storage/fdb.rs) and its [transaction receipts](STORAGE.md#transaction-receipts). Within the retry window, a committed receipt returns the saved result and original commit version without rerunning the body. The choice between extending this helper and adding a higher-level wrapper is an implementation detail; transaction-scoped Signal-With-Start, rollback cancellation, and the 10-second Apply debounce are required.
+Bound per-tenant outstanding batches and shared worker concurrency. Scheduled recovery scans dirty
+ranges and wakes stage workflows even when no events remain. Temporal outages pause dispatch and
+processing; filesystem writes retain events until recovery. Monitor schedule progress, event backlog,
+dirty age, activity failures, and index pressure.
 
 ### Wait and retry
 
-- Debounce relevant `Apply` mutations per object using a Temporal timer: processing starts no earlier than the latest source-change timestamp +10 seconds. A new mutation resets the deadline; duplicate or older signals do not extend it.
-- For example, relevant Applies at 0s, 4s, and 9s produce one processing pass no earlier than 19s, using the latest committed state. The `preprocess` handoff to `indexFile` does not add another 10-second buffer unless a newer source mutation requires it.
+- Debounce relevant `Apply` mutations per object: activities select eligible dirty objects, and the corresponding stage workflow uses a timer for the next eligible work when needed. Processing starts no earlier than the latest source-change timestamp +10 seconds; duplicate signals do not extend it.
+- For example, relevant Applies at 0s, 4s, and 9s produce one processing pass no earlier than 19s, using the latest committed state. The process-to-search handoff does not add another 10-second buffer unless a newer source mutation requires it.
 - Recheck FDB revision before work. Newer changes restart the wait, including changes whose signal has not arrived.
 - Count from nondecreasing server timestamps, never signal arrival. Clock skew limits timing accuracy.
 - Ten seconds of silence does not prove upload completion. Clients need no publish marker; later writes trigger another pass.
@@ -159,7 +139,7 @@ budget.pdf: root_id = reports_id
 - Workflow code stays deterministic; FDB, processor, and ES calls run in activities.
 - Configure activity timeouts and exponential retries with a cap on the delay. Heartbeat long extraction/traversal activities; honor cancellation.
 - Retry transient failures without requiring another file change. Invalid input remains a visible failure with its dirty marker intact.
-- Keep only IDs, versions, and cursors in workflow history. Stream bytes inside activities; use Continue-As-New to bound long histories.
+- Keep only stage state, IDs, versions, counts, and cursors in workflow history. Stream bytes inside activities; use Continue-As-New to bound long histories.
 - Drain signals before completion/Continue-As-New; carry pending revision and traversal state forward. Reconciliation covers closing-run races.
 - [Temporal activity retries and idempotency](https://docs.temporal.io/activity-definition), [Continue-As-New](https://docs.temporal.io/develop/typescript/workflows/continue-as-new).
 
@@ -172,7 +152,7 @@ budget.pdf: root_id = reports_id
 - Use a stable operation ID across activity retries; recover an existing processor job/output after ambiguous success.
 - Validate source version across reads and before accepting output. Reuse extraction only when source and processor versions match.
 - Metadata-only changes reuse valid text. Configuration changes mark affected sources through bounded rescans.
-- Only `indexFile` calls ES publication activities. `preprocess` hands off through Signal-With-Start from an activity using `with_idempotent_transaction`, with cancellation on rollback.
+- Only search activities publish to ES. Extract activities atomically store completed extraction, clear matching extract-dirty keys, and mark search dirty through `with_idempotent_transaction`. They then signal search before completing; retries reuse committed output and retry the signal.
 
 ### Frames and processor interface
 
@@ -192,8 +172,8 @@ Tenant keys below omit `dfs-v1-{env}/tenant/<tenantId>/`:
 | `search/extraction/<objectId>/generation/<generation>/block/<blockIndex>` | Extracted text; ≤64 KiB per stored block. |
 
 - Activities use existing FDB helpers. Each extraction attempt stages a private generation in bounded transactions; bytes never enter workflow history.
-- The final `with_idempotent_transaction` validates source/configuration and active operation, marks complete, switches current generation, and awaits Signal-With-Start for `indexFile`. Rollback cancels the affected indexing execution. Retries reuse accepted output and safely repeat the handoff.
-- `preprocess` then completes; `indexFile` runs independently. Recovery after text storage retries the handoff or indexing without extracting again.
+- The final `with_idempotent_transaction` validates source/configuration and active operation, marks output complete, switches current generation, clears matching extract-dirty state, and marks search dirty. Rollback publishes neither output nor handoff. Retries reuse accepted output; Temporal unavailability cannot prevent this FDB commit.
+- The extract activity signals the tenant search workflow before completing; a subsequent search batch publishes the output. Recovery after text storage retries search work without extracting again.
 - Incomplete or superseded attempts cannot publish. Complete generations are immutable and have no ordinary DFS objects, paths, xattrs, or grants.
 - Indexer reads one fixed generation; validate current/input versions during reads and before preparing ES output. Restart on change.
 - Cleanup runs in worker maintenance batches: mark unreferenced or expired incomplete generations deleting, then clear blocks and metadata.
@@ -209,9 +189,9 @@ Tenant keys below omit `dfs-v1-{env}/tenant/<tenantId>/`:
 5. Check every bulk-item result. Fail the activity on unsuccessful items; retry identical body/revision after ambiguous success. Release saved bytes after completion/abandonment.
 
 - Bound activity concurrency, reads, aggregate buffered bytes, and in-flight ES requests. Size extraction and indexing worker capacity independently.
-- Start with 2–8 MiB bulks and 30-second refresh. [Indexing guidance](https://www.elastic.co/docs/deploy-manage/production-guidance/optimize-performance/indexing-speed).
+- Search activities handle at most 100 objects and flush index operations in approximately 1 MB encoded bulks (initial target: 1,000,000 bytes including bulk metadata). Flush smaller final bulks; define explicit handling for oversized individual documents. Measure index pressure and freshness, including refresh, under load.
 - Reduce active workers on 429s or rising search latency. Increase gradually when ES has capacity and indexing lags.
-- Track dirty-marker age, Temporal task backlog, activity failures, and source-to-searchable lag. Metadata-only publication does not clear preprocessing work.
+- Track dirty age by stage, tenant-partitioned event backlog, activity failures, bulk item failures, and source-to-searchable lag. Router acceptance never clears object dirty work.
 
 ## Query path
 
@@ -226,9 +206,9 @@ API follow-up: align the processor contract and multilingual mapping with the se
 ## Implementation follow-ups
 
 - Finalize the detector and multilingual mapping proposal, including query scoring and excerpts.
-- Configure Temporal namespaces and separate worker queues; validate transaction rollback handling and signal bursts with the 10-second debounce.
+- Implement `OutboxEvent`, scheduled tenant discovery, and per-tenant router/extract/search workflows. Validate atomic dirty writes, reliable signals, fair activity concurrency, and the 10-second debounce.
 - Define processor/manifest and frame contracts, then reconcile API documentation in the follow-up.
-- Validate extraction retries, worker loss, ES outages, rollback cancellation, stale compound inputs, duplicate/reordered GCS events, and backfill racing with live writes/deletes.
+- Validate extraction retries, worker loss and scheduled router failures, Temporal and ES outages, rollback without dispatch, lost acknowledgements, stale compound inputs, duplicate/reordered GCS events, and backfill racing with live writes/deletes.
 
 ## Tenant routing and shard layout
 

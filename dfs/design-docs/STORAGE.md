@@ -231,17 +231,21 @@ writes need not maintain them. Background workers could share an internal tenant
 
 ### Search
 
-[SEARCH.md](SEARCH.md) defines the search proposal: one ES document per object, FDB-based permission
-checks, and Temporal orchestration through separate preprocessing and indexing task queues.
+[SEARCH.md](SEARCH.md) defines FDB-authorized search and its extraction/indexing stages.
+[Transactional outbound](TRANSACTIONAL_OUTBOUND.md) defines the queue and dirty-key schemas.
 
-- Source mutations and `search/dirty/<objectId>` markers commit together under the tenant prefix.
-- Signal-With-Start runs inside `with_idempotent_transaction`, with Temporal cancellation on rollback.
-- Workflows debounce relevant Applies for 10 seconds. `preprocess` stores extracted text and starts
-  `indexFile`; only successful publication clears the corresponding dirty revision.
-- Temporal owns retries and execution progress. FDB retains pending work and extracted text;
-  reconciliation repairs interrupted work. Native text indexing is limited to `text/*` MIME types.
-- FDB permissions remain authoritative. Results use `SearchAttr`; API freshness-policy reconciliation,
-  multilingual mapping, GCS backfill, and reindexing follow-ups are tracked in [SEARCH.md](SEARCH.md).
+- Source mutations and object-ID events commit together through `OutboxEvent`, under
+  `dfs-v1-{env}/outbox/events/<tenant_id>/<event_id>`. Enqueue adds no routing metadata reads.
+- A Temporal Schedule discovers pending tenants and signals their router workflows. Tenant
+  activities resolve MIME type and object-local exclusion, write extract/search dirty keys, signal
+  the corresponding stage workflows, then delete acknowledged events.
+- Activities process up to 100 dirty objects. Extraction atomically publishes output and marks search
+  dirty, then signals search before completing. Search publishes approximately 1 MB bulks and clears
+  only successful objects with matching dirty stamps.
+- Temporal outages leave events in FDB while filesystem writes continue. Scheduled recovery scans
+  dirty ranges to wake stopped stage workflows, including tenants with no remaining events.
+- FDB permissions remain authoritative. API freshness, multilingual mapping, GCS backfill, and
+  reindexing follow-ups are tracked in [SEARCH.md](SEARCH.md).
 
 ### Full in-memory tree index
 
