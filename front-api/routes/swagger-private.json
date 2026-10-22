@@ -11365,6 +11365,10 @@
               "ultra"
             ],
             "description": "Default reasoning-effort tier, for known model facets."
+          },
+          "revoked": {
+            "type": "boolean",
+            "description": "Set on user facets whose workspace membership was revoked."
           }
         }
       },

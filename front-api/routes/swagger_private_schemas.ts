@@ -42,6 +42,9 @@
  *           type: string
  *           enum: [cost_efficient, balanced, premium, ultra]
  *           description: Default reasoning-effort tier, for known model facets.
+ *         revoked:
+ *           type: boolean
+ *           description: Set on user facets whose workspace membership was revoked.
  *     PrivateUser:
  *       type: object
  *       description: Authenticated user with their workspaces and subscriber hash.
