@@ -1,3 +1,4 @@
+import { getUserConversationAccess } from "@app/lib/api/assistant/conversation/permissions";
 import { getConversationParticipantGrant } from "@app/lib/api/dfs/conversation_grants";
 import {
   createGroupSubject,
@@ -15,6 +16,7 @@ import { ConversationResource } from "@app/lib/resources/conversation_resource";
 import { DfsUserFolderResource } from "@app/lib/resources/dfs_user_folder_resource";
 import { SpaceResource } from "@app/lib/resources/space_resource";
 import { UserResource } from "@app/lib/resources/user_resource";
+import { concurrentExecutor } from "@app/lib/utils/async_utils";
 import type { DfsGrant, DfsObjectId } from "@app/types/dfs";
 import { DfsError, isDfsObjectId } from "@app/types/dfs";
 import type { Result } from "@app/types/shared/result";
@@ -233,8 +235,9 @@ async function getFirstEditor(
 /**
  * @cc [owner:fabiencelier,label:security] conversation-folder-grants
  * The folder of a conversation in a pod MUST get no grant: its access is the pod folder's. A folder
- * created here for any other conversation MUST get an ALLOW with `rw` for each of its participants.
- * A folder that already existed in dfs MUST be reused without changing its grants.
+ * created here for any other conversation MUST get an ALLOW with `rw` for each of its participants
+ * for whom `ConversationResource.canAccess` returns `allowed`, and for no other participant. A
+ * folder that already existed in dfs MUST be reused without changing its grants.
  */
 export async function getOrCreateConversationFolder(
   auth: Authenticator,
@@ -276,7 +279,7 @@ export async function getOrCreateConversationFolder(
   const participants =
     pod || !folder.value.created
       ? []
-      : await getParticipants(auth, conversation);
+      : await getEligibleParticipants(auth, conversation);
   if (participants.length > 0) {
     const granted = await context.tenantClient.updateGrants({
       objectId: stored,
@@ -312,7 +315,7 @@ async function getOrCreateConversationOwnerFolder(
   conversation: ConversationResource,
   { user }: { user?: UserResource }
 ): Promise<Result<DfsObjectId, DfsError>> {
-  const owner = user ?? (await getParticipants(auth, conversation))[0];
+  const owner = user ?? (await getEligibleParticipants(auth, conversation))[0];
   if (!owner) {
     return new Err(
       new DfsError(
@@ -322,6 +325,27 @@ async function getOrCreateConversationOwnerFolder(
     );
   }
   return getOrCreateUserFolder(auth, context, owner);
+}
+
+/**
+ * The participants of `conversation` who can still access it, first participant first: losing
+ * access to a requested space keeps the participant row.
+ */
+async function getEligibleParticipants(
+  auth: Authenticator,
+  conversation: ConversationResource
+): Promise<UserResource[]> {
+  const participants = await getParticipants(auth, conversation);
+  const accesses = await concurrentExecutor(
+    participants,
+    (participant) =>
+      getUserConversationAccess(auth, {
+        userId: participant.sId,
+        conversationId: conversation.sId,
+      }),
+    { concurrency: 4 }
+  );
+  return participants.filter((_, i) => accesses[i] === "allowed");
 }
 
 /** The participants of `conversation`, first participant first. */

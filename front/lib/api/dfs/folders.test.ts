@@ -55,12 +55,16 @@ async function metadataOf(
 
 async function createConversation(
   auth: Authenticator,
-  { spaceModelId }: { spaceModelId?: number } = {}
+  {
+    spaceModelId,
+    requestedSpaceIds,
+  }: { spaceModelId?: number; requestedSpaceIds?: number[] } = {}
 ) {
   const conversation = await ConversationFactory.create(auth, {
     agentConfigurationId: "dust",
     messagesCreatedAt: [],
     spaceId: spaceModelId,
+    requestedSpaceIds,
   });
   const resource = await ConversationResource.fetchById(auth, conversation.sId);
   if (!resource) {
@@ -332,6 +336,54 @@ describe("getOrCreateConversationFolder", () => {
     expect(transport.calls.at(-1)?.request).toEqual({
       objectId: { value: Buffer.from(res.isOk() ? res.value : "", "hex") },
       changes: [user, other].map((participant) => ({
+        grant: { allow: { subject: `u:${participant.sId}`, mode: 6 } },
+        remove: false,
+      })),
+    });
+  });
+
+  it("gives no access to participants who cannot read a requested space", async () => {
+    const { workspace, user } = await createResourceTest({});
+    const { transport, context } = setup();
+    const space = await SpaceFactory.regular(workspace);
+    const adminAuth = await Authenticator.internalAdminForWorkspace(
+      workspace.sId
+    );
+    const reader = await UserFactory.basic();
+    const outsider = await UserFactory.basic();
+    for (const member of [reader, outsider]) {
+      await MembershipFactory.associate(workspace, member, { role: "user" });
+    }
+    const added = await space.addMembers(adminAuth, {
+      userIds: [user.sId, reader.sId],
+    });
+    expect(added.isOk()).toBe(true);
+    // Refreshed so that it includes the space's group.
+    const auth = await Authenticator.fromUserIdAndWorkspaceId(
+      user.sId,
+      workspace.sId
+    );
+    const conversation = await createConversation(auth, {
+      requestedSpaceIds: [space.id],
+    });
+    for (const participant of [user, reader, outsider]) {
+      await ConversationResource.upsertParticipation(auth, {
+        conversation,
+        action: "posted",
+        user: participant.toJSON(),
+      });
+    }
+
+    const res = await getOrCreateConversationFolder(
+      auth,
+      context,
+      conversation
+    );
+
+    expect(res.isOk()).toBe(true);
+    expect(transport.calls.at(-1)?.request).toEqual({
+      objectId: { value: Buffer.from(res.isOk() ? res.value : "", "hex") },
+      changes: [user, reader].map((participant) => ({
         grant: { allow: { subject: `u:${participant.sId}`, mode: 6 } },
         remove: false,
       })),
