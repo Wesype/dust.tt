@@ -43,7 +43,6 @@ function nameColumn(
     accessorKey: "name",
     header,
     enableSorting: false,
-    meta: { className: "w-1/2" },
     cell: ({ row }) => {
       const { name, isRevoked, isGroup, isExpanded, isChild, isBold } =
         row.original;
@@ -85,7 +84,7 @@ function redeemedOnColumn(header: string): ColumnDef<CouponRow> {
     accessorKey: "redeemedOn",
     header,
     enableSorting: false,
-    meta: { className: "w-[18%]" },
+    meta: { className: "hidden w-28 @xxs:table-cell" },
     cell: ({ row }) => (
       <span className="text-sm text-muted-foreground">
         {row.original.redeemedOn}
@@ -99,7 +98,7 @@ function amountColumn(header: string): ColumnDef<CouponRow> {
     accessorKey: "amount",
     header,
     enableSorting: false,
-    meta: { headerAlign: "right", className: "w-[16%]" },
+    meta: { headerAlign: "right", className: "w-20" },
     cell: ({ row }) => (
       <span
         className={cn(
@@ -118,7 +117,7 @@ function remainingColumn(header: string): ColumnDef<CouponRow> {
     accessorKey: "remaining",
     header,
     enableSorting: false,
-    meta: { headerAlign: "right", className: "w-[16%]" },
+    meta: { headerAlign: "right", className: "w-28" },
     cell: ({ row }) => (
       <span
         className={cn(
