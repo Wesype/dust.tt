@@ -22,6 +22,13 @@ fuser = { version = "0.18", default-features = false }
 [target.'cfg(target_os = "macos")'.dependencies]
 fuser = { version = "0.18", default-features = false, features = ["macos-no-mount"] }
 
+# The mount test runs only on Linux, against a dfs server backed by FoundationDB.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+dfs-api = { path = "../server" }
+foundationdb = { version = "=0.11.0", default-features = false, features = ["fdb-7_4", "embedded-fdb-include"] }
+nix = { version = "0.30", features = ["signal"] }
+tokio = { version = "1", features = ["net"] }
+
 [lints.rust]
 unsafe_code = "deny"
 

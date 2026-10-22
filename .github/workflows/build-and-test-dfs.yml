@@ -61,7 +61,7 @@ jobs:
             curl --fail --location --retry 3 --output "${package_file}.sha256" "${package_url}.sha256"
             sha256sum --check "${package_file}.sha256"
           done
-          sudo apt-get install -y --no-install-recommends libclang-dev \
+          sudo apt-get install -y --no-install-recommends libclang-dev fuse3 \
             "./foundationdb-clients_${FDB_VERSION}-1_amd64.deb" \
             "./foundationdb-server_${FDB_VERSION}-1_amd64.deb"
           ready_deadline_seconds=$((SECONDS + 60))
