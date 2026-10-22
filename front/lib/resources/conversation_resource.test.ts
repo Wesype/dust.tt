@@ -7190,6 +7190,9 @@ const KNOWN_CONVERSATION_RELATED_MODELS = [
   // batch_suggestion.sourceConversationModelId is ON DELETE SET NULL, so no
   // explicit cleanup is needed in destroyConversation — the DB clears it.
   "batch_suggestion",
+  // conversation.parentConversationId is ON DELETE SET NULL, so no explicit
+  // cleanup is needed in destroyConversation — the DB clears it.
+  "conversation",
   "conversation_fork",
   "conversation_mcp_server_view",
   "conversation_participant",

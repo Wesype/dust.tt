@@ -1,3 +1,5 @@
+import { ConversationResource } from "@app/lib/resources/conversation_resource";
+import { ConversationFactory } from "@app/tests/utils/ConversationFactory";
 import { createPublicApiMockRequest } from "@app/tests/utils/generic_public_api_tests";
 import { honoApp } from "@front-api/app";
 import { describe, expect, it, vi } from "vitest";
@@ -106,5 +108,87 @@ describe("POST /api/v1/w/[wId]/assistant/conversations", () => {
 
     expect(response.status).toBe(400);
     expect((await response.json()).error.type).toBe("invalid_request_error");
+  });
+
+  describe("parentConversationId", () => {
+    it("returns 403 when a regular key sets it", async () => {
+      const { auth, workspace, key } = await createPublicApiMockRequest({
+        method: "POST",
+      });
+      const parent = await ConversationFactory.create(auth, {
+        agentConfigurationId: "dust",
+        messagesCreatedAt: [],
+      });
+
+      const response = await postConversations(workspace, key, {
+        title: "Sub-conversation",
+        depth: 1,
+        parentConversationId: parent.sId,
+      });
+
+      expect(response.status).toBe(403);
+      expect((await response.json()).error.type).toBe("workspace_auth_error");
+    });
+
+    it("returns 404 when the parent conversation does not exist", async () => {
+      const { workspace, key } = await createPublicApiMockRequest({
+        method: "POST",
+        systemKey: true,
+      });
+
+      const response = await postConversations(workspace, key, {
+        title: "Sub-conversation",
+        depth: 1,
+        parentConversationId: "conv_does_not_exist",
+      });
+
+      expect(response.status).toBe(404);
+      expect((await response.json()).error.type).toBe("conversation_not_found");
+    });
+
+    it("returns 400 when depth is not the parent's depth plus one", async () => {
+      const { auth, workspace, key } = await createPublicApiMockRequest({
+        method: "POST",
+        systemKey: true,
+      });
+      const parent = await ConversationFactory.create(auth, {
+        agentConfigurationId: "dust",
+        messagesCreatedAt: [],
+      });
+
+      const response = await postConversations(workspace, key, {
+        title: "Sub-conversation",
+        depth: 2,
+        parentConversationId: parent.sId,
+      });
+
+      expect(response.status).toBe(400);
+      expect((await response.json()).error.type).toBe("invalid_request_error");
+    });
+
+    it("stores the parent conversation", async () => {
+      const { auth, workspace, key } = await createPublicApiMockRequest({
+        method: "POST",
+        systemKey: true,
+      });
+      const parent = await ConversationFactory.create(auth, {
+        agentConfigurationId: "dust",
+        messagesCreatedAt: [],
+      });
+
+      const response = await postConversations(workspace, key, {
+        title: "Sub-conversation",
+        depth: 1,
+        parentConversationId: parent.sId,
+      });
+
+      expect(response.status).toBe(200);
+      const { conversation } = await response.json();
+      const created = await ConversationResource.fetchById(
+        auth,
+        conversation.sId
+      );
+      expect(created?.parentConversationId).toBe(parent.id);
+    });
   });
 });

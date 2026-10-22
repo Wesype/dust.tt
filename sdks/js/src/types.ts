@@ -2627,6 +2627,8 @@ export const PublicPostConversationsRequestBodySchema = z.intersection(
       .optional()
       .default("unlisted"),
     depth: z.number().int().nonnegative().optional(),
+    // The conversation whose agent spawns this sub-conversation (`run_agent`). System keys only.
+    parentConversationId: z.string().optional(),
     spaceId: z.string().optional(),
     message: z.union([
       z.intersection(

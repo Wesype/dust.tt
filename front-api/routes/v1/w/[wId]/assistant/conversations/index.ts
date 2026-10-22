@@ -117,6 +117,10 @@ const app = publicApiApp();
  *                 minimum: 0
  *                 description: The depth of the conversation in a chain of sub-agent conversations (optional, defaults to 0)
  *                 example: 0
+ *               parentConversationId:
+ *                 type: string
+ *                 description: The sId of the conversation whose agent spawns this sub-conversation (optional, system keys only). When set, depth must be the parent's depth plus one
+ *                 example: conv_abc123
  *               spaceId:
  *                 type: string
  *                 description: The sId of the space (project) in which to create the conversation (optional). If not provided, the conversation is created outside projects
@@ -132,6 +136,8 @@ const app = publicApiApp();
  *         description: Bad Request
  *       401:
  *         description: Unauthorized
+ *       403:
+ *         description: Forbidden. Only system keys can set parentConversationId.
  *       429:
  *         description: Rate limit exceeded.
  *       500:
@@ -146,6 +152,7 @@ app.post(
       title,
       visibility,
       depth,
+      parentConversationId,
       message,
       contentFragment,
       contentFragments,
@@ -298,6 +305,42 @@ app.post(
       });
     }
 
+    let parentConversation: ConversationResource | null = null;
+    if (parentConversationId) {
+      if (!auth.isSystemKey()) {
+        return apiError(ctx, {
+          status_code: 403,
+          api_error: {
+            type: "workspace_auth_error",
+            message: "Sub-conversations must be created with a system key.",
+          },
+        });
+      }
+      parentConversation = await ConversationResource.fetchById(
+        auth,
+        parentConversationId
+      );
+      if (!parentConversation) {
+        return apiError(ctx, {
+          status_code: 404,
+          api_error: {
+            type: "conversation_not_found",
+            message: "Parent conversation not found.",
+          },
+        });
+      }
+      if (depth !== parentConversation.depth + 1) {
+        return apiError(ctx, {
+          status_code: 400,
+          api_error: {
+            type: "invalid_request_error",
+            message:
+              "The depth of a sub-conversation must be its parent's depth plus one.",
+          },
+        });
+      }
+    }
+
     const resolvedFragments = [...(contentFragments ?? [])];
     if (contentFragment) {
       resolvedFragments.push(contentFragment);
@@ -353,6 +396,7 @@ app.post(
       title: title ?? null,
       visibility: normalizeConversationVisibility(visibility),
       depth,
+      parentConversation,
       spaceId: resolvedSpaceModelId,
     });
 

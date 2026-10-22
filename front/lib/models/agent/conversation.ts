@@ -44,6 +44,8 @@ export class ConversationModel extends WorkspaceAwareModel<ConversationModel> {
   declare memoryFilePath: CreationOptional<string | null>;
   // The dfs folder holding the conversation's files, created on first use.
   declare dfsObjectId: CreationOptional<string | null>;
+  // The conversation whose agent spawned this sub-conversation (`run_agent`), null for a root one.
+  declare parentConversationId: ForeignKey<ConversationModel["id"]> | null;
 
   declare requestedSpaceIds: number[];
 
@@ -133,6 +135,11 @@ ConversationModel.init(
         concurrently: true,
       },
       {
+        fields: ["parentConversationId"],
+        where: { parentConversationId: { [Op.ne]: null } },
+        concurrently: true,
+      },
+      {
         fields: ["workspaceId", "createdAt"],
         name: "conversations_workspace_id_created_at_idx",
       },
@@ -170,6 +177,15 @@ ConversationModel.belongsTo(SpaceModel, {
 
 SpaceModel.hasMany(ConversationModel, {
   as: "conversations",
+});
+
+ConversationModel.belongsTo(ConversationModel, {
+  as: "parentConversation",
+  foreignKey: {
+    name: "parentConversationId",
+    allowNull: true,
+  },
+  onDelete: "SET NULL",
 });
 
 export class ConversationParticipantModel extends WorkspaceAwareModel<ConversationParticipantModel> {

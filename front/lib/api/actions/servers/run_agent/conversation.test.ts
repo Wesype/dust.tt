@@ -218,6 +218,7 @@ describe("getOrCreateConversation", () => {
       expect.objectContaining({
         spaceId,
         depth: mainConversation.depth + 1,
+        parentConversationId: mainConversation.sId,
       })
     );
     expect(mockCreateConversation.mock.calls[0][0]).not.toHaveProperty(

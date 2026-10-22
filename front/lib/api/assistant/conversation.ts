@@ -216,12 +216,19 @@ const PROGRAMMATIC_CREDIT_CONCURRENCY_LIMITS: Record<string, number> = {
  * its own exclusions (such as task and activation-pod conversations), unless `notifyPodMembers`
  * is false, in which case the caller owns that notification.
  */
+/**
+ * @cc [owner:fabiencelier,label:security] conversation-parent
+ * Callers MUST only pass a `parentConversation` that the authenticated caller can read and whose
+ * agent spawns this conversation, with `depth` equal to its depth plus one. The public API MUST
+ * only accept it from system keys.
+ */
 export async function createConversation(
   auth: Authenticator,
   {
     title,
     visibility,
     depth = 0,
+    parentConversation = null,
     triggerId,
     spaceId,
     metadata,
@@ -230,6 +237,8 @@ export async function createConversation(
     title: string | null;
     visibility: ConversationVisibility;
     depth?: number;
+    // The conversation whose agent spawns this sub-conversation (`run_agent`).
+    parentConversation?: ConversationResource | null;
     triggerId?: ModelId | null;
     spaceId: ModelId | null;
     metadata?: ConversationMetadata;
@@ -255,6 +264,7 @@ export async function createConversation(
       title,
       visibility,
       depth,
+      parentConversationId: parentConversation?.id ?? null,
       triggerId,
       spaceId,
       requestedSpaceIds: spaceId ? [spaceId] : [],

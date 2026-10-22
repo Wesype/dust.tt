@@ -329,6 +329,7 @@ export async function getOrCreateConversation(
     title: `run_agent ${mainAgent.name} > ${childAgentBlob.name}`,
     visibility: "unlisted",
     depth: mainConversation.depth + 1,
+    parentConversationId: mainConversation.sId,
     spaceId: mainConversation.spaceId ?? undefined,
     contentFragments,
   });
