@@ -18,6 +18,7 @@ import { useIsMobile } from "@app/lib/swr/useIsMobile";
 import { FULL_SCREEN_HASH_PARAM } from "@app/types/conversation_side_panel";
 import { cn, Menu01, PillButton } from "@dust-tt/sparkle";
 import { useLingui } from "@lingui/react/macro";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import type React from "react";
 import { lazy, Suspense } from "react";
 
@@ -56,6 +57,7 @@ function AppContentInnerWrapper({
   const toggleSidebarShortcut = useKeyboardShortcutLabel(
     APP_KEYBOARD_SHORTCUTS.toggleNavigationBar
   );
+  const shouldReduceMotion = useReducedMotion();
 
   if (isMobile) {
     return children;
@@ -73,17 +75,30 @@ function AppContentInnerWrapper({
           "0 0 0 0.4px rgba(0, 0, 0, 0.02), 0 0 1px 1px rgba(0, 0, 0, 0.02)",
       }}
     >
-      {hasSidebarToggleSlot && (
-        <div className="absolute left-2 top-2 z-10">
-          <PillButton
-            icon={Menu01}
-            label={t`Lock sidebar open`}
-            onClick={onShowSidebar}
-            tooltipShortcut={toggleSidebarShortcut}
-            tooltipSide="right"
-          />
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {hasSidebarToggleSlot && (
+          <motion.div
+            key="lock-sidebar"
+            className="absolute left-2 top-2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0, transition: { duration: 0 } }}
+            transition={
+              shouldReduceMotion
+                ? { duration: 0 }
+                : { duration: 0.2, ease: "easeOut" }
+            }
+          >
+            <PillButton
+              icon={Menu01}
+              label={t`Lock sidebar open`}
+              onClick={onShowSidebar}
+              tooltipShortcut={toggleSidebarShortcut}
+              tooltipSide="right"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
       {children}
     </div>
   );
@@ -168,8 +183,7 @@ export function AppContentLayout({ children }: AppContentLayoutProps) {
                   isMobile
                     ? MOBILE_DOCUMENT_SCROLL_CLASSES.contentArea
                     : cn(
-                        // `isolate` keeps page z-indexes below the SidebarToggleButton.
-                        "isolate min-h-0 overflow-y-auto [scrollbar-gutter:stable]",
+                        "min-h-0 overflow-y-auto [scrollbar-gutter:stable]",
                         !hasTitleBar && "h-panel"
                       )
                 )}

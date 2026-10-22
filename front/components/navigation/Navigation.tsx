@@ -196,7 +196,16 @@ function DesktopNavigation({
               )
         )}
       >
-        {children}
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col transition-opacity ease-out motion-reduce:transition-none",
+            !isNavigationBarOpen && !isVisible
+              ? "opacity-0 duration-100"
+              : "duration-200"
+          )}
+        >
+          {children}
+        </div>
       </div>
     </div>
   );
