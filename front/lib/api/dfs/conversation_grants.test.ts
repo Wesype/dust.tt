@@ -8,6 +8,7 @@ import { newDfsObjectId } from "@app/lib/dfs/object_id";
 import { ConversationResource } from "@app/lib/resources/conversation_resource";
 import { UserResource } from "@app/lib/resources/user_resource";
 import { ConversationFactory } from "@app/tests/utils/ConversationFactory";
+import type { FakeDfsAnswer } from "@app/tests/utils/dfs/FakeDfsTransport";
 import { FakeDfsTransport } from "@app/tests/utils/dfs/FakeDfsTransport";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
@@ -31,8 +32,11 @@ beforeEach(() => {
   vi.mocked(withDfsFolderContext).mockResolvedValue(new Ok(undefined));
 });
 
-function setup() {
-  const transport = new FakeDfsTransport({ UpdateGrants: new Ok({}) });
+function setup({ listGrants }: { listGrants?: FakeDfsAnswer } = {}) {
+  const transport = new FakeDfsTransport({
+    UpdateGrants: new Ok({}),
+    ...(listGrants ? { ListGrants: listGrants } : {}),
+  });
   vi.mocked(getDfsTenantClient).mockResolvedValue(
     new Ok(new DfsClient(transport, "t".repeat(64)))
   );
@@ -178,6 +182,50 @@ describe("reflectConversationParticipationOnDfs on addition", () => {
 
     expect(transport.calls).toEqual([]);
   });
+  it("does not grant a participant added who cannot access the conversation", async () => {
+    const {
+      authenticator: adminAuth,
+      workspace,
+      user: admin,
+    } = await createResourceTest({ role: "admin" });
+    await FeatureFlagFactory.basic(adminAuth, "dust_file_system");
+    const outsider = await UserFactory.basic();
+    await MembershipFactory.associate(workspace, outsider, { role: "user" });
+    const restrictedSpace = await SpaceFactory.regular(workspace);
+    const added = await restrictedSpace.addMembers(adminAuth, {
+      userIds: [admin.sId],
+    });
+    expect(added.isOk()).toBe(true);
+    const { conversation, folderId } =
+      await createConversationWithFolder(adminAuth);
+    // The folder has no grant yet, so restricting it revokes nothing.
+    const { transport } = setup({ listGrants: new Ok({ grants: [] }) });
+    await conversation.updateRequirements(adminAuth, [restrictedSpace.id]);
+
+    const { commit } = captureAfterCommit();
+    await ConversationResource.upsertParticipation(adminAuth, {
+      conversation,
+      action: "subscribed",
+      user: outsider.toJSON(),
+    });
+    await commit();
+
+    expect(
+      transport.calls
+        .filter((c) => c.method === "UpdateGrants")
+        .map((c) => c.request)
+    ).toEqual([
+      {
+        objectId: { value: Buffer.from(folderId, "hex") },
+        changes: [
+          {
+            grant: { allow: { subject: `u:${outsider.sId}`, mode: 6 } },
+            remove: true,
+          },
+        ],
+      },
+    ]);
+  });
 });
 
 describe("reflectConversationParticipationOnDfs on departure", () => {
@@ -293,5 +341,75 @@ describe("reflectConversationParticipationOnDfs", () => {
         ],
       },
     ]);
+  });
+});
+describe("reflectConversationRequirementsOnDfs", () => {
+  it("detaches the grants of users who cannot access the conversation after its requirements change", async () => {
+    const {
+      authenticator: adminAuth,
+      workspace,
+      user: admin,
+    } = await createResourceTest({ role: "admin" });
+    await FeatureFlagFactory.basic(adminAuth, "dust_file_system");
+    const other = await UserFactory.basic();
+    await MembershipFactory.associate(workspace, other, { role: "user" });
+    const restrictedSpace = await SpaceFactory.regular(workspace);
+    const added = await restrictedSpace.addMembers(adminAuth, {
+      userIds: [admin.sId],
+    });
+    expect(added.isOk()).toBe(true);
+    const { conversation, folderId } =
+      await createConversationWithFolder(adminAuth);
+    for (const participant of [admin, other]) {
+      await ConversationResource.upsertParticipation(adminAuth, {
+        conversation,
+        action: "posted",
+        user: participant.toJSON(),
+      });
+    }
+    const { transport } = setup({
+      listGrants: new Ok({
+        grants: [
+          { allow: { subject: `u:${admin.sId}`, mode: 6 } },
+          { allow: { subject: `u:${other.sId}`, mode: 6 } },
+          { allow: { subject: "g:group", mode: 6 } },
+        ],
+      }),
+    });
+
+    await conversation.updateRequirements(adminAuth, [restrictedSpace.id]);
+
+    expect(transport.calls.map((c) => c.method)).toEqual([
+      "ListGrants",
+      "UpdateGrants",
+    ]);
+    expect(transport.calls[1]?.request).toEqual({
+      objectId: { value: Buffer.from(folderId, "hex") },
+      changes: [
+        {
+          grant: { allow: { subject: `u:${other.sId}`, mode: 6 } },
+          remove: true,
+        },
+      ],
+    });
+  });
+
+  it("leaves the folder of a conversation in a pod alone", async () => {
+    const { workspace, user } = await createResourceTest({});
+    const pod = await SpaceFactory.project(workspace, user.id);
+    // Refreshed so that it includes the new pod's groups.
+    const auth = await Authenticator.fromUserIdAndWorkspaceId(
+      user.sId,
+      workspace.sId
+    );
+    await FeatureFlagFactory.basic(auth, "dust_file_system");
+    const { conversation } = await createConversationWithFolder(auth, {
+      spaceModelId: pod.id,
+    });
+    const { transport } = setup();
+
+    await conversation.updateRequirements(auth, [pod.id]);
+
+    expect(transport.calls).toEqual([]);
   });
 });

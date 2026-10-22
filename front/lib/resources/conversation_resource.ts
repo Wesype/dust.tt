@@ -1,5 +1,8 @@
 import { getConversationRankVersionLock } from "@app/lib/api/assistant/conversation/lock";
-import { reflectConversationParticipationOnDfs } from "@app/lib/api/dfs/conversation_grants";
+import {
+  reflectConversationParticipationOnDfs,
+  reflectConversationRequirementsOnDfs,
+} from "@app/lib/api/dfs/conversation_grants";
 import type { Authenticator } from "@app/lib/auth";
 import { ConversationMCPServerViewModel } from "@app/lib/models/agent/actions/conversation_mcp_server_view";
 import {
@@ -3471,6 +3474,11 @@ export class ConversationResource extends BaseResource<ConversationModel> {
     return count > 0;
   }
 
+  /** The access the authenticated user of `userAuth` has to this conversation. */
+  async getAccess(userAuth: Authenticator): Promise<ConversationAccessType> {
+    return ConversationResource.canAccess(userAuth, this.sId);
+  }
+
   /** Whether `user` participates in this conversation. */
   async isParticipant(
     auth: Authenticator,
@@ -5208,6 +5216,23 @@ export class ConversationResource extends BaseResource<ConversationModel> {
       },
       transaction
     );
+    // Re-read once committed, including if soft-deleted since: see
+    // `reflectConversationRequirementsOnDfs`.
+    const reflect = async () => {
+      const [conversation] = await ConversationResource.fetchByModelIds(
+        auth,
+        [this.id],
+        { includeDeleted: true }
+      );
+      if (conversation) {
+        await reflectConversationRequirementsOnDfs(auth, { conversation });
+      }
+    };
+    if (transaction) {
+      transaction.afterCommit(reflect);
+    } else {
+      await reflect();
+    }
   }
 
   /**

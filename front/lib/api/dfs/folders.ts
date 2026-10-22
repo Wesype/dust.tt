@@ -1,5 +1,8 @@
-import { getUserConversationAccess } from "@app/lib/api/assistant/conversation/permissions";
-import { getConversationParticipantGrant } from "@app/lib/api/dfs/conversation_grants";
+import {
+  canAccessConversation,
+  getConversationParticipantGrant,
+} from "@app/lib/api/dfs/conversation_grants";
+import { updateGrantsInBatches } from "@app/lib/api/dfs/grants";
 import {
   createGroupSubject,
   createUserSubject,
@@ -236,7 +239,7 @@ async function getFirstEditor(
  * @cc [owner:fabiencelier,label:security] conversation-folder-grants
  * The folder of a conversation in a pod MUST get no grant: its access is the pod folder's. A folder
  * created here for any other conversation MUST get an ALLOW with `rw` for each of its participants
- * for whom `ConversationResource.canAccess` returns `allowed`, and for no other participant. A
+ * for whom `canAccessConversation` holds, and for no other participant. A
  * folder that already existed in dfs MUST be reused without changing its grants.
  */
 export async function getOrCreateConversationFolder(
@@ -281,7 +284,7 @@ export async function getOrCreateConversationFolder(
       ? []
       : await getEligibleParticipants(auth, conversation);
   if (participants.length > 0) {
-    const granted = await context.tenantClient.updateGrants({
+    const granted = await updateGrantsInBatches(context.tenantClient, {
       objectId: stored,
       changes: participants.map((participant) => ({
         grant: getConversationParticipantGrant(participant),
@@ -350,11 +353,7 @@ export async function fetchConversationOwner(
     if (!user) {
       continue;
     }
-    const access = await getUserConversationAccess(auth, {
-      userId: user.sId,
-      conversationId: conversation.sId,
-    });
-    if (access === "allowed") {
+    if (await canAccessConversation(auth, conversation, user.sId)) {
       return user;
     }
   }
@@ -372,14 +371,10 @@ async function getEligibleParticipants(
   const participants = await getParticipants(auth, conversation);
   const accesses = await concurrentExecutor(
     participants,
-    (participant) =>
-      getUserConversationAccess(auth, {
-        userId: participant.sId,
-        conversationId: conversation.sId,
-      }),
+    (participant) => canAccessConversation(auth, conversation, participant.sId),
     { concurrency: 4 }
   );
-  return participants.filter((_, i) => accesses[i] === "allowed");
+  return participants.filter((_, i) => accesses[i]);
 }
 
 /** The participants of `conversation`, first participant first. */

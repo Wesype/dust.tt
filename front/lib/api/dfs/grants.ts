@@ -155,3 +155,30 @@ export async function setSubjectGrants(
   }
   return new Ok({ changedSubjects });
 }
+
+/**
+ * Applies `changes` to `objectId` in as many `UpdateGrants` calls as its limit requires.
+ * `tenantClient` MUST be authenticated with the tenant key of the object's tenant. Not atomic: a
+ * failure can leave the earlier calls applied, so `changes` SHOULD be safe to apply again.
+ */
+/**
+ * @cc [owner:fabiencelier,label:backend;error-handling] update-grants-in-batches
+ * `changes` MUST be sent in order, in calls of at most `MAX_GRANT_UPDATES` changes, with no call
+ * when it is empty. The first failing call MUST stop the remaining ones and its error MUST be
+ * returned.
+ */
+export async function updateGrantsInBatches(
+  tenantClient: Pick<DfsClient, "updateGrants">,
+  { objectId, changes }: { objectId: DfsObjectId; changes: DfsGrantUpdate[] }
+): Promise<Result<void, DfsError>> {
+  for (let i = 0; i < changes.length; i += MAX_GRANT_UPDATES) {
+    const updated = await tenantClient.updateGrants({
+      objectId,
+      changes: changes.slice(i, i + MAX_GRANT_UPDATES),
+    });
+    if (updated.isErr()) {
+      return updated;
+    }
+  }
+  return new Ok(undefined);
+}
