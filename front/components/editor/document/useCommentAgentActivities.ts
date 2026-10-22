@@ -3,6 +3,7 @@ import type { AgentEvent } from "@app/lib/client/collab/agents";
 import { onAgentActivity } from "@app/lib/client/collab/agents";
 import type { CommentChannel } from "@app/lib/client/collab/comments";
 import type { WorkingAgentActivity } from "@app/types/collab";
+import { isDocumentActivity } from "@app/types/collab";
 import type { HocuspocusProvider } from "@hocuspocus/provider";
 import { useEffect, useState } from "react";
 
@@ -23,7 +24,9 @@ const EMPTY: ReadonlyMap<string, AgentEvent> = new Map();
  * threads count. A
  * read MUST show as thinking `READ_THEN_THINKING_MS` later and an edit `EDIT_THEN_THINKING_MS`
  * later; a thread MUST show none `RUN_SHOWN_MS` after its last announcement. An activity without
- * `commentId` MUST be ignored.
+ * `commentId` MUST be ignored, and so MUST a read or an edit for a thread that shows none: only
+ * `waiting` and `thinking`, announced when a comment mentions the agent, start a run, so what the
+ * agent does after its reply shows nothing.
  * A new provider MUST start with none.
  */
 export function useCommentAgentActivities(
@@ -96,6 +99,11 @@ export function useCommentAgentActivities(
         return;
       }
       const run = runs.get(commentId);
+      // A mention starts a run (`waiting`, then `thinking`); a read or an edit with none is the
+      // agent working after its reply, or a run this page joined after its start.
+      if (!run && isDocumentActivity(activity)) {
+        return;
+      }
       run?.timers.forEach(clearTimeout);
       const waiting = activity === "waiting";
       const repliesFrom =

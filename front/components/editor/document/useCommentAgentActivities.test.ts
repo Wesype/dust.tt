@@ -110,6 +110,21 @@ describe("useCommentAgentActivities", () => {
     expect(result.current.has("c1")).toBe(false);
   });
 
+  it("ignores a read or an edit its agent announces after replying", () => {
+    const { provider, announce } = fakeProvider();
+    const { comments, post } = fakeComments([thread("c1")]);
+    const agent = CollabAgentFactory.build({ commentId: "c1" });
+    const { result } = renderHook(() =>
+      useCommentAgentActivities(provider, comments)
+    );
+
+    announce(agent, "thinking");
+    post("c1", message({ kind: "agent", id: agent.agentId, name: "@Writer" }));
+    announce(agent, "editing");
+    announce(agent, "reading");
+    expect(result.current.has("c1")).toBe(false);
+  });
+
   it("keeps a waiting agent through replies, and ends it on its reply once it runs", () => {
     const { provider, announce } = fakeProvider();
     const { comments, post } = fakeComments([thread("c1")]);
@@ -141,6 +156,7 @@ describe("useCommentAgentActivities", () => {
       useCommentAgentActivities(provider, null)
     );
 
+    announce(agent, "thinking");
     announce(agent, "reading");
     act(() => vi.advanceTimersByTime(READ_THEN_THINKING_MS - 1));
     expect(result.current.get("c1")?.activity).toBe("reading");

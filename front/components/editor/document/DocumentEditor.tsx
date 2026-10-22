@@ -103,7 +103,9 @@ const CollabEditor = lazy(
  * @cc [owner:tdraier,label:product] collab-editor-agent-placement
  * While the session announces an agent at work, its avatar, from `renderCommentAuthorAvatar`, and
  * its activity MUST show before the participants, wherever the comments button shows, and not
- * with the save and live statuses.
+ * with the save and live statuses. An agent a comment mentioned shows only while its thread does
+ * (`comment-agent-activities`): what it reads or edits after its reply shows in the document
+ * itself, as it types its edits.
  */
 /**
  * @cc [owner:adrien,label:product] document-active-comment-after-sync
