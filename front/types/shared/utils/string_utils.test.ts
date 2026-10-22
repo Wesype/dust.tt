@@ -13,6 +13,7 @@ describe("formatAsDisplayName", () => {
   it("keeps the casing of a special case that starts the name", () => {
     expect(formatAsDisplayName("n8n")).toBe("n8n");
     expect(formatAsDisplayName("github")).toBe("GitHub");
+    expect(formatAsDisplayName("GitLab Cloud")).toBe("GitLab cloud");
     expect(formatAsDisplayName("websearch")).toBe("Web search");
   });
 

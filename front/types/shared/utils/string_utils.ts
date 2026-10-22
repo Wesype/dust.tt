@@ -148,6 +148,7 @@ export function hasNullUnicodeCharacter(text: string): boolean {
 
 const SPECIAL_CASES = {
   github: "GitHub",
+  "git lab": "GitLab",
   hubspot: "HubSpot",
   "stack one": "StackOne",
   "n 8n": "n8n",

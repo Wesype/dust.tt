@@ -1140,6 +1140,226 @@ const CONTENTFUL_SHARED_CONFIG: Omit<
   },
 };
 
+const GITLAB_SHARED_CONFIG: Omit<
+  DefaultRemoteMCPServerConfig,
+  "id" | "name" | "description" | "url" | "connectionInstructions"
+> = {
+  icon: "GitlabLogo",
+  documentationUrl:
+    "https://docs.gitlab.com/user/model_context_protocol/mcp_server/",
+  authMethod: "oauth-dynamic",
+  scope: "mcp",
+  toolStakes: {
+    get_mcp_server_version: "never_ask",
+    get_project: "never_ask",
+    list_projects: "never_ask",
+    list_groups: "never_ask",
+    list_project_members: "never_ask",
+    get_user: "never_ask",
+    search: "never_ask",
+    search_labels: "never_ask",
+    semantic_search: "never_ask",
+    get_merge_request: "never_ask",
+    list_merge_requests: "never_ask",
+    get_work_item: "never_ask",
+    list_work_items: "never_ask",
+    get_work_item_types: "never_ask",
+    get_saved_view_work_items: "never_ask",
+    list_branches: "never_ask",
+    get_repository_file: "never_ask",
+    list_repository_tree: "never_ask",
+    get_commit: "never_ask",
+    list_commits: "never_ask",
+    list_releases: "never_ask",
+    list_tags: "never_ask",
+    get_pipeline: "never_ask",
+    list_pipelines: "never_ask",
+    get_job: "never_ask",
+    get_artifact_file: "never_ask",
+    list_duo_agents_and_flows: "never_ask",
+    list_duo_sessions: "never_ask",
+    get_duo_session: "never_ask",
+    save_merge_request: "high",
+    save_merge_request_review: "high",
+    accept_merge_request: "high",
+    save_note: "high",
+    save_work_item: "high",
+    link_work_items: "high",
+    add_branch: "high",
+    add_commit: "high",
+    fork_repository: "high",
+    save_pipeline: "high",
+    start_duo_session: "high",
+    send_duo_session_input: "high",
+  },
+  toolDisplayLabels: {
+    get_mcp_server_version: {
+      running: "Checking the server version on GitLab",
+      done: "Checked the server version on GitLab",
+    },
+    get_project: {
+      running: "Getting a project from GitLab",
+      done: "Got a project from GitLab",
+    },
+    list_projects: {
+      running: "Listing projects on GitLab",
+      done: "Listed projects on GitLab",
+    },
+    list_groups: {
+      running: "Listing groups on GitLab",
+      done: "Listed groups on GitLab",
+    },
+    list_project_members: {
+      running: "Listing project members on GitLab",
+      done: "Listed project members on GitLab",
+    },
+    get_user: {
+      running: "Getting a user from GitLab",
+      done: "Got a user from GitLab",
+    },
+    search: {
+      running: "Searching on GitLab",
+      done: "Searched on GitLab",
+    },
+    search_labels: {
+      running: "Searching labels on GitLab",
+      done: "Searched labels on GitLab",
+    },
+    semantic_search: {
+      running: "Searching code on GitLab",
+      done: "Searched code on GitLab",
+    },
+    get_merge_request: {
+      running: "Getting a merge request from GitLab",
+      done: "Got a merge request from GitLab",
+    },
+    list_merge_requests: {
+      running: "Listing merge requests on GitLab",
+      done: "Listed merge requests on GitLab",
+    },
+    get_work_item: {
+      running: "Getting a work item from GitLab",
+      done: "Got a work item from GitLab",
+    },
+    list_work_items: {
+      running: "Listing work items on GitLab",
+      done: "Listed work items on GitLab",
+    },
+    get_work_item_types: {
+      running: "Getting work item types from GitLab",
+      done: "Got work item types from GitLab",
+    },
+    get_saved_view_work_items: {
+      running: "Getting work items from a saved view on GitLab",
+      done: "Got work items from a saved view on GitLab",
+    },
+    list_branches: {
+      running: "Listing branches on GitLab",
+      done: "Listed branches on GitLab",
+    },
+    get_repository_file: {
+      running: "Reading a file from GitLab",
+      done: "Read a file from GitLab",
+    },
+    list_repository_tree: {
+      running: "Listing repository files on GitLab",
+      done: "Listed repository files on GitLab",
+    },
+    get_commit: {
+      running: "Getting a commit from GitLab",
+      done: "Got a commit from GitLab",
+    },
+    list_commits: {
+      running: "Listing commits on GitLab",
+      done: "Listed commits on GitLab",
+    },
+    list_releases: {
+      running: "Listing releases on GitLab",
+      done: "Listed releases on GitLab",
+    },
+    list_tags: {
+      running: "Listing tags on GitLab",
+      done: "Listed tags on GitLab",
+    },
+    get_pipeline: {
+      running: "Getting a pipeline from GitLab",
+      done: "Got a pipeline from GitLab",
+    },
+    list_pipelines: {
+      running: "Listing pipelines on GitLab",
+      done: "Listed pipelines on GitLab",
+    },
+    get_job: {
+      running: "Getting a CI job from GitLab",
+      done: "Got a CI job from GitLab",
+    },
+    get_artifact_file: {
+      running: "Reading an artifact file from GitLab",
+      done: "Read an artifact file from GitLab",
+    },
+    list_duo_agents_and_flows: {
+      running: "Listing Duo agents and flows on GitLab",
+      done: "Listed Duo agents and flows on GitLab",
+    },
+    list_duo_sessions: {
+      running: "Listing Duo sessions on GitLab",
+      done: "Listed Duo sessions on GitLab",
+    },
+    get_duo_session: {
+      running: "Getting a Duo session from GitLab",
+      done: "Got a Duo session from GitLab",
+    },
+    save_merge_request: {
+      running: "Saving a merge request on GitLab",
+      done: "Saved a merge request on GitLab",
+    },
+    save_merge_request_review: {
+      running: "Reviewing a merge request on GitLab",
+      done: "Reviewed a merge request on GitLab",
+    },
+    accept_merge_request: {
+      running: "Merging a merge request on GitLab",
+      done: "Merged a merge request on GitLab",
+    },
+    save_note: {
+      running: "Saving a comment on GitLab",
+      done: "Saved a comment on GitLab",
+    },
+    save_work_item: {
+      running: "Saving a work item on GitLab",
+      done: "Saved a work item on GitLab",
+    },
+    link_work_items: {
+      running: "Linking work items on GitLab",
+      done: "Linked work items on GitLab",
+    },
+    add_branch: {
+      running: "Creating a branch on GitLab",
+      done: "Created a branch on GitLab",
+    },
+    add_commit: {
+      running: "Committing changes on GitLab",
+      done: "Committed changes on GitLab",
+    },
+    fork_repository: {
+      running: "Forking a repository on GitLab",
+      done: "Forked a repository on GitLab",
+    },
+    save_pipeline: {
+      running: "Saving a pipeline on GitLab",
+      done: "Saved a pipeline on GitLab",
+    },
+    start_duo_session: {
+      running: "Starting a Duo session on GitLab",
+      done: "Started a Duo session on GitLab",
+    },
+    send_duo_session_input: {
+      running: "Sending input to a Duo session on GitLab",
+      done: "Sent input to a Duo session on GitLab",
+    },
+  },
+};
+
 export const DEFAULT_REMOTE_MCP_SERVERS: DefaultRemoteMCPServerConfig[] = [
   {
     id: 10000,
@@ -1898,36 +2118,6 @@ export const DEFAULT_REMOTE_MCP_SERVERS: DefaultRemoteMCPServerConfig[] = [
       },
     },
   },
-  //Removed temporaly gitlab server
-  /*
-  {
-    id: 10003,
-    name: "gitlab",
-    description:
-      "GitLab tools for repository management, issue tracking, and CI/CD operations.",
-    url: "https://gitlab.com/api/v4/mcp",
-    icon: "GitlabLogo",
-    documentationUrl:
-      "https://docs.gitlab.com/user/gitlab_duo/model_context_protocol/mcp_server/",
-    connectionInstructions:
-      "GitLab uses OAuth authentication with the 'mcp' scope. The default URL connects to gitlab.com.",
-    authMethod: "oauth-dynamic",
-    scope: "mcp",
-    toolStakes: {
-      get_mcp_server_version: "never_ask",
-      create_issue: "low",
-      get_issue: "never_ask",
-      create_merge_request: "low",
-      get_merge_request: "never_ask",
-      get_merge_request_commits: "never_ask",
-      get_merge_request_diffs: "never_ask",
-      get_merge_request_pipelines: "never_ask",
-      get_pipeline_jobs: "never_ask",
-      gitlab_search: "never_ask",
-      semantic_code_search: "never_ask",
-    },
-  },
-  */
   //Removed temporaly see https://dust4ai.slack.com/archives/C050SM8NSPK/p1754397289272209
   /*
   {
@@ -8423,6 +8613,26 @@ export const DEFAULT_REMOTE_MCP_SERVERS: DefaultRemoteMCPServerConfig[] = [
         done: "Searched sections on Mobbin",
       },
     },
+  },
+  {
+    ...GITLAB_SHARED_CONFIG,
+    id: 10062,
+    name: "GitLab Cloud",
+    description:
+      "GitLab tools to search and read projects, code, merge requests, work items and CI/CD pipelines, and to create or update them (GitLab.com).",
+    url: "https://gitlab.com/api/v4/mcp",
+    connectionInstructions:
+      "GitLab uses OAuth with dynamic client registration. Sign in with your GitLab.com account to connect. A GitLab administrator must first allow access to the MCP server for your top-level group. If your company hosts its own GitLab instance, use GitLab Self-Managed instead.",
+  },
+  {
+    ...GITLAB_SHARED_CONFIG,
+    id: 10063,
+    name: "GitLab Self-Managed",
+    description:
+      "GitLab tools to search and read projects, code, merge requests, work items and CI/CD pipelines, and to create or update them (GitLab Self-Managed and Dedicated).",
+    url: "",
+    connectionInstructions:
+      "Enter your GitLab instance's MCP server URL: https://<your-gitlab-host>/api/v4/mcp. The instance must run GitLab 18.6 or later (19.5 or later recommended, where the MCP server is generally available) and be reachable over HTTPS. A GitLab administrator must first allow access to the MCP server for the instance. GitLab uses OAuth with dynamic client registration. Sign in with your GitLab account to connect. If your administrator has disabled dynamic client registration, the connection will fail.",
   },
 ];
 
