@@ -250,7 +250,10 @@ export const Notification = {
           swipeDirections={["right"]}
           toastOptions={{
             unstyled: true,
-            className: "w-fit select-none",
+            // Sonner measures a toast by setting its height to `auto` and reading it back. Apps
+            // that set `interpolate-size: allow-keywords` make that change animate, so the read
+            // returns the old height and the hovered stack clips the toast.
+            className: "w-fit select-none [interpolate-size:numeric-only]",
           }}
         />
       </NotificationsContext.Provider>
