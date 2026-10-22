@@ -48,6 +48,7 @@ import {
   saveAllSessions,
   COMMENT_COMMAND_TIMEOUT_MS,
   createCollabHocuspocus,
+  handleClientMessage,
   UNLOAD_GRACE_PERIOD_MS,
 } from "@front-api/lib/collab/hocuspocus";
 import {
@@ -1015,6 +1016,135 @@ describe("comment threads in a live session", () => {
     const late = await mine.send({ type: "delete", commentId: "c2" });
     expect(late.isErr() && late.error).toBe("unavailable");
   }, 15_000);
+
+  it("refuses a command that throws once applied, and resolves only once it is answered", async () => {
+    const { writer, hocuspocus } = await start();
+    const documentName = `${writer.workspaceId}:${writer.canonicalPath}`;
+    const connection = await hocuspocus.openDirectConnection(
+      documentName,
+      writer
+    );
+    const document = hocuspocus.documents.get(documentName);
+    if (!document) {
+      throw new Error("The document did not load.");
+    }
+    vi.spyOn(document, "broadcastStateless").mockImplementation(() => {
+      throw new Error("The broadcast failed.");
+    });
+    const reply = vi.fn();
+
+    await handleClientMessage(hocuspocus, {
+      document,
+      file: writer,
+      payload: JSON.stringify({
+        type: "command",
+        requestId: "r1",
+        command: { type: "add", commentId: "c2", body: "Ship it." },
+      }),
+      reply,
+    });
+    expect(reply).toHaveBeenCalledExactlyOnceWith(
+      JSON.stringify({ type: "refused", requestId: "r1", error: "unavailable" })
+    );
+    await connection.disconnect();
+  });
+
+  it("keeps applying later commands when a refusal cannot be sent", async () => {
+    const { writer, hocuspocus } = await start();
+    const documentName = `${writer.workspaceId}:${writer.canonicalPath}`;
+    const connection = await hocuspocus.openDirectConnection(
+      documentName,
+      writer
+    );
+    const document = hocuspocus.documents.get(documentName);
+    if (!document) {
+      throw new Error("The document did not load.");
+    }
+    vi.spyOn(document, "broadcastStateless").mockImplementationOnce(() => {
+      throw new Error("The broadcast failed.");
+    });
+    const command = (requestId: string, commentId: string) =>
+      JSON.stringify({
+        type: "command",
+        requestId,
+        command: { type: "add", commentId, body: "Ship it." },
+      });
+
+    await handleClientMessage(hocuspocus, {
+      document,
+      file: writer,
+      payload: command("r1", "c2"),
+      reply: () => {
+        throw new Error("The reply failed.");
+      },
+    });
+    const third: DfmComment = { ...THREAD, id: "c3" };
+    vi.mocked(applyCommentRequest).mockImplementationOnce(
+      async (_file, comments) =>
+        new Ok({
+          comments: [...comments, third],
+          created: third,
+          added: third.messages[0],
+        })
+    );
+    const reply = vi.fn();
+    await handleClientMessage(hocuspocus, {
+      document,
+      file: writer,
+      payload: command("r2", "c3"),
+      reply,
+    });
+    expect(reply).toHaveBeenCalledExactlyOnceWith(
+      JSON.stringify({ type: "accepted", requestId: "r2", comment: third })
+    );
+    expect(getSession(document)?.comments).toEqual([THREAD, CREATED, third]);
+    await connection.disconnect();
+  });
+
+  it("keeps a command applied, saved and dispatched when its answer cannot be sent", async () => {
+    const { writer, hocuspocus } = await start();
+    const documentName = `${writer.workspaceId}:${writer.canonicalPath}`;
+    const connection = await hocuspocus.openDirectConnection(
+      documentName,
+      writer
+    );
+    const document = hocuspocus.documents.get(documentName);
+    if (!document) {
+      throw new Error("The document did not load.");
+    }
+    const reply = vi.fn(() => {
+      throw new Error("The reply failed.");
+    });
+
+    await expect(
+      handleClientMessage(hocuspocus, {
+        document,
+        file: writer,
+        payload: JSON.stringify({ type: "threads" }),
+        reply,
+      })
+    ).resolves.toBeUndefined();
+    await handleClientMessage(hocuspocus, {
+      document,
+      file: writer,
+      payload: JSON.stringify({
+        type: "command",
+        requestId: "r1",
+        command: { type: "add", commentId: "c2", body: "Ship it." },
+      }),
+      reply,
+    });
+    expect(reply).toHaveBeenCalledTimes(2);
+    expect(getSession(document)?.comments).toEqual([THREAD, CREATED]);
+    expect(dispatchSessionCommentMentions).toHaveBeenCalledOnce();
+    hocuspocus.flushPendingStores();
+    await vi.waitFor(() =>
+      expect(
+        vi.mocked(saveCollabSession).mock.calls.at(-1)?.[1].comments
+      ).toEqual([THREAD, CREATED])
+    );
+    await connection.disconnect();
+  });
 
   it("marks an added thread's text before answering it, and refuses one it cannot anchor", async () => {
     const { writer, hocuspocus, url } = await start();

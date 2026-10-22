@@ -9,6 +9,7 @@ import {
   getYDocUnsavableBodyReason,
 } from "@app/lib/api/collab/ydoc";
 import { YDOC_STATE_TIMEOUT_MS } from "@app/lib/api/collab/ydoc_state";
+import type { DfmMessage } from "@app/lib/markdown/dfm";
 import {
   concurrentExecutor,
   raceWithTimeout,
@@ -16,7 +17,10 @@ import {
 } from "@app/lib/utils/async_utils";
 import logger from "@app/logger/logger";
 
-import type { CommentRequestErrorCode } from "@app/types/collab";
+import type {
+  CommentRequest,
+  CommentRequestErrorCode,
+} from "@app/types/collab";
 import {
   commentClientMessageSchema,
   isDefaultSaveState,
@@ -27,6 +31,7 @@ import { Err } from "@app/types/shared/result";
 import { normalizeError } from "@app/types/shared/utils/error_utils";
 import { safeParseJSON } from "@app/types/shared/utils/json_utils";
 import { authenticateConnection } from "@front-api/lib/collab/connection_access";
+import type { CollabSession } from "@front-api/lib/collab/session";
 import {
   epochMessage,
   getSession,
@@ -40,7 +45,7 @@ import {
   startSession,
   stopWrites,
 } from "@front-api/lib/collab/session";
-import type { LocalTransactionOrigin } from "@hocuspocus/server";
+import type { Document, LocalTransactionOrigin } from "@hocuspocus/server";
 import { Hocuspocus } from "@hocuspocus/server";
 
 import { z } from "zod";
@@ -130,25 +135,6 @@ function logUnexpected(
  * (`toSaveState`) changes, every connection MUST be sent it as `save_state`, and a connection
  * opening while it differs from `DEFAULT_SAVE_STATE` MUST be sent it once connected. The state
  * includes the last copy kept after a save conflict (`collab-session-save-conflict`).
- */
-/**
- * @cc [owner:tdraier,label:security;product] collab-comment-threads
- * A connection MUST receive the session's threads when it asks. A comment command MUST be applied
- * with `applyCommentRequest` for the connection's own file, one at a time per document, and
- * answered to that connection only. An accepted `add` carrying an anchor MUST first mark its text
- * with `anchorYDocComment`, as a change of no connection's, which saves MUST NOT go through, and be
- * refused with its error, or as `unavailable` when it throws, keeping neither the thread nor the
- * mark, when that fails; the mark MUST reach every connection before the threads. Once accepted,
- * the new threads MUST be sent to every connection of the document and the document stored, so
- * the save writes them, through the connection that last changed its text, or through the latest
- * commenter's when none did, and the message it added handed to `dispatchSessionCommentMentions`
- * without waiting for it, which shows every connection the agent it runs. A command its document
- * unloaded before it finished MUST change nothing.
- * Every command carrying a request id MUST be answered, refused as `unavailable` when it is
- * invalid, failed, outlived its document, found the document's last save failed at its turn, or
- * did not finish within `COMMENT_COMMAND_TIMEOUT_MS` of its arrival, then never applied, and a
- * failing or late command MUST NOT hold the later ones. Any other message that is not a valid
- * client message MUST be ignored.
  */
 export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
   const hocuspocus = new Hocuspocus<CollabAccess>({
@@ -346,167 +332,263 @@ export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
       }
     },
 
-    async onStateless({ connection, document, documentName, payload }) {
-      const session = getSession(document);
-      const file: CollabAccess = connection.context;
-      const json = safeParseJSON(payload);
-      const message = json.isOk()
-        ? commentClientMessageSchema.safeParse(json.value)
-        : null;
-      if (!session || !message?.success) {
-        logger.info(
-          { documentName, workspaceId: file.workspaceId },
-          "Collab stateless message ignored"
-        );
-        const request = json.isOk()
-          ? commandRequestSchema.safeParse(json.value)
-          : null;
-        if (request?.success) {
-          connection.sendStateless(
-            refusedMessage(request.data.requestId, "unavailable")
-          );
-        }
-        return;
-      }
-      if (message.data.type === "threads") {
-        connection.sendStateless(
-          serverMessage({ type: "threads", comments: session.comments })
-        );
-        return;
-      }
-
-      const { requestId, command } = message.data;
-      // From its arrival: a command waiting behind others is as late as one that runs long.
-      const deadline = Date.now() + COMMENT_COMMAND_TIMEOUT_MS;
-      const logFailure = (err: unknown) =>
-        logger.error(
-          {
-            err: normalizeError(err),
-            documentName,
-            workspaceId: file.workspaceId,
-          },
-          "Collab comment command failed"
-        );
-      const apply = async (): Promise<CommandResult> => {
-        const remaining = deadline - Date.now();
-        try {
-          const applied =
-            remaining > 0
-              ? await Promise.race([
-                  applyCommentRequest(file, session.comments, command),
-                  setTimeoutAsync(remaining),
-                ])
-              : "timeout";
-          if (applied === "timeout") {
-            logger.error(
-              { documentName, workspaceId: file.workspaceId },
-              "Collab comment command timed out"
-            );
-            return new Err("unavailable");
-          }
-          return applied;
-        } catch (err) {
-          logFailure(err);
-          return new Err("unavailable");
-        }
-      };
-      const run = async () => {
-        // Unloaded while the command waited or ran: a reload reads the file into a new document,
-        // and storing this one would cancel that document's debounced store, keyed by name.
-        // While saves fail, an accepted comment would only live in memory.
-        const result: CommandResult =
-          document.isDestroyed || session.saveFailed
-            ? new Err("unavailable")
-            : await apply();
-        if (document.isDestroyed || result.isErr()) {
-          connection.sendStateless(
-            refusedMessage(
-              requestId,
-              result.isErr() ? result.error : "unavailable"
-            )
-          );
-          return;
-        }
-
-        if (command.type === "add" && command.anchor) {
-          let anchored: Result<void, CommentRequestErrorCode>;
-          try {
-            anchored = anchorYDocComment(
-              document,
-              {
-                commentId: command.commentId,
-                anchor: command.anchor,
-                comments: result.value.comments,
-              },
-              COMMENT_MARK_ORIGIN
-            );
-          } catch (err) {
-            logFailure(err);
-            anchored = new Err("unavailable");
-          }
-          if (anchored.isErr()) {
-            connection.sendStateless(refusedMessage(requestId, anchored.error));
-            return;
-          }
-          // The mark first, so editors already hold it when the thread arrives.
-          document.flush();
-        }
-
-        // TODO(co-edition): a command still applies after its sender left, whose channel already
-        // answered it `unavailable`; a retried `add` then makes a second thread.
-        session.comments = result.value.comments;
-        // Every accepted command changes the threads.
-        session.lastCommenter = file;
-        // TODO(co-edition): broadcast only the changed thread rather than every thread to every
-        // connection.
-        document.broadcastStateless(
-          serverMessage({ type: "threads", comments: session.comments })
-        );
-        connection.sendStateless(
-          serverMessage({
-            type: "accepted",
-            requestId,
-            comment: result.value.created,
-          })
-        );
-        // Not awaited: Hocuspocus debounces the store and catches its failures, which
-        // `onStoreDocument` logs.
-        void hocuspocus.storeDocumentHooks(document, {
-          clientsCount: document.getConnectionsCount(),
-          document,
-          documentName,
-          instance: hocuspocus,
-          lastContext: file,
-          lastTransactionOrigin: undefined,
-        });
-        if (result.value.added) {
-          // Not awaited: the command is answered without waiting for its mentions to be posted.
-          void dispatchSessionCommentMentions(
-            file,
-            document,
-            command,
-            result.value.added,
-            (agent, activity) =>
-              showAgentActivity(hocuspocus, documentName, agent, activity)
-          ).catch((err) =>
-            logger.error(
-              {
-                err: normalizeError(err),
-                documentName,
-                workspaceId: file.workspaceId,
-              },
-              "Collab comment mentions dispatch failed"
-            )
-          );
-        }
-      };
-      session.pendingMutations = session.pendingMutations
-        .then(run)
-        .catch(logFailure);
+    async onStateless({ connection, document, payload }) {
+      void handleClientMessage(hocuspocus, {
+        document,
+        file: connection.context,
+        payload,
+        reply: (message) => connection.sendStateless(message),
+      });
     },
   });
 
   return hocuspocus;
+}
+
+/** A comment command waiting for its turn, with how to answer it. */
+interface QueuedCommand {
+  hocuspocus: Hocuspocus<CollabAccess>;
+  document: Document;
+  session: CollabSession;
+  file: CollabAccess;
+  requestId: string;
+  command: CommentRequest;
+  deadline: number;
+  answer: (message: string) => void;
+}
+
+function logCommandFailure({ document, file }: QueuedCommand, err: unknown) {
+  logger.error(
+    {
+      err: normalizeError(err),
+      documentName: document.name,
+      workspaceId: file.workspaceId,
+    },
+    "Collab comment command failed"
+  );
+}
+
+async function applyCommand(queued: QueuedCommand): Promise<CommandResult> {
+  const { document, session, file, command, deadline } = queued;
+  const remaining = deadline - Date.now();
+  try {
+    const applied =
+      remaining > 0
+        ? await Promise.race([
+            applyCommentRequest(file, session.comments, command),
+            setTimeoutAsync(remaining),
+          ])
+        : "timeout";
+    if (applied === "timeout") {
+      logger.error(
+        { documentName: document.name, workspaceId: file.workspaceId },
+        "Collab comment command timed out"
+      );
+      return new Err("unavailable");
+    }
+    return applied;
+  } catch (err) {
+    logCommandFailure(queued, err);
+    return new Err("unavailable");
+  }
+}
+
+async function dispatchMentions(
+  { hocuspocus, document, file, command }: QueuedCommand,
+  added: DfmMessage
+): Promise<void> {
+  try {
+    await dispatchSessionCommentMentions(
+      file,
+      document,
+      command,
+      added,
+      (agent, activity) =>
+        showAgentActivity(hocuspocus, document.name, agent, activity)
+    );
+  } catch (err) {
+    logger.error(
+      {
+        err: normalizeError(err),
+        documentName: document.name,
+        workspaceId: file.workspaceId,
+      },
+      "Collab comment mentions dispatch failed"
+    );
+  }
+}
+
+async function runCommand(queued: QueuedCommand): Promise<void> {
+  const { hocuspocus, document, session, file, requestId, command, answer } =
+    queued;
+  // Unloaded while the command waited or ran: a reload reads the file into a new document,
+  // and storing this one would cancel that document's debounced store, keyed by name.
+  // While saves fail, an accepted comment would only live in memory.
+  const result: CommandResult =
+    document.isDestroyed || session.saveFailed
+      ? new Err("unavailable")
+      : await applyCommand(queued);
+  if (document.isDestroyed || result.isErr()) {
+    answer(
+      refusedMessage(requestId, result.isErr() ? result.error : "unavailable")
+    );
+    return;
+  }
+
+  if (command.type === "add" && command.anchor) {
+    let anchored: Result<void, CommentRequestErrorCode>;
+    try {
+      anchored = anchorYDocComment(
+        document,
+        {
+          commentId: command.commentId,
+          anchor: command.anchor,
+          comments: result.value.comments,
+        },
+        COMMENT_MARK_ORIGIN
+      );
+    } catch (err) {
+      logCommandFailure(queued, err);
+      anchored = new Err("unavailable");
+    }
+    if (anchored.isErr()) {
+      answer(refusedMessage(requestId, anchored.error));
+      return;
+    }
+    // The mark first, so editors already hold it when the thread arrives.
+    document.flush();
+  }
+
+  // TODO(co-edition): a command still applies after its sender left, whose channel already
+  // answered it `unavailable`; a retried `add` then makes a second thread.
+  session.comments = result.value.comments;
+  // Every accepted command changes the threads.
+  session.lastCommenter = file;
+  // TODO(co-edition): broadcast only the changed thread rather than every thread to every
+  // connection.
+  document.broadcastStateless(
+    serverMessage({ type: "threads", comments: session.comments })
+  );
+  answer(
+    serverMessage({
+      type: "accepted",
+      requestId,
+      comment: result.value.created,
+    })
+  );
+  // Not awaited: Hocuspocus debounces the store and catches its failures, which
+  // `onStoreDocument` logs.
+  void hocuspocus.storeDocumentHooks(document, {
+    clientsCount: document.getConnectionsCount(),
+    document,
+    documentName: document.name,
+    instance: hocuspocus,
+    lastContext: file,
+    lastTransactionOrigin: undefined,
+  });
+  const { added } = result.value;
+  if (added) {
+    // Not awaited: the command is answered without waiting for its mentions to be posted.
+    void dispatchMentions(queued, added);
+  }
+}
+
+/**
+ * @cc [owner:tdraier,label:security;product] collab-comment-threads
+ * `file` MUST be the sending connection's access, and `reply` the only way back to it. A threads
+ * request MUST get the session's threads. A command MUST be applied with `applyCommentRequest`, one
+ * at a time per document, and always answered: `accepted`, refused with its error, or
+ * `unavailable` when invalid, thrown, late (`COMMENT_COMMAND_TIMEOUT_MS`), or after its document
+ * unloaded or its last save failed. A refused command changes nothing, unless it threw midway, and
+ * never holds later ones.
+ * An anchored `add` MUST first mark its text (`anchorYDocComment`, as no connection's change, never
+ * saved through), the mark reaching every connection before the threads. Once accepted, the threads
+ * MUST go to every connection and the document be stored, saved through its last text editor or
+ * else the latest commenter, then `dispatchSessionCommentMentions` started without waiting. Other
+ * messages MUST be ignored. A throwing `reply`, a command throwing before its answer and a failed
+ * dispatch MUST only be logged (exceptions to `no-catching-own-errors`). The promise MUST resolve
+ * once answered or ignored, never reject.
+ */
+export async function handleClientMessage(
+  hocuspocus: Hocuspocus<CollabAccess>,
+  {
+    document,
+    file,
+    payload,
+    reply,
+  }: {
+    document: Document;
+    file: CollabAccess;
+    payload: string;
+    reply: (message: string) => void;
+  }
+): Promise<void> {
+  const session = getSession(document);
+  const { name: documentName } = document;
+  let answered = false;
+  const answer = (message: string) => {
+    answered = true;
+    try {
+      reply(message);
+    } catch (err) {
+      logger.error(
+        {
+          err: normalizeError(err),
+          documentName,
+          workspaceId: file.workspaceId,
+        },
+        "Collab comment answer not sent"
+      );
+    }
+  };
+  const json = safeParseJSON(payload);
+  const message = json.isOk()
+    ? commentClientMessageSchema.safeParse(json.value)
+    : null;
+  if (!session || !message?.success) {
+    logger.info(
+      { documentName, workspaceId: file.workspaceId },
+      "Collab stateless message ignored"
+    );
+    const request = json.isOk()
+      ? commandRequestSchema.safeParse(json.value)
+      : null;
+    if (request?.success) {
+      answer(refusedMessage(request.data.requestId, "unavailable"));
+    }
+    return;
+  }
+  if (message.data.type === "threads") {
+    answer(serverMessage({ type: "threads", comments: session.comments }));
+    return;
+  }
+
+  const queued: QueuedCommand = {
+    hocuspocus,
+    document,
+    session,
+    file,
+    requestId: message.data.requestId,
+    command: message.data.command,
+    // From its arrival: a command waiting behind others is as late as one that runs long.
+    deadline: Date.now() + COMMENT_COMMAND_TIMEOUT_MS,
+    answer,
+  };
+  const previous = session.pendingMutations;
+  // Never rejects: a command that fails fails alone, not the writes and commands queued after it.
+  const handle = async (): Promise<void> => {
+    try {
+      await previous;
+      await runCommand(queued);
+    } catch (err) {
+      logCommandFailure(queued, err);
+      if (!answered) {
+        answer(refusedMessage(queued.requestId, "unavailable"));
+      }
+    }
+  };
+  session.pendingMutations = handle();
+  await session.pendingMutations;
 }
 
 /**
