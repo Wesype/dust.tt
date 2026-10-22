@@ -10,13 +10,14 @@ import type { LightWorkspaceType } from "@app/types/user";
 import { useCallback } from "react";
 
 type RetryMessageResponse = {
-  message: AgentMessageType;
+  message: AgentMessageType | null;
 };
 
 /**
  * @cc [owner:id13,label:react;reliability] retry-returns-created-message
- * A successful retry MUST return the server-created agent message so callers can replace stale
- * local and cached versions without waiting for the conversation event stream.
+ * A successful retry that is not `blockedOnly` MUST return the server-created agent message so
+ * callers can replace stale local and cached versions without waiting for the conversation event
+ * stream. A `blockedOnly` retry creates no message and returns `null`.
  */
 export function useRetryMessage({ owner }: { owner: LightWorkspaceType }) {
   return useCallback(

@@ -8524,7 +8524,14 @@
                   "type": "object",
                   "properties": {
                     "message": {
-                      "$ref": "#/components/schemas/PrivateAgentMessage"
+                      "type": "object",
+                      "description": "The retried agent message, null when only blocked actions are retried.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/PrivateAgentMessage"
+                        }
+                      ],
+                      "nullable": true
                     }
                   }
                 }

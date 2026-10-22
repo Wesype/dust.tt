@@ -78,7 +78,11 @@ const app = workspaceApp();
  *               type: object
  *               properties:
  *                 message:
- *                   $ref: '#/components/schemas/PrivateAgentMessage'
+ *                   type: object
+ *                   description: The retried agent message, null when only blocked actions are retried.
+ *                   allOf:
+ *                     - $ref: '#/components/schemas/PrivateAgentMessage'
+ *                   nullable: true
  *       401:
  *         description: Unauthorized
  */
@@ -147,41 +151,12 @@ app.post(
       });
     }
 
-    const conversation = conversationResource.toJSON();
-
-    const renderRes = await batchRenderMessages(
-      auth,
-      conversationResource,
-      [messageModel],
-      "full"
-    );
-    if (renderRes.isErr()) {
-      return apiError(ctx, {
-        status_code: 500,
-        api_error: {
-          type: "internal_server_error",
-          message: "Failed to render message.",
-        },
-      });
-    }
-
-    const message = renderRes.value[0];
-    if (!message || !isAgentMessageType(message)) {
-      return apiError(ctx, {
-        status_code: 500,
-        api_error: {
-          type: "internal_server_error",
-          message: "Failed to render message.",
-        },
-      });
-    }
-
     // If the query parameter `blocked_only` is true, we retry only the blocked
-    // actions.
+    // actions. No message is created, so the message is not rendered for the response.
     if (ctx.req.query("blocked_only") === "true") {
       const retryBlockedActionsRes = await retryBlockedActions(
         auth,
-        conversation,
+        conversationResource.toJSON(),
         { messageId }
       );
 
@@ -195,7 +170,7 @@ app.post(
           (error.code === "no_blocked_actions" ||
             error.code === "agent_message_not_resumable")
         ) {
-          return ctx.json({ message });
+          return ctx.json({ message: null });
         }
 
         if (
@@ -224,7 +199,34 @@ app.post(
         );
       }
 
-      return ctx.json({ message });
+      return ctx.json({ message: null });
+    }
+
+    const renderRes = await batchRenderMessages(
+      auth,
+      conversationResource,
+      [messageModel],
+      "full"
+    );
+    if (renderRes.isErr()) {
+      return apiError(ctx, {
+        status_code: 500,
+        api_error: {
+          type: "internal_server_error",
+          message: "Failed to render message.",
+        },
+      });
+    }
+
+    const message = renderRes.value[0];
+    if (!message || !isAgentMessageType(message)) {
+      return apiError(ctx, {
+        status_code: 500,
+        api_error: {
+          type: "internal_server_error",
+          message: "Failed to render message.",
+        },
+      });
     }
 
     const retriedMessageRes = await retryAgentMessage(auth, {
