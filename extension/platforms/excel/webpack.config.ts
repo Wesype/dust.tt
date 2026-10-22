@@ -102,6 +102,7 @@ export const getConfig = async ({
     fs.readFileSync(path.resolve(__dirname, "../../package.json"), "utf8")
   );
   const version = packageJson.version;
+  const commitHash = process.env.COMMIT_HASH || getCommitHash();
 
   // Production builds go straight into the shared Office origin, served under `/excel/`.
   const buildDirPath = isDevelopment
@@ -247,10 +248,12 @@ export const getConfig = async ({
       }),
       new webpack.EnvironmentPlugin({
         BUILD_DATE: process.env.COMMIT_HASH || Math.floor(Date.now() / 1000),
-        COMMIT_HASH: process.env.COMMIT_HASH || getCommitHash(),
+        COMMIT_HASH: commitHash,
         DATADOG_CLIENT_TOKEN: process.env.DATADOG_CLIENT_TOKEN || "",
         DATADOG_ENV: isDevelopment ? "dev" : "prod",
         DUST_EXTENSION_VERSION: `excel-${version}`,
+        // Read by front's shared code (`@app/lib/commit-hash`), e.g. in API calls.
+        NEXT_PUBLIC_COMMIT_HASH: commitHash,
         NEXT_PUBLIC_DUST_APP_URL: process.env.NEXT_PUBLIC_DUST_APP_URL || "",
         NEXT_PUBLIC_DUST_API_URL: process.env.NEXT_PUBLIC_DUST_API_URL || "",
         NEXT_PUBLIC_DUST_STATIC_WEBSITE_URL:
