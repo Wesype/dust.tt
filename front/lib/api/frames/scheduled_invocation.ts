@@ -1,6 +1,7 @@
 import { canWriteFrameV2Source } from "@app/lib/api/frames/permissions";
 import { loadFramePublicationDescriptor } from "@app/lib/api/frames/publication_storage";
 import { getFramePublicationSchedules } from "@app/lib/api/frames/schedule_ids";
+import { runOnRedis } from "@app/lib/api/redis";
 import { resolveActiveFrameFunctionForUse } from "@app/lib/api/sandbox_functions/frame_share_capability";
 import { Authenticator, getFeatureFlags } from "@app/lib/auth";
 import { FileResource } from "@app/lib/resources/file_resource";
@@ -20,7 +21,29 @@ export type FrameScheduledInvocationErrorCode =
   | "function_not_found"
   | "publisher_unavailable"
   | "publisher_access_lost"
+  | "duplicate_fire"
   | "invocation_refused";
+
+// How long a fire instant is remembered. It only has to outlive the retries and replays of that
+// one instant, not the gap to the next fire: each fire time has its own claim.
+const FIRE_GUARD_TTL_SECONDS = 24 * 60 * 60;
+
+/**
+ * @cc [owner:smb2268,label:product] one-invocation-per-scheduled-fire
+ * A fire is identified by `(workspace, frame, schedule, scheduledFireTime)`; fires of the same
+ * schedule at different times are independent. For one fire, at most one invocation MAY be
+ * created: a second request for the same fire within `FIRE_GUARD_TTL_SECONDS` of the first MUST be
+ * refused with `duplicate_fire` before any invocation row exists. The claim MUST be taken only
+ * after every refusal that needs no invocation, and MUST NOT be released afterwards, since an
+ * invocation row may exist whatever `invoke` returns.
+ */
+async function claimScheduledFire(key: string): Promise<boolean> {
+  const claimed = await runOnRedis(
+    { origin: "frame_schedule_fires" },
+    (redis) => redis.set(key, "1", { NX: true, EX: FIRE_GUARD_TTL_SECONDS })
+  );
+  return claimed === "OK";
+}
 
 export class FrameScheduledInvocationError extends Error {
   constructor(
@@ -144,6 +167,21 @@ export async function invokeScheduledFrameFunction({
     return refused(
       "function_not_found",
       `Durable function "${schedule.functionName}" not found in the active publication of Frame ${frameId}.`
+    );
+  }
+
+  const invocable = await sandboxFunction.checkInvocable(publisherAuth, {
+    origin: "scheduled",
+  });
+  if (invocable.isErr()) {
+    return refused("invocation_refused", invocable.error.message);
+  }
+
+  const fireKey = `frame_schedule_fire:${workspaceId}:${frameId}:${scheduleId}:${scheduledFireTime.toISOString()}`;
+  if (!(await claimScheduledFire(fireKey))) {
+    return refused(
+      "duplicate_fire",
+      `Schedule "${scheduleId}" of Frame ${frameId} already fired at ${scheduledFireTime.toISOString()}.`
     );
   }
 

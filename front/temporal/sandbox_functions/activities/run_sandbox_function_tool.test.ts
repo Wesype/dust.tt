@@ -1,11 +1,13 @@
 import { tryCallMCPTool } from "@app/lib/actions/mcp_actions";
 import { InternalMCPServerInMemoryResource } from "@app/lib/resources/internal_mcp_server_in_memory_resource";
+import { SandboxFunctionInvocationResource } from "@app/lib/resources/sandbox_function_invocation_resource";
 import { SandboxFunctionMCPActionResource } from "@app/lib/resources/sandbox_function_mcp_action_resource";
 import { runSandboxFunctionToolActivity } from "@app/temporal/sandbox_functions/activities/run_sandbox_function_tool";
 import { MCPServerViewFactory } from "@app/tests/utils/MCPServerViewFactory";
 import { fileStorageMock } from "@app/tests/utils/mocks/file_storage";
 import { SandboxFunctionMCPActionFactory } from "@app/tests/utils/SandboxFunctionMCPActionFactory";
 import { createPersistedSandboxFunctionInvocationTokenTestContext } from "@app/tests/utils/SandboxTokenFactory";
+import type { SandboxFunctionInvocationOrigin } from "@app/types/api/sandbox_functions";
 import type { AgentPauseOutputResourceType } from "@dust-tt/client";
 import { INTERNAL_MIME_TYPES } from "@dust-tt/client";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -41,9 +43,11 @@ function mockToolCallResult(result: CallToolResult) {
   });
 }
 
-async function setupActivityRun() {
+async function setupActivityRun({
+  origin,
+}: { origin?: SandboxFunctionInvocationOrigin } = {}) {
   const { auth, workspace, invocation, globalSpace } =
-    await createPersistedSandboxFunctionInvocationTokenTestContext();
+    await createPersistedSandboxFunctionInvocationTokenTestContext({ origin });
   const server = await InternalMCPServerInMemoryResource.makeNew(auth, {
     name: "common_utilities",
     useCase: null,
@@ -58,7 +62,7 @@ async function setupActivityRun() {
     mcpServerView: view,
   });
 
-  return { auth, workspace, action };
+  return { auth, workspace, action, invocation };
 }
 
 describe("runSandboxFunctionToolActivity", () => {
@@ -125,6 +129,49 @@ describe("runSandboxFunctionToolActivity", () => {
     );
     expect(outputWrite).toBeDefined();
     expect(JSON.parse(outputWrite?.content.toString() ?? "")).toEqual(content);
+  });
+
+  it("fails a scheduled invocation closed when the tool requires personal authentication", async () => {
+    const { auth, action, invocation } = await setupActivityRun({
+      origin: "scheduled",
+    });
+
+    const authRequiredResource: AgentPauseOutputResourceType = {
+      mimeType: INTERNAL_MIME_TYPES.TOOL_OUTPUT.AGENT_PAUSE_TOOL_OUTPUT,
+      type: "tool_personal_auth_required",
+      provider: "google_drive",
+      text: "Personal authentication required.",
+      uri: "",
+    };
+    mockToolCallResult({
+      isError: false,
+      content: [{ type: "resource", resource: authRequiredResource }],
+    });
+
+    await runSandboxFunctionToolActivity(auth.toJSON(), {
+      actionModelId: action.id,
+    });
+
+    const refetched =
+      await SandboxFunctionMCPActionResource.fetchByModelIdWithAuth(
+        auth,
+        action.id
+      );
+    expect(refetched?.status).toBe("errored");
+    const settled = await SandboxFunctionInvocationResource.fetchById(auth, {
+      sandboxFunction: invocation.sandboxFunction,
+      invocationId: invocation.sId,
+      access: "system",
+    });
+    expect(settled?.status).toBe("errored");
+    expect((await settled?.getData())?.error).toMatchObject({
+      code: "personal_auth_required_unattended",
+    });
+    expect(publishSandboxFunctionBlockingEvent).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: "tool_personal_auth_required" }),
+      expect.anything()
+    );
   });
 
   it("should fail closed to errored on a non-error early exit", async () => {

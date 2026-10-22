@@ -630,6 +630,14 @@ msgid "A fast function can't call tools."
 msgstr "Eine schnelle Funktion kann keine Tools aufrufen."
 
 #: front/lib/api_error_messages.ts
+msgid "This tool needs approval, which a scheduled run can't wait for."
+msgstr "Dieses Tool benötigt eine Genehmigung, auf die ein geplanter Lauf nicht warten kann."
+
+#: front/lib/api_error_messages.ts
+msgid "This tool needs a personal connection, which a scheduled run can't set up."
+msgstr "Dieses Tool benötigt eine persönliche Verbindung, die ein geplanter Lauf nicht einrichten kann."
+
+#: front/lib/api_error_messages.ts
 msgid "Project details not found."
 msgstr "Projektdetails nicht gefunden."
 

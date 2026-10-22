@@ -102,6 +102,14 @@ app.post(
                 message: result.error.message,
               },
             });
+          case "approval_required_unattended":
+            return apiError(ctx, {
+              status_code: 403,
+              api_error: {
+                type: "approval_required_unattended",
+                message: result.error.message,
+              },
+            });
           default:
             assertNever(result.error.type);
         }

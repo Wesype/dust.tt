@@ -68,6 +68,7 @@ export type RedisUsageTagsType =
   | "force_reload_commits"
   | "programmatic_cap_trigger_alert"
   | "programmatic_usage_tracking"
+  | "frame_schedule_fires"
   | "group_permissions_cache"
   | "key_usage_tracking"
   | "lock"

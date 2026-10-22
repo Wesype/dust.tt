@@ -1,4 +1,5 @@
 import { InternalMCPServerInMemoryResource } from "@app/lib/resources/internal_mcp_server_in_memory_resource";
+import { SandboxFunctionInvocationResource } from "@app/lib/resources/sandbox_function_invocation_resource";
 import { SandboxFunctionMCPActionResource } from "@app/lib/resources/sandbox_function_mcp_action_resource";
 import { MCPServerViewFactory } from "@app/tests/utils/MCPServerViewFactory";
 import { RemoteMCPServerFactory } from "@app/tests/utils/RemoteMCPServerFactory";
@@ -216,6 +217,56 @@ describe("POST /api/v1/w/[wId]/sandbox/actions/call (function invocation)", () =
         }),
       }),
       { invocation: expect.objectContaining({ sId: context.invocation.sId }) }
+    );
+  });
+
+  it("refuses an approval-gated tool call from a scheduled invocation and settles it", async () => {
+    const context =
+      await createPersistedSandboxFunctionInvocationTokenTestContext({
+        origin: "scheduled",
+      });
+    const remoteServer = await RemoteMCPServerFactory.create(context.workspace);
+    const view = await MCPServerViewFactory.create(
+      context.workspace,
+      remoteServer.sId,
+      context.globalSpace
+    );
+
+    const response = await callSandboxTool(context.workspace, context.token, {
+      serverViewId: view.sId,
+      toolName: "tool",
+      arguments: {},
+    });
+
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body.error.type).toBe("approval_required_unattended");
+
+    const invocation = await SandboxFunctionInvocationResource.fetchById(
+      context.auth,
+      {
+        sandboxFunction: context.sandboxFunction,
+        invocationId: context.invocation.sId,
+        access: "system",
+      }
+    );
+    expect(invocation?.status).toBe("errored");
+    expect((await invocation?.getData())?.error).toMatchObject({
+      code: "approval_required_unattended",
+    });
+    expect(
+      await SandboxFunctionMCPActionResource.listByInvocation(
+        context.auth,
+        context.invocation
+      )
+    ).toEqual([]);
+    expect(vi.mocked(launchSandboxFunctionToolWorkflow)).not.toHaveBeenCalled();
+    expect(
+      vi.mocked(publishSandboxFunctionBlockingEvent)
+    ).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ type: "tool_approve_execution" }),
+      expect.anything()
     );
   });
 

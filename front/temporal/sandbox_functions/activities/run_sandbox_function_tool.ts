@@ -7,7 +7,10 @@ import {
   emitAuditLogEvent,
 } from "@app/lib/api/audit/workos_audit";
 import { runToolWithStreaming } from "@app/lib/api/mcp/run_tool";
-import { buildSandboxFunctionAuditMetadata } from "@app/lib/api/sandbox_functions/audit";
+import {
+  buildSandboxFunctionAuditMetadata,
+  readInvocationContextForAudit,
+} from "@app/lib/api/sandbox_functions/audit";
 import { publishSandboxFunctionBlockingEvent } from "@app/lib/api/sandbox_functions/publish_blocking_event";
 import type { SandboxFunctionMcpActionRunTimingsMs } from "@app/lib/api/sandbox_functions/sandbox_function_mcp_action_server_timings";
 import {
@@ -108,6 +111,7 @@ export async function runSandboxFunctionTool(
   };
 
   const startTimeMs = performance.now();
+  const invocationContext = await readInvocationContextForAudit(invocation);
 
   try {
     const streamingStarted = performance.now();
@@ -123,9 +127,12 @@ export async function runSandboxFunctionTool(
               isSandboxFunctionToolEvent(event),
               "Expected a sandbox function authentication event."
             );
-            await publishSandboxFunctionBlockingEvent(auth, event, {
-              invocation,
-            });
+            // A scheduled run has no one to complete the connection; the block is settled below.
+            if (invocation.origin !== "scheduled") {
+              await publishSandboxFunctionBlockingEvent(auth, event, {
+                invocation,
+              });
+            }
             break;
           case "tool_approve_execution":
           case "tool_ask_user_question":
@@ -160,7 +167,10 @@ export async function runSandboxFunctionTool(
                   : "internal",
                 mcp_server_name: action.toolConfiguration.mcpServerName,
                 action_id: action.sId,
-                ...buildSandboxFunctionAuditMetadata(invocation),
+                ...buildSandboxFunctionAuditMetadata(
+                  invocation,
+                  invocationContext
+                ),
                 initiating_user_id: auth.user()?.sId ?? "unknown",
                 initiating_user_email: auth.user()?.email ?? "unknown",
               },
@@ -178,6 +188,25 @@ export async function runSandboxFunctionTool(
     persistOutput = mcp.persistOutput;
     pauseEvents = mcp.pauseEvents;
     markSucceeded = mcp.markSucceeded;
+
+    if (
+      action.status === "blocked_authentication_required" &&
+      invocation.origin === "scheduled"
+    ) {
+      await action.markAsErrored({
+        executionDurationMs: performance.now() - startTimeMs,
+      });
+      await invocation.fail({
+        code: "personal_auth_required_unattended",
+        message:
+          `Tool "${action.toolConfiguration.originalName}" needs a personal connection, which a ` +
+          "scheduled run cannot set up. Connect it once as the publisher.",
+      });
+      localLogger.info(
+        { toolName: action.toolConfiguration.originalName },
+        "Refused a personal-auth tool call from a scheduled Frame function invocation"
+      );
+    }
 
     // Personal authentication is an expected non-terminal pause surfaced through the invocation
     // stream. Other pause resources still fail closed until their resolution flows are wired.

@@ -22,6 +22,7 @@ import { SpaceFactory } from "@app/tests/utils/SpaceFactory";
 import { UserFactory } from "@app/tests/utils/UserFactory";
 import { WorkspaceFactory } from "@app/tests/utils/WorkspaceFactory";
 import type { AgentMCPActionType } from "@app/types/actions";
+import type { SandboxFunctionInvocationOrigin } from "@app/types/api/sandbox_functions";
 import { frameV2ContentType } from "@app/types/files";
 
 process.env.DUST_SANDBOX_JWT_SECRET ??= "test-sandbox-jwt-secret";
@@ -209,8 +210,10 @@ export async function createSandboxFunctionInvocationTokenTestContext() {
 // them back (calling MCP tools from a function invocation).
 export async function createPersistedSandboxFunctionInvocationTokenTestContext({
   noTools = false,
+  origin,
 }: {
   noTools?: boolean;
+  origin?: SandboxFunctionInvocationOrigin;
 } = {}) {
   const context = await createSandboxTokenTestContext();
   const { workspace } = context;
@@ -284,6 +287,7 @@ export async function createPersistedSandboxFunctionInvocationTokenTestContext({
   const invocation = await SandboxFunctionInvocationResource.makeNew(auth, {
     sandboxFunction,
     input: undefined,
+    origin,
   });
 
   const token = await generateSandboxFunctionInvocationToken(auth, {

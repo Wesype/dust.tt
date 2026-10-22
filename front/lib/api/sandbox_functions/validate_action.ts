@@ -10,7 +10,10 @@ import {
   getAuditLogContext,
 } from "@app/lib/api/audit/workos_audit";
 import { getRedisHybridManager } from "@app/lib/api/redis-hybrid-manager";
-import { buildSandboxFunctionAuditMetadata } from "@app/lib/api/sandbox_functions/audit";
+import {
+  buildSandboxFunctionAuditMetadata,
+  readInvocationContextForAudit,
+} from "@app/lib/api/sandbox_functions/audit";
 import { getSandboxFunctionBlockingEventChannel } from "@app/lib/api/sandbox_functions/publish_blocking_event";
 import type { Authenticator } from "@app/lib/auth";
 import { SandboxFunctionInvocationResource } from "@app/lib/resources/sandbox_function_invocation_resource";
@@ -173,6 +176,7 @@ export async function validateSandboxFunctionAction(
 
   // Same action as the conversation flavor, with frame function identifiers standing in for the
   // conversation ones. No agent metadata: a frame function has none.
+  const invocationContext = await readInvocationContextForAudit(invocation);
   void emitAuditLogEvent({
     auth,
     action: "tool.approval_resolved",
@@ -190,7 +194,7 @@ export async function validateSandboxFunctionAction(
       mcp_server_name: action.toolConfiguration.mcpServerName,
       stake_level: action.toolConfiguration.permission,
       action_id: action.sId,
-      ...buildSandboxFunctionAuditMetadata(invocation),
+      ...buildSandboxFunctionAuditMetadata(invocation, invocationContext),
       deciding_user_id: user?.sId ?? "unknown",
       deciding_user_email: user?.email ?? "unknown",
     },

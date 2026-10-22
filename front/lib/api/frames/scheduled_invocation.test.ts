@@ -2,6 +2,8 @@ import { canWriteFrameV2Source } from "@app/lib/api/frames/permissions";
 import { deriveFrameScheduleId } from "@app/lib/api/frames/schedule_ids";
 import { invokeScheduledFrameFunction } from "@app/lib/api/frames/scheduled_invocation";
 import { revokeAndTrackMembership } from "@app/lib/api/membership";
+import { resolveActiveFrameFunctionForUse } from "@app/lib/api/sandbox_functions/frame_share_capability";
+import { SandboxFunctionInvocationResource } from "@app/lib/resources/sandbox_function_invocation_resource";
 import { launchSandboxFunctionInvocationWorkflow } from "@app/temporal/sandbox_functions/client";
 import {
   createTestScheduledFramePublication,
@@ -9,6 +11,7 @@ import {
 } from "@app/tests/utils/FramePublicationFactory";
 import { fileStorageMock } from "@app/tests/utils/mocks/file_storage";
 import { Ok } from "@app/types/shared/result";
+import assert from "assert";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@app/temporal/sandbox_functions/client", async (importOriginal) => {
@@ -78,6 +81,42 @@ describe("invokeScheduledFrameFunction", () => {
       scheduledFireTime: FIRE_TIME.toISOString(),
     });
     expect(launchSandboxFunctionInvocationWorkflow).toHaveBeenCalledOnce();
+  });
+
+  it("creates at most one invocation per scheduled fire", async () => {
+    const { adminAuth, workspace, frame, publicationId } =
+      await createTestScheduledFramePublication({ schedule: SCHEDULE });
+    const fire = {
+      workspaceId: workspace.sId,
+      frameId: frame.sId,
+      scheduleId: SCHEDULE_ID,
+      expectedPublicationId: publicationId,
+      scheduledFireTime: FIRE_TIME,
+    };
+
+    const first = await invokeScheduledFrameFunction(fire);
+    const duplicate = await invokeScheduledFrameFunction(fire);
+    const nextFire = await invokeScheduledFrameFunction({
+      ...fire,
+      scheduledFireTime: new Date(FIRE_TIME.getTime() + 60 * 60 * 1000),
+    });
+
+    expect(first.isOk()).toBe(true);
+    expect(duplicate.isErr() && duplicate.error.code).toBe("duplicate_fire");
+    expect(nextFire.isOk()).toBe(true);
+    expect(launchSandboxFunctionInvocationWorkflow).toHaveBeenCalledTimes(2);
+    const sandboxFunction = await resolveActiveFrameFunctionForUse(adminAuth, {
+      frameId: frame.sId,
+      functionName: TEST_SCHEDULED_FUNCTION_NAME,
+      target: "live",
+    });
+    assert(sandboxFunction);
+    expect(
+      await SandboxFunctionInvocationResource.listRows(adminAuth, {
+        sandboxFunction,
+        limit: 10,
+      })
+    ).toHaveLength(2);
   });
 
   it("refuses when Frame schedules are not enabled", async () => {
@@ -174,15 +213,20 @@ describe("invokeScheduledFrameFunction", () => {
         userIdentity: "interactive_workspace_user_required",
       });
 
-    const result = await invokeScheduledFrameFunction({
+    const fire = {
       workspaceId: workspace.sId,
       frameId: frame.sId,
       scheduleId: SCHEDULE_ID,
       expectedPublicationId: publicationId,
       scheduledFireTime: FIRE_TIME,
-    });
+    };
+
+    const result = await invokeScheduledFrameFunction(fire);
+    // Refusals come before the claim: a retry is refused for the same reason, not as a duplicate.
+    const retry = await invokeScheduledFrameFunction(fire);
 
     expect(result.isErr() && result.error.code).toBe("invocation_refused");
+    expect(retry.isErr() && retry.error.code).toBe("invocation_refused");
     expect(launchSandboxFunctionInvocationWorkflow).not.toHaveBeenCalled();
   });
 });

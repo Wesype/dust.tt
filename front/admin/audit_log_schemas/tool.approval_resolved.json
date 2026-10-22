@@ -27,6 +27,8 @@
     "frame_publication_id": "string",
     "invocation_id": "string",
     "invocation_origin": "string",
+    "schedule_id": "string",
+    "scheduled_fire_time": "string",
     "deciding_user_id": "string",
     "deciding_user_email": "string",
     "actor_type": "string"

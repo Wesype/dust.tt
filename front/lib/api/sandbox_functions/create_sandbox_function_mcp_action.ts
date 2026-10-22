@@ -2,6 +2,7 @@ import type {
   ServerSideMCPServerConfigurationType,
   ServerSideMCPToolConfigurationType,
 } from "@app/lib/actions/mcp";
+import type { LightMCPToolConfigurationType } from "@app/lib/actions/mcp";
 import { MCP_TOOL_CONFIGURATION_FIELDS_TO_OMIT } from "@app/lib/actions/mcp";
 import { buildToolConfigurationsFromRawTools } from "@app/lib/actions/mcp_actions";
 import { getAugmentedInputs } from "@app/lib/actions/mcp_execution";
@@ -15,7 +16,10 @@ import {
   getAuditLogContext,
 } from "@app/lib/api/audit/workos_audit";
 import { resolveSandboxFunctionServerConfiguration } from "@app/lib/api/sandbox/company_default_configurations";
-import { buildSandboxFunctionAuditMetadata } from "@app/lib/api/sandbox_functions/audit";
+import {
+  buildSandboxFunctionAuditMetadata,
+  readInvocationContextForAudit,
+} from "@app/lib/api/sandbox_functions/audit";
 import { publishSandboxFunctionBlockingEvent } from "@app/lib/api/sandbox_functions/publish_blocking_event";
 import type { SandboxFunctionMcpActionServerTimingsMs } from "@app/lib/api/sandbox_functions/sandbox_function_mcp_action_server_timings";
 import { roundMs } from "@app/lib/api/sandbox_functions/sandbox_function_mcp_action_server_timings";
@@ -37,11 +41,50 @@ class SandboxFunctionMCPActionError extends Error {
       | "server_view_not_found"
       | "tool_not_available"
       | "invalid_inputs"
-      | "invocation_not_found",
+      | "invocation_not_found"
+      | "approval_required_unattended",
     message: string
   ) {
     super(message);
   }
+}
+
+/**
+ * @cc [owner:smb2268,label:security;product] unattended-tool-call-fails-closed
+ * A tool call from a `scheduled` invocation that would block on human approval MUST be refused
+ * with `approval_required_unattended` and MUST settle the invocation as errored with that code.
+ * No blocked action MAY be created for it: nothing waits for a human on a scheduled run. Calls
+ * that resolve to `ready_allowed_implicitly` (never_ask, or a stored approval of the publisher)
+ * MUST run exactly as for any other origin.
+ */
+async function refuseUnattendedToolCall(
+  auth: Authenticator,
+  {
+    invocation,
+    toolConfiguration,
+    code,
+    message,
+  }: {
+    invocation: SandboxFunctionInvocationResource;
+    toolConfiguration: LightMCPToolConfigurationType;
+    code: "approval_required_unattended";
+    message: string;
+  }
+): Promise<SandboxFunctionMCPActionError> {
+  await invocation.fail({ code, message });
+  logger.info(
+    {
+      workspaceId: auth.getNonNullableWorkspace().sId,
+      invocationId: invocation.sId,
+      sandboxFunctionId: invocation.sandboxFunction.sId,
+      toolName: toolConfiguration.originalName,
+      mcpServerName: toolConfiguration.mcpServerName,
+      stakeLevel: toolConfiguration.permission,
+      code,
+    },
+    "Refused a tool call from a scheduled Frame function invocation"
+  );
+  return new SandboxFunctionMCPActionError(code, message);
 }
 
 // Resolves a tool for execution from a sandbox function invocation. The tool must exist and be
@@ -258,6 +301,17 @@ export async function createSandboxFunctionMCPAction(
       actionStatus = "running";
       break;
     case "blocked_validation_required":
+      if (invocation.origin === "scheduled") {
+        const refusal = await refuseUnattendedToolCall(auth, {
+          invocation,
+          toolConfiguration,
+          code: "approval_required_unattended",
+          message:
+            `Tool "${toolConfiguration.originalName}" needs approval, which a scheduled run ` +
+            "cannot wait for. Lower its stake, or approve it once as the publisher.",
+        });
+        return new Err(refusal);
+      }
       actionStatus = "blocked_validation_required";
       break;
     default:
@@ -310,6 +364,7 @@ export async function createSandboxFunctionMCPAction(
         invocation,
       });
 
+      const invocationContext = await readInvocationContextForAudit(invocation);
       void emitAuditLogEvent({
         auth,
         action: "tool.approval_requested",
@@ -326,7 +381,7 @@ export async function createSandboxFunctionMCPAction(
           mcp_server_name: toolConfiguration.mcpServerName,
           stake_level: toolConfiguration.permission,
           action_id: action.sId,
-          ...buildSandboxFunctionAuditMetadata(invocation),
+          ...buildSandboxFunctionAuditMetadata(invocation, invocationContext),
           initiating_user_id: auth.user()?.sId ?? "unknown",
           initiating_user_email: auth.user()?.email ?? "unknown",
         },

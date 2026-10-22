@@ -171,6 +171,8 @@ export const API_ERROR_MESSAGES: Record<APIErrorType, MessageDescriptor> = {
   frame_tool_authorization_required: msg`This Frame requires authorization before its tools can be used.`,
   frame_manifest_not_movable: msg`A Frame's manifest can't be moved or renamed on its own. Move or rename the Frame's folder instead.`,
   fast_function_called_tools: msg`A fast function can't call tools.`,
+  approval_required_unattended: msg`This tool needs approval, which a scheduled run can't wait for.`,
+  personal_auth_required_unattended: msg`This tool needs a personal connection, which a scheduled run can't set up.`,
   project_metadata_not_found: msg`Project details not found.`,
   agent_suggestion_not_found: msg`Suggestion not found.`,
   batch_suggestion_not_found: msg`Suggestions not found.`,

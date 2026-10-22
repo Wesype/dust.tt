@@ -194,6 +194,8 @@ const API_ERROR_TYPES = [
   "frame_tool_authorization_required",
   "frame_manifest_not_movable",
   "fast_function_called_tools",
+  "approval_required_unattended",
+  "personal_auth_required_unattended",
   // Projects
   "project_metadata_not_found",
   // Suggestions

@@ -727,15 +727,18 @@ export class SandboxFunctionResource extends BaseResource<SandboxFunctionModel> 
       : null;
   }
 
-  async invoke(
+  /**
+   * The refusals `invoke` applies before it creates anything, for callers that must commit to a
+   * run (e.g. claim a scheduled fire) only once it is known to be allowed.
+   */
+  async checkInvocable(
     auth: Authenticator,
-    body: PostSandboxFunctionInvocationRequestBody,
     {
       origin = "delegated",
     }: {
       origin?: NonExternalSandboxFunctionInvocationOrigin;
     } = {}
-  ): Promise<Result<SandboxFunctionInvocationResource, Error>> {
+  ): Promise<Result<undefined, SandboxFunctionInvocationError>> {
     if (auth.getNonNullableWorkspace().id !== this.workspaceId) {
       return new Err(
         new SandboxFunctionInvocationError(
@@ -764,6 +767,23 @@ export class SandboxFunctionResource extends BaseResource<SandboxFunctionModel> 
           "frame_tool_authorization_required"
         )
       );
+    }
+
+    return new Ok(undefined);
+  }
+
+  async invoke(
+    auth: Authenticator,
+    body: PostSandboxFunctionInvocationRequestBody,
+    {
+      origin = "delegated",
+    }: {
+      origin?: NonExternalSandboxFunctionInvocationOrigin;
+    } = {}
+  ): Promise<Result<SandboxFunctionInvocationResource, Error>> {
+    const invocable = await this.checkInvocable(auth, { origin });
+    if (invocable.isErr()) {
+      return invocable;
     }
 
     return SandboxFunctionInvocationResource.createAndStartExecution(auth, {
