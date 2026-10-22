@@ -325,7 +325,7 @@ describe("POST /api/w/:wId/files/:fileId/save-in-project", () => {
       },
       mountFilePath: sourceObjects[0],
     });
-    await frame.markFrameV2AsReadyFromMount(auth);
+    await frame.markAsReadyFromMount(auth);
 
     fileStorageMock.setObject(sourceObjects[0], "{}");
     fileStorageMock.setObject(sourceObjects[1], "ui source");

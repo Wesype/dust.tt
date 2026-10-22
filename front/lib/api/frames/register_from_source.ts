@@ -11,7 +11,11 @@ import {
 } from "@app/types/api/frame_manifest";
 import type { ConversationWithoutContentType } from "@app/types/assistant/conversation";
 import type { DustFileSystemError } from "@app/types/file_system";
-import type { FileUseCase, FileUseCaseMetadata } from "@app/types/files";
+import type {
+  AllSupportedFileContentType,
+  FileUseCase,
+  FileUseCaseMetadata,
+} from "@app/types/files";
 import { frameV2ContentType } from "@app/types/files";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
@@ -22,23 +26,24 @@ function registrationError(message: string) {
   return new Err(new FramePublicationError("invalid_source", message));
 }
 
-async function existingFrameAtMountPath(
+async function existingFileAtMountPath(
   auth: Authenticator,
-  mountFilePath: string
-): Promise<Result<FileResource | null, RegisterFrameV2FromSourceError>> {
+  mountFilePath: string,
+  contentType: AllSupportedFileContentType
+): Promise<Result<FileResource | null, FramePublicationError>> {
   const [existing] = await FileResource.fetchByMountFilePaths(auth, [
     mountFilePath,
   ]);
   if (!existing) {
     return new Ok(null);
   }
-  if (!existing.isFrameV2) {
+  if (existing.contentType !== contentType) {
     return registrationError(
-      "A non-Frame file is already registered at this path."
+      "Another kind of file is already registered at this path."
     );
   }
 
-  await existing.markFrameV2AsReadyFromMount(auth);
+  await existing.markAsReadyFromMount(auth);
   return new Ok(existing);
 }
 
@@ -93,30 +98,70 @@ export async function registerFrameV2FromSourceUsingFileSystem(
     );
   }
 
+  const registered = await registerMountedFile(auth, {
+    dustFs,
+    scopedPath: normalizedPath,
+    contentType: frameV2ContentType,
+    fileName: FRAME_MANIFEST_FILE,
+    fileSize: manifestBuffer.length,
+  });
+  if (registered.isErr()) {
+    return registered;
+  }
+  const { file: frame, created } = registered.value;
+  return new Ok({ frame, created });
+}
+
+/**
+ * Register the FileResource of a file already stored at its mount path in a writable conversation
+ * or Pod, or return the one registered there, marked ready.
+ */
+export async function registerMountedFile(
+  auth: Authenticator,
+  {
+    dustFs,
+    scopedPath,
+    contentType,
+    fileName,
+    fileSize,
+  }: {
+    dustFs: DustFileSystem;
+    scopedPath: string;
+    contentType: AllSupportedFileContentType;
+    fileName: string;
+    fileSize: number;
+  }
+): Promise<
+  Result<{ file: FileResource; created: boolean }, FramePublicationError>
+> {
   const mount = dustFs
     .getMounts()
     .find(
       (candidate) =>
-        normalizedPath.startsWith(`${candidate.scopedPrefix}/`) &&
+        scopedPath.startsWith(`${candidate.scopedPrefix}/`) &&
         candidate.permissions.canWrite
     );
   if (!mount || (mount.kind !== "conversation" && mount.kind !== "pod")) {
     return registrationError(
-      "Frame source does not belong to a writable conversation or Pod mount."
+      "File does not belong to a writable conversation or Pod mount."
     );
   }
 
-  const mountFilePath = dustFs.toMountFilePath(normalizedPath);
+  const mountFilePath = dustFs.toMountFilePath(scopedPath);
   if (!mountFilePath) {
-    return registrationError(`Invalid Frame source path: ${normalizedPath}`);
+    return registrationError(`Invalid file path: ${scopedPath}`);
   }
 
-  const existingResult = await existingFrameAtMountPath(auth, mountFilePath);
+  const existingResult = await existingFileAtMountPath(
+    auth,
+    mountFilePath,
+    contentType
+  );
   if (existingResult.isErr()) {
     return existingResult;
   }
   if (existingResult.value) {
-    return new Ok({ frame: existingResult.value, created: false });
+    return new Ok({ file: existingResult.value, created: false });
   }
 
   const useCase: FileUseCase =
@@ -125,35 +170,39 @@ export async function registerFrameV2FromSourceUsingFileSystem(
     mount.kind === "pod" ? { spaceId: mount.id } : { conversationId: mount.id };
 
   try {
-    const frame = await withTransaction(async (transaction) => {
+    const file = await withTransaction(async (transaction) => {
       const created = await FileResource.makeNew(
         {
           workspaceId: auth.getNonNullableWorkspace().id,
           userId: auth.user()?.id ?? null,
-          contentType: frameV2ContentType,
-          fileName: FRAME_MANIFEST_FILE,
-          fileSize: manifestBuffer.length,
+          contentType,
+          fileName,
+          fileSize,
           useCase,
           useCaseMetadata,
           mountFilePath,
         },
         { transaction }
       );
-      await created.markFrameV2AsReadyFromMount(auth, { transaction });
+      await created.markAsReadyFromMount(auth, { transaction });
       return created;
     });
-    return new Ok({ frame, created: true });
+    return new Ok({ file, created: true });
   } catch (error) {
     if (!(error instanceof UniqueConstraintError)) {
       throw error;
     }
 
-    const concurrent = await existingFrameAtMountPath(auth, mountFilePath);
+    const concurrent = await existingFileAtMountPath(
+      auth,
+      mountFilePath,
+      contentType
+    );
     if (concurrent.isErr()) {
       return concurrent;
     }
-    assert(concurrent.value, "Frame not found after mount path conflict");
-    return new Ok({ frame: concurrent.value, created: false });
+    assert(concurrent.value, "File not found after mount path conflict");
+    return new Ok({ file: concurrent.value, created: false });
   }
 }
 

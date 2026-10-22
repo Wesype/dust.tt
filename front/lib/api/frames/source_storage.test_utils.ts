@@ -60,7 +60,7 @@ export async function setupFrameSourceStorageTest(
     },
     mountFilePath: sourceObjects[0],
   });
-  await frame.markFrameV2AsReadyFromMount(auth);
+  await frame.markAsReadyFromMount(auth);
   fileStorageMock.setObject(sourceObjects[0], frameManifest);
   fileStorageMock.setObject(sourceObjects[1], "ui source");
   fileStorageMock.setFileExists(

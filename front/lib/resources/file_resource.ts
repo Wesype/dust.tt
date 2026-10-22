@@ -1009,17 +1009,16 @@ export class FileResource extends BaseResource<FileModel> {
   }
 
   /**
-   * Mark a Frames v2 manifest that already exists at its mount path as ready.
-   * Unlike markAsReady(), this must not copy from the canonical upload path.
+   * Mark a file that already exists at its mount path as ready, creating its share row when it is
+   * shareable. Unlike markAsReady(), this must not copy from the canonical upload path.
    */
-  async markFrameV2AsReadyFromMount(
+  async markAsReadyFromMount(
     auth: Authenticator,
     { transaction }: { transaction?: Transaction } = {}
   ) {
-    assert(this.isFrameV2, "Only Frames v2 can be adopted from a mount path");
-    assert(this.mountFilePath, "A mounted Frames v2 manifest requires a path");
+    assert(this.mountFilePath, "A file adopted from a mount path requires one");
 
-    await this.ensureShareableFrame(auth, { transaction });
+    await this.ensureShareable(auth, { transaction });
 
     if (this.status === "ready") {
       return;
@@ -1067,7 +1066,7 @@ export class FileResource extends BaseResource<FileModel> {
       },
       transaction
     );
-    await this.markFrameV2AsReadyFromMount(auth, { transaction });
+    await this.markAsReadyFromMount(auth, { transaction });
 
     return legacyFields;
   }

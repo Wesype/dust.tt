@@ -283,7 +283,7 @@ describe("POST /api/v1/w/[wId]/sandbox/frames", () => {
   it("returns the existing Frame share link without changing use rights", async () => {
     const context = await setup();
     assert(context.frame);
-    await context.frame.markFrameV2AsReadyFromMount(context.auth);
+    await context.frame.markAsReadyFromMount(context.auth);
     await context.frame.setShareScope(context.auth, "emails_only");
     const before = await context.frame.getShareInfo();
     assert(before);
@@ -375,7 +375,7 @@ describe("POST /api/v1/w/[wId]/sandbox/frames", () => {
         podId: pod.sId,
       })}Status/${FRAME_MANIFEST_FILE}`,
     });
-    await frame.markFrameV2AsReadyFromMount(context.auth);
+    await frame.markAsReadyFromMount(context.auth);
 
     const response = await requestFrameShare(
       context.workspace.sId,

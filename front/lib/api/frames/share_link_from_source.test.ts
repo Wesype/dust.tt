@@ -57,7 +57,7 @@ async function setupLegacy({
 describe("getFrameShareLinkFromSource", () => {
   it("returns existing share information without changing it", async () => {
     const context = await setup();
-    await context.frame.markFrameV2AsReadyFromMount(context.auth);
+    await context.frame.markAsReadyFromMount(context.auth);
     await context.frame.setShareScope(context.auth, "emails_only");
     const before = await context.frame.getShareInfo();
     assert(before);

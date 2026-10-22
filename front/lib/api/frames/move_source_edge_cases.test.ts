@@ -73,7 +73,7 @@ describe("moveFrameV2Source edge cases", () => {
       useCaseMetadata: { conversationId: c.conversation.sId },
       mountFilePath: nestedManifestPath,
     });
-    await nestedFrame.markFrameV2AsReadyFromMount(c.auth);
+    await nestedFrame.markAsReadyFromMount(c.auth);
     c.listedObjects.push(nestedManifestPath);
     fileStorageMock.setObject(nestedManifestPath, frameManifest);
 
