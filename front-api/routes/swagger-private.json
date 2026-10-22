@@ -7830,6 +7830,7 @@
                         "created",
                         "succeeded",
                         "failed",
+                        "blocked",
                         "cancelled",
                         "gracefully_stopped"
                       ]
@@ -12128,6 +12129,7 @@
               "created",
               "succeeded",
               "failed",
+              "blocked",
               "cancelled"
             ]
           },
@@ -12314,6 +12316,7 @@
               "created",
               "succeeded",
               "failed",
+              "blocked",
               "cancelled"
             ]
           },

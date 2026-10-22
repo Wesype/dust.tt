@@ -1321,7 +1321,7 @@ export type UserMessageWithRankType = z.infer<
 export type AgentActionPublicType = z.infer<typeof AgentActionTypeSchema>;
 
 const AgentMessageStatusSchema = FlexibleEnumSchema<
-  "created" | "succeeded" | "failed" | "cancelled"
+  "created" | "succeeded" | "failed" | "blocked" | "cancelled"
 >();
 
 const AgentMessageTypeSchema = z.object({

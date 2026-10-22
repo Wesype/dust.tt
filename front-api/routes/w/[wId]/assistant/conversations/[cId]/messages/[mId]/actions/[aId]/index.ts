@@ -61,7 +61,7 @@ const app = workspaceApp();
  *                   $ref: '#/components/schemas/PrivateAgentMCPAction'
  *                 messageStatus:
  *                   type: string
- *                   enum: [created, succeeded, failed, cancelled, gracefully_stopped]
+ *                   enum: [created, succeeded, failed, blocked, cancelled, gracefully_stopped]
  *       400:
  *         description: Invalid request (missing parameters or message is not an agent message)
  *       401:

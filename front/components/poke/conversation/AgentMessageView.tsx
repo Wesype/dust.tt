@@ -32,6 +32,7 @@ const AGENT_STATUS: Record<
   created: { label: "generating", color: "warning" },
   succeeded: { label: "succeeded", color: "success" },
   failed: { label: "failed", color: "warning" },
+  blocked: { label: "blocked", color: "warning" },
   cancelled: { label: "cancelled", color: "primary" },
   interrupted: { label: "cancelled", color: "primary" },
   gracefully_stopped: {

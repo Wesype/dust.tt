@@ -22,6 +22,14 @@ msgid "Errored after {duration}"
 msgstr ""
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked after {duration}, without tools."
+msgstr ""
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked after {duration}"
+msgstr ""
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Canceled after {duration}, without tools."
 msgstr "Cancelled after {duration}, without tools."
 
@@ -35,6 +43,14 @@ msgstr ""
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Completed in {duration}"
+msgstr ""
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked, without tools."
+msgstr ""
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked"
 msgstr ""
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
@@ -54,16 +70,21 @@ msgid "Completed"
 msgstr ""
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
-msgid "No tools used."
-msgstr ""
-
-#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
-msgid "Writing…"
+msgctxt "activity status"
+msgid "Blocked"
 msgstr ""
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgctxt "activity status"
 msgid "Done"
+msgstr ""
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "No tools used."
+msgstr ""
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Writing…"
 msgstr ""
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx

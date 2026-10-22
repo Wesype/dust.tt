@@ -189,4 +189,57 @@ describe("InlineActivitySteps", () => {
     expect(screen.getAllByTestId("thinking-step")).toHaveLength(1);
     expect(screen.getByText("Earlier reasoning")).toBeInTheDocument();
   });
+
+  it("labels a blocked message without tools as blocked", () => {
+    render(
+      <InlineActivitySteps
+        agentMessage={{
+          ...mockAgentMessage,
+          status: "blocked",
+          content: null,
+          completionDurationMs: 2_000,
+        }}
+        lastAgentStateClassification="done"
+        completedSteps={[]}
+        pendingToolCalls={[]}
+        owner={mockOwner}
+        conversationId="conv-1"
+        isLastMessage
+      />
+    );
+
+    expect(
+      screen.getByText(/^Blocked after .*, without tools\.$/)
+    ).toBeVisible();
+    expect(screen.queryByText(/Completed/)).toBeNull();
+  });
+
+  it("labels the header and terminal row of a blocked message with earlier steps as blocked", () => {
+    render(
+      <InlineActivitySteps
+        agentMessage={{
+          ...mockAgentMessage,
+          status: "blocked",
+          content: null,
+        }}
+        lastAgentStateClassification="done"
+        completedSteps={[
+          {
+            type: "thinking",
+            content: "Earlier reasoning",
+            id: "thinking-1",
+          },
+        ]}
+        pendingToolCalls={[]}
+        owner={mockOwner}
+        conversationId="conv-1"
+        isLastMessage
+      />
+    );
+
+    // The collapsible header and the terminal row.
+    expect(screen.getAllByText("Blocked")).toHaveLength(2);
+    expect(screen.queryByText("Completed")).toBeNull();
+    expect(screen.queryByText("Done")).toBeNull();
+  });
 });

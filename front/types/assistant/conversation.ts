@@ -298,6 +298,7 @@ export const AGENT_MESSAGE_STATUSES = [
   "created",
   "succeeded",
   "failed",
+  "blocked",
   "cancelled",
   "interrupted",
   "gracefully_stopped",
@@ -311,6 +312,7 @@ export const AGENT_MESSAGE_STATUSES_TO_TRACK: AgentMessageStatus[] = [
   // Message can be in "created" status when we stop the loop to ask for user permission for instance.
   "created",
   "succeeded",
+  "blocked",
   "cancelled",
   "interrupted",
   "gracefully_stopped",
@@ -324,6 +326,7 @@ export const AGENT_MESSAGE_STATUSES_TO_TRACK: AgentMessageStatus[] = [
 // already stopped (and that steering, if any, has since superseded via a newly promoted message).
 export const UNRESUMABLE_AGENT_MESSAGE_STATUSES: AgentMessageStatus[] = [
   "failed",
+  "blocked",
   "cancelled",
   "interrupted",
   "gracefully_stopped",
@@ -335,6 +338,7 @@ export function isTerminalAgentMessageStatus(
   switch (status) {
     case "succeeded":
     case "failed":
+    case "blocked":
     case "cancelled":
     case "interrupted":
     case "gracefully_stopped":

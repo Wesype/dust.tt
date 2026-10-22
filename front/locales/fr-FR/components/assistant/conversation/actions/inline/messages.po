@@ -22,6 +22,14 @@ msgid "Errored after {duration}"
 msgstr "Erreur après {duration}"
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked after {duration}, without tools."
+msgstr "Bloqué après {duration}, sans outils."
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked after {duration}"
+msgstr "Bloqué après {duration}"
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Canceled after {duration}, without tools."
 msgstr "Annulé après {duration}, sans outils."
 
@@ -36,6 +44,14 @@ msgstr "Terminé en {duration}, sans outils."
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Completed in {duration}"
 msgstr "Terminé en {duration}"
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked, without tools."
+msgstr "Bloqué, sans outils."
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked"
+msgstr "Bloqué"
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Canceled, without tools."
@@ -54,17 +70,22 @@ msgid "Completed"
 msgstr "Terminé"
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgctxt "activity status"
+msgid "Blocked"
+msgstr "Bloqué"
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgctxt "activity status"
+msgid "Done"
+msgstr "Terminé"
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "No tools used."
 msgstr "Aucun outil utilisé."
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Writing…"
 msgstr "Rédaction…"
-
-#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
-msgctxt "activity status"
-msgid "Done"
-msgstr "Terminé"
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Thinking…"

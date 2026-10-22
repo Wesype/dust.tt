@@ -854,12 +854,14 @@ export function AgentMessage({
   const shouldShowMessageActions =
     !isDeleted &&
     agentMessage.status !== "created" &&
-    agentMessage.status !== "failed";
+    agentMessage.status !== "failed" &&
+    agentMessage.status !== "blocked";
 
   const shouldShowRetry =
     !isDeleted &&
     agentMessage.status !== "created" &&
     agentMessage.status !== "failed" &&
+    agentMessage.status !== "blocked" &&
     !shouldStream &&
     !isAgentMessageHandingOver &&
     !isProjectArchived;
@@ -869,6 +871,7 @@ export function AgentMessage({
     !isOnboardingConversation &&
     agentMessage.status !== "created" &&
     agentMessage.status !== "failed" &&
+    agentMessage.status !== "blocked" &&
     agentMessage.configuration.status !== "draft" &&
     (!isGlobalAgent ||
       (isGlobalAgentId(agentMessage.configuration.sId) &&
@@ -1520,7 +1523,9 @@ function AgentMessageContent({
 
   // The answer only renders once the agent is done, so it is not parsed while streaming.
   const answer =
-    agentMessage.content && agentMessage.streaming.agentState === "done"
+    agentMessage.status !== "blocked" &&
+    agentMessage.content &&
+    agentMessage.streaming.agentState === "done"
       ? extractSuggestionPile(
           sanitizeVisualizationContent(agentMessage.content)
         )
@@ -1735,7 +1740,8 @@ function AgentMessageContent({
             </div>
           </div>
         )}
-        {agentMessage.status === "failed" && (
+        {(agentMessage.status === "failed" ||
+          agentMessage.status === "blocked") && (
           <ErrorMessage
             owner={owner}
             error={

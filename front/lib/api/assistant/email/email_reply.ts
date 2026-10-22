@@ -199,7 +199,7 @@ export async function sendEmailReplyOnCompletion(
     return;
   }
 
-  if (agentMessage.status === "failed") {
+  if (agentMessage.status === "failed" || agentMessage.status === "blocked") {
     await sendEmailReplyOnError(
       auth,
       agentLoopArgs,

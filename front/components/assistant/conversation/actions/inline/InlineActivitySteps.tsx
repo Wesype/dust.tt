@@ -21,6 +21,7 @@ import { AnimatedText, Check, XCircle } from "@dust-tt/sparkle";
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
+import type { ComponentType } from "react";
 
 interface InlineActivityStepsProps {
   agentMessage: LightAgentMessageType | LightAgentMessageWithActionsType;
@@ -44,6 +45,10 @@ function getCompletionLabel(
       return withoutTools
         ? msg`Errored after ${duration}, without tools.`
         : msg`Errored after ${duration}`;
+    case "blocked":
+      return withoutTools
+        ? msg`Blocked after ${duration}, without tools.`
+        : msg`Blocked after ${duration}`;
     case "cancelled":
       return withoutTools
         ? msg`Canceled after ${duration}, without tools.`
@@ -60,10 +65,32 @@ function getTerminalLabel(
   withoutTools: boolean
 ): MessageDescriptor {
   switch (status) {
+    case "blocked":
+      return withoutTools ? msg`Blocked, without tools.` : msg`Blocked`;
     case "cancelled":
       return withoutTools ? msg`Canceled, without tools.` : msg`Canceled`;
     default:
       return withoutTools ? msg`Completed, without tools.` : msg`Completed`;
+  }
+}
+
+function getTerminalRowContent(status: LightAgentMessageType["status"]): {
+  icon: ComponentType<{ className?: string }>;
+  label: MessageDescriptor;
+} {
+  switch (status) {
+    case "blocked":
+      return {
+        icon: XCircle,
+        label: msg({ message: "Blocked", context: "activity status" }),
+      };
+    case "cancelled":
+      return { icon: XCircle, label: msg`Canceled` };
+    default:
+      return {
+        icon: Check,
+        label: msg({ message: "Done", context: "activity status" }),
+      };
   }
 }
 
@@ -94,6 +121,7 @@ export function InlineActivitySteps({
   const isDone =
     lastAgentStateClassification === "done" ||
     agentMessage.status === "failed" ||
+    agentMessage.status === "blocked" ||
     agentMessage.status === "cancelled";
 
   const openBreakdownPanel = (actionId?: string) => {
@@ -219,18 +247,15 @@ export function InlineActivitySteps({
       activePendingToolCalls.length === 0 &&
       completedSteps.length > 0);
 
-  const terminalRow =
+  const terminalRowContent =
     isDone &&
     completedSteps.length > 0 &&
     agentMessage.status !== "gracefully_stopped"
-      ? {
-          icon: agentMessage.status === "cancelled" ? XCircle : Check,
-          label:
-            agentMessage.status === "cancelled"
-              ? t`Canceled`
-              : t({ message: "Done", context: "activity status" }),
-        }
-      : undefined;
+      ? getTerminalRowContent(agentMessage.status)
+      : null;
+  const terminalRow = terminalRowContent
+    ? { icon: terminalRowContent.icon, label: t(terminalRowContent.label) }
+    : undefined;
 
   const extraBelowCollapse =
     !isDone && agentMessage.content ? (

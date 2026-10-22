@@ -504,7 +504,7 @@
  *           description: If handover, the agent message that summoned this agent
  *         status:
  *           type: string
- *           enum: [created, succeeded, failed, cancelled]
+ *           enum: [created, succeeded, failed, blocked, cancelled]
  *         content:
  *           type: string
  *           nullable: true
@@ -624,7 +624,7 @@
  *           nullable: true
  *         status:
  *           type: string
- *           enum: [created, succeeded, failed, cancelled]
+ *           enum: [created, succeeded, failed, blocked, cancelled]
  *         content:
  *           type: string
  *           nullable: true

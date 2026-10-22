@@ -22,6 +22,14 @@ msgid "Errored after {duration}"
 msgstr "Fehler nach {duration}"
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked after {duration}, without tools."
+msgstr "Blockiert nach {duration}, ohne Tools."
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked after {duration}"
+msgstr "Blockiert nach {duration}"
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Canceled after {duration}, without tools."
 msgstr "Abgebrochen nach {duration}, ohne Tools."
 
@@ -36,6 +44,14 @@ msgstr "Abgeschlossen in {duration}, ohne Tools."
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Completed in {duration}"
 msgstr "Abgeschlossen in {duration}"
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked, without tools."
+msgstr "Blockiert, ohne Tools."
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked"
+msgstr "Blockiert"
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Canceled, without tools."
@@ -54,17 +70,22 @@ msgid "Completed"
 msgstr "Abgeschlossen"
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgctxt "activity status"
+msgid "Blocked"
+msgstr "Blockiert"
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgctxt "activity status"
+msgid "Done"
+msgstr "Fertig"
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "No tools used."
 msgstr "Keine Tools verwendet."
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Writing…"
 msgstr "Schreibt…"
-
-#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
-msgctxt "activity status"
-msgid "Done"
-msgstr "Fertig"
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Thinking…"

@@ -22,6 +22,14 @@ msgid "Errored after {duration}"
 msgstr "Errored after {duration}"
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked after {duration}, without tools."
+msgstr "Blocked after {duration}, without tools."
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked after {duration}"
+msgstr "Blocked after {duration}"
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Canceled after {duration}, without tools."
 msgstr "Canceled after {duration}, without tools."
 
@@ -36,6 +44,14 @@ msgstr "Completed in {duration}, without tools."
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Completed in {duration}"
 msgstr "Completed in {duration}"
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked, without tools."
+msgstr "Blocked, without tools."
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgid "Blocked"
+msgstr "Blocked"
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Canceled, without tools."
@@ -54,17 +70,22 @@ msgid "Completed"
 msgstr "Completed"
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgctxt "activity status"
+msgid "Blocked"
+msgstr "Blocked"
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
+msgctxt "activity status"
+msgid "Done"
+msgstr "Done"
+
+#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "No tools used."
 msgstr "No tools used."
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Writing…"
 msgstr "Writing…"
-
-#: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
-msgctxt "activity status"
-msgid "Done"
-msgstr "Done"
 
 #: front/components/assistant/conversation/actions/inline/InlineActivitySteps.tsx
 msgid "Thinking…"
