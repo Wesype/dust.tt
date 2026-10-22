@@ -26,6 +26,27 @@ msgid "Error loading the Frame source."
 msgstr "Error loading the Frame source."
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameDraftControls.tsx
+msgid "Discard this draft?"
+msgstr "Discard this draft?"
+
+#: front/components/assistant/conversation/interactive_content/frame/FrameDraftControls.tsx
+msgid "Your changes since the live version will be lost. This can't be undone."
+msgstr "Your changes since the live version will be lost. This can't be undone."
+
+#: front/components/assistant/conversation/interactive_content/frame/FrameDraftControls.tsx
+#: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
+msgid "Discard"
+msgstr "Discard"
+
+#: front/components/assistant/conversation/interactive_content/frame/FrameDraftControls.tsx
+msgid "Discard draft"
+msgstr "Discard draft"
+
+#: front/components/assistant/conversation/interactive_content/frame/FrameDraftControls.tsx
+msgid "Go back to the live version and leave draft mode"
+msgstr "Go back to the live version and leave draft mode"
+
+#: front/components/assistant/conversation/interactive_content/frame/FrameDraftControls.tsx
 msgid "Validate draft"
 msgstr "Validate draft"
 
@@ -415,10 +436,6 @@ msgstr "Discard unsaved edits?"
 #: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
 msgid "You have unsaved text edits. Leaving Edit will discard them."
 msgstr "You have unsaved text edits. Leaving Edit will discard them."
-
-#: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
-msgid "Discard"
-msgstr "Discard"
 
 #: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
 msgid "Cancel"

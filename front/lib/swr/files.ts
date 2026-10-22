@@ -253,7 +253,7 @@ export function useFileContentByUrl({
 }) {
   const isDisabled = disabled || !url;
 
-  const { data, error } = useSWRWithDefaults<
+  const { data, error, mutate } = useSWRWithDefaults<
     string | null,
     FileContentByUrlData
   >(
@@ -285,6 +285,7 @@ export function useFileContentByUrl({
     isNotFound,
     isFileContentLoading: !error && data === undefined && !isDisabled,
     fileContentError: error ? normalizeError(error) : null,
+    mutateFileContent: mutate,
   };
 }
 

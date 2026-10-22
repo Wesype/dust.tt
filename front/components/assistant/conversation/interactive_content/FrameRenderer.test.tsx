@@ -55,6 +55,7 @@ const mocks = vi.hoisted(() => ({
   ),
   hasFrameFunctions: false,
   canWriteFrameSource: true,
+  discardDraft: vi.fn(async (_draftPublicationId: string) => true),
   draftPublicationId: null as string | null,
   draftMode: false,
   draftsEnabled: false,
@@ -64,6 +65,7 @@ const mocks = vi.hoisted(() => ({
   /** Incremented on every iframe mount (React key change). */
   iframeMounts: 0,
   mutateFileContent: vi.fn(),
+  mutateFrameSource: vi.fn(),
   useFileContent: vi.fn(),
   useFramePermissions: vi.fn(),
 }));
@@ -172,6 +174,7 @@ vi.mock("@app/lib/swr/files", () => ({
     isNotFound: false,
     isFileContentLoading: false,
     fileContentError: null,
+    mutateFileContent: mocks.mutateFrameSource,
   }),
   useFileMetadata: () => ({
     fileMetadata: {
@@ -197,6 +200,9 @@ vi.mock("@app/hooks/useMakeFrameDraftLive", () => ({
 }));
 vi.mock("@app/hooks/useEnterFrameDraftMode", () => ({
   useEnterFrameDraftMode: () => mocks.enterDraftMode,
+}));
+vi.mock("@app/hooks/useDiscardFrameDraft", () => ({
+  useDiscardFrameDraft: () => mocks.discardDraft,
 }));
 
 vi.mock("@app/lib/swr/frames", () => ({
@@ -458,6 +464,58 @@ describe("FrameRenderer", () => {
       expect(
         screen.queryByRole("button", { name: "More actions" })
       ).not.toBeInTheDocument();
+    });
+
+    it("refetches the content and remounts the iframe after a discard", async () => {
+      mocks.draftMode = true;
+      mocks.draftPublicationId = "publication-draft";
+      mocks.confirm.mockResolvedValue(true);
+
+      renderV2();
+      expect(mocks.iframeMounts).toBe(1);
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+      });
+
+      await waitFor(() => expect(mocks.iframeMounts).toBe(2));
+      expect(mocks.discardDraft).toHaveBeenCalledWith("publication-draft");
+      expect(mocks.mutateFileContent).toHaveBeenCalled();
+      expect(mocks.mutateFrameSource).toHaveBeenCalled();
+      expect(mocks.mutateFramePermissions).toHaveBeenCalled();
+    });
+
+    it("shows the panel's loading state until every refresh after a discard is done", async () => {
+      mocks.draftMode = true;
+      mocks.draftPublicationId = "publication-draft";
+      mocks.confirm.mockResolvedValue(true);
+      let finishContentRefresh = () => {};
+      mocks.mutateFileContent.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishContentRefresh = resolve;
+          })
+      );
+      const panelSpinners = () =>
+        screen
+          .queryAllByRole("status", { name: "Loading" })
+          .filter((element) => !element.closest("button"));
+
+      renderV2();
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+      });
+
+      await waitFor(() => expect(mocks.mutateFileContent).toHaveBeenCalled());
+      expect(panelSpinners().length).toBeGreaterThan(0);
+      expect(mocks.iframeMounts).toBe(1);
+
+      await act(async () => {
+        finishContentRefresh();
+      });
+
+      await waitFor(() => expect(panelSpinners()).toHaveLength(0));
+      expect(mocks.iframeMounts).toBe(2);
     });
 
     it("offers the more menu to an editor when drafts are enabled", () => {

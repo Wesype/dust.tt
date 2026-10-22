@@ -97,6 +97,18 @@ msgstr "Error deleting conversation."
 msgid "Message has been deleted successfully."
 msgstr "Message has been deleted successfully."
 
+#: front/hooks/useDiscardFrameDraft.ts
+msgid "Could not discard the draft"
+msgstr "Could not discard the draft"
+
+#: front/hooks/useDiscardFrameDraft.ts
+msgid "Draft discarded"
+msgstr "Draft discarded"
+
+#: front/hooks/useDiscardFrameDraft.ts
+msgid "The Frame is back to its live version."
+msgstr "The Frame is back to its live version."
+
 #: front/hooks/useDiscoveryHomepageOptIn.ts
 msgid "Could not switch homepage"
 msgstr "Could not switch homepage"

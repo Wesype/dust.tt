@@ -97,6 +97,18 @@ msgstr "Erreur lors de la suppression de la conversation."
 msgid "Message has been deleted successfully."
 msgstr "Le message a bien été supprimé."
 
+#: front/hooks/useDiscardFrameDraft.ts
+msgid "Could not discard the draft"
+msgstr "Impossible d’abandonner le brouillon."
+
+#: front/hooks/useDiscardFrameDraft.ts
+msgid "Draft discarded"
+msgstr "Le brouillon a été abandonné."
+
+#: front/hooks/useDiscardFrameDraft.ts
+msgid "The Frame is back to its live version."
+msgstr "Le Frame est revenu à sa version en ligne."
+
 #: front/hooks/useDiscoveryHomepageOptIn.ts
 msgid "Could not switch homepage"
 msgstr "Impossible de changer de page d'accueil"

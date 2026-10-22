@@ -167,6 +167,7 @@ export function FrameRenderer({
     isNotFound: isFrameSourceNotFound,
     isFileContentLoading: isFrameSourceLoading,
     fileContentError: frameSourceError,
+    mutateFileContent: mutateFrameSource,
   } = useFileContentByUrl({
     url: frameSourceUrl,
     disabled: renderMode !== "v2" || !showCode,
@@ -256,6 +257,23 @@ export function FrameRenderer({
       editSession.remount();
     }
     setIsLoading(false);
+  };
+
+  // Discard moves the latest publication back to live without a new contentHash: refetch what the
+  // panel shows, then remount the iframe on the live bundle. The panel shows its loading state
+  // until every refresh is done, so the old draft never shows as the idle live Frame.
+  const handleDraftDiscarded = async () => {
+    setIsLoading(true);
+    try {
+      await Promise.all([
+        mutateFramePermissions(),
+        mutateFileContent(),
+        mutateFrameSource(),
+      ]);
+      editSession.remount();
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const onRevert = () => {
@@ -431,6 +449,7 @@ export function FrameRenderer({
                   draftPublicationId={draftPublicationId}
                   livePublicationId={livePublicationId}
                   hideLabels={isMobile}
+                  onDraftDiscarded={handleDraftDiscarded}
                   onDraftModeChanged={() => mutateFramePermissions()}
                 />
               )}

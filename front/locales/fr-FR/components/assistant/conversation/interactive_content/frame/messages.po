@@ -26,6 +26,27 @@ msgid "Error loading the Frame source."
 msgstr "Impossible de charger le code source du Frame."
 
 #: front/components/assistant/conversation/interactive_content/frame/FrameDraftControls.tsx
+msgid "Discard this draft?"
+msgstr "Abandonner ce brouillon ?"
+
+#: front/components/assistant/conversation/interactive_content/frame/FrameDraftControls.tsx
+msgid "Your changes since the live version will be lost. This can't be undone."
+msgstr "Vos modifications depuis la version en ligne seront perdues. Cette action est irréversible."
+
+#: front/components/assistant/conversation/interactive_content/frame/FrameDraftControls.tsx
+#: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
+msgid "Discard"
+msgstr "Abandonner"
+
+#: front/components/assistant/conversation/interactive_content/frame/FrameDraftControls.tsx
+msgid "Discard draft"
+msgstr "Abandonner le brouillon"
+
+#: front/components/assistant/conversation/interactive_content/frame/FrameDraftControls.tsx
+msgid "Go back to the live version and leave draft mode"
+msgstr "Revenir à la version en ligne et quitter le mode brouillon"
+
+#: front/components/assistant/conversation/interactive_content/frame/FrameDraftControls.tsx
 msgid "Validate draft"
 msgstr "Valider le brouillon"
 
@@ -415,10 +436,6 @@ msgstr "Abandonner les modifications non enregistrées ?"
 #: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
 msgid "You have unsaved text edits. Leaving Edit will discard them."
 msgstr "Vous avez des modifications de texte non enregistrées. Quitter le mode Modifier les supprimera."
-
-#: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
-msgid "Discard"
-msgstr "Abandonner"
 
 #: front/components/assistant/conversation/interactive_content/frame/useFrameEditSession.ts
 msgid "Cancel"

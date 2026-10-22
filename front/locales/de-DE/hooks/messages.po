@@ -97,6 +97,18 @@ msgstr "Fehler beim Löschen der Unterhaltung."
 msgid "Message has been deleted successfully."
 msgstr "Die Nachricht wurde gelöscht."
 
+#: front/hooks/useDiscardFrameDraft.ts
+msgid "Could not discard the draft"
+msgstr "Der Entwurf konnte nicht verworfen werden."
+
+#: front/hooks/useDiscardFrameDraft.ts
+msgid "Draft discarded"
+msgstr "Der Entwurf wurde verworfen."
+
+#: front/hooks/useDiscardFrameDraft.ts
+msgid "The Frame is back to its live version."
+msgstr "Das Frame ist wieder auf seiner Live-Version."
+
 #: front/hooks/useDiscoveryHomepageOptIn.ts
 msgid "Could not switch homepage"
 msgstr "Startseite konnte nicht gewechselt werden"
