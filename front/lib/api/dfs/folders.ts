@@ -1,3 +1,4 @@
+import { getConversationParticipantGrant } from "@app/lib/api/dfs/conversation_grants";
 import {
   createGroupSubject,
   createUserSubject,
@@ -289,11 +290,6 @@ export async function getOrCreateConversationFolder(
     }
   }
   return new Ok(stored);
-}
-
-/** The grant of a participant of a conversation outside pods, see `conversation-folder-grants`. */
-function getConversationParticipantGrant(user: UserResource): DfsGrant {
-  return { type: "allow", subject: createUserSubject(user), mode: 0o6 };
 }
 
 /** The pod `conversation` is in, if any. Its folder's access is then driven by the pod's. */
