@@ -22,10 +22,7 @@ use crate::{
         resources::{
             directory::DirectoryResource,
             file::FileResource,
-            object::{
-                self, ObjectResource,
-                locks::{LockTokens, validate_lock_id},
-            },
+            object::{self, ObjectResource, locks::LockTokens},
             session::SessionResource,
             tenant::TenantResource,
         },
@@ -427,9 +424,6 @@ impl Dfs for API {
     async fn lock(&self, request: Request<LockRequest>) -> Result<Response<LockState>, Status> {
         let session = self.require_session(&request).await?;
         let request = request.into_inner();
-        if let Some(lock_id) = &request.lock_id {
-            validate_lock_id(lock_id)?;
-        }
         let (lock, _) = fdb::with_idempotent_transaction(|tx| {
             let session = session.as_ref();
             let request = &request;

@@ -1,29 +1,19 @@
+use super::{allow, create_directory_child};
+use crate::{MASTER_KEY, error_code, serve, with_authorization};
 use anyhow::{Context, Result};
-use dfs_api::{
-    clock,
-    storage::{
-        fdb,
-        resources::{
-            keys::{namespace_subspace, tenant_subspace},
-            object::ObjectResource,
-            tenant::TenantResource,
-        },
-    },
+use dfs_api::storage::{
+    fdb,
+    resources::{object::ObjectResource, tenant::TenantResource},
 };
 use dfs_protocol::{
     ObjectId,
     rpc::{
         self, ApplyRequest, CreateSessionRequest, CreateTenantRequest, ErrorCode, LockRequest,
-        ObjectKind, ObjectLock, UpdateOperation, WriteOperation, dfs_client::DfsClient,
-        operation::Operation,
+        ObjectKind, ObjectLock, UpdateOperation, dfs_client::DfsClient, operation::Operation,
     },
 };
-use foundationdb::tuple::pack;
 
-use super::{allow, create_directory_child};
-use crate::{MASTER_KEY, error_code, serve, with_authorization};
-
-pub(crate) async fn locks_enforce_ownership_grace_and_atomic_invalidation() -> Result<()> {
+pub(crate) async fn locks_enforce_ownership_release_and_tenant_scope() -> Result<()> {
     let mut client = DfsClient::new(serve().await?);
     let tenant = client
         .create_tenant(with_authorization(
@@ -182,112 +172,61 @@ pub(crate) async fn locks_enforce_ownership_grace_and_atomic_invalidation() -> R
         .context("expected malformed rejection")?;
     assert_eq!(error_code(&malformed)?, ErrorCode::InvalidInput);
 
-    let key =
-        tenant_subspace(&tenant.tenant_id).pack(&("object", file.as_bytes().as_slice(), "lock"));
-    let expiry_key = |expires_at_ms: u64| {
-        namespace_subspace().pack(&(
-            "lock-expiry",
-            expires_at_ms.to_be_bytes().as_slice(),
-            tenant.tenant_id.as_str(),
-            file.as_bytes().as_slice(),
-        ))
-    };
-    let tx = fdb::database()?.create_trx()?;
-    let grace_expiry_ms = clock::now_ms()?;
-    tx.clear(&expiry_key(refreshed.expires_at));
-    tx.set(&key, &pack(&(lock.lock_id.as_slice(), grace_expiry_ms)));
-    tx.set(&expiry_key(grace_expiry_ms), &[]);
-    tx.commit().await?;
-    let blocked = client
-        .apply(with_authorization(
-            ApplyRequest {
-                operations: vec![update.clone()],
-                locks: vec![],
+    let other_tenant = client
+        .create_tenant(with_authorization(
+            CreateTenantRequest {
+                tenant_id: ObjectId::new_v7().to_string(),
+                root_grants: vec![allow("writer", 0o6)],
             },
-            &authorization,
+            &format!("Bearer {MASTER_KEY}"),
         )?)
         .await?
         .into_inner();
-    assert_eq!(
-        blocked.results[0]
-            .error
-            .as_ref()
-            .context("expected grace")?
-            .code(),
-        ErrorCode::WouldBlock
-    );
-    let lost = client
-        .apply(with_authorization(
-            ApplyRequest {
-                operations: vec![update.clone()],
-                locks: vec![proof.clone()],
+    let other_session = client
+        .create_session(with_authorization(
+            CreateSessionRequest {
+                subjects: vec!["writer".into()],
             },
-            &authorization,
+            &format!("Bearer {}", other_tenant.tenant_key),
         )?)
         .await?
         .into_inner();
-    assert_eq!(
-        lost.results[0]
-            .error
-            .as_ref()
-            .context("expected expired token")?
-            .code(),
-        ErrorCode::LockLost
-    );
-
-    let tx = fdb::database()?.create_trx()?;
-    let expired_ms = clock::now_ms()? - 10_000;
-    tx.clear(&expiry_key(grace_expiry_ms));
-    tx.set(&key, &pack(&(lock.lock_id.as_slice(), expired_ms)));
-    tx.set(&expiry_key(expired_ms), &[]);
-    tx.commit().await?;
-    let invalid = rpc::Operation {
-        operation: Some(Operation::Write(WriteOperation {
-            object_id: file,
-            offset: u64::MAX,
-            data: vec![1],
-            append: false,
-        })),
-    };
-    let rejected = client
-        .apply(with_authorization(
-            ApplyRequest {
-                operations: vec![invalid],
-                locks: vec![],
+    client
+        .unlock(with_authorization(
+            proof.clone(),
+            &format!("Bearer {}", other_session.session_key),
+        )?)
+        .await?;
+    let conflict = client
+        .lock(with_authorization(
+            LockRequest {
+                object_id: file,
+                lock_id: None,
             },
             &authorization,
         )?)
-        .await?
-        .into_inner();
-    assert_eq!(
-        rejected.results[0]
-            .error
-            .as_ref()
-            .context("expected invalid write")?
-            .code(),
-        ErrorCode::InvalidInput
-    );
-    assert!(
-        fdb::database()?
-            .create_trx()?
-            .get(&key, false)
-            .await?
-            .is_some()
-    );
-    let success = client
-        .apply(with_authorization(
-            ApplyRequest {
-                operations: vec![update.clone()],
-                locks: vec![],
+        .await
+        .err()
+        .context("cross-tenant unlock must preserve the lock")?;
+    assert_eq!(error_code(&conflict)?, ErrorCode::WouldBlock);
+    let malformed = client
+        .unlock(with_authorization(
+            ObjectLock {
+                object_id: file,
+                lock_id: vec![0; 15],
             },
             &authorization,
         )?)
-        .await?
-        .into_inner();
-    assert!(success.results[0].mutation.is_some());
-    let tx = fdb::database()?.create_trx()?;
-    assert!(tx.get(&key, false).await?.is_none());
-    assert!(tx.get(&expiry_key(expired_ms), false).await?.is_none());
+        .await
+        .err()
+        .context("expected malformed unlock rejection")?;
+    assert_eq!(error_code(&malformed)?, ErrorCode::InvalidInput);
+    client
+        .unlock(with_authorization(
+            proof.clone(),
+            &format!("Bearer {}", reader.session_key),
+        )?)
+        .await?;
     let lost = client
         .lock(with_authorization(
             LockRequest {
@@ -298,8 +237,20 @@ pub(crate) async fn locks_enforce_ownership_grace_and_atomic_invalidation() -> R
         )?)
         .await
         .err()
-        .context("expected invalidated token")?;
+        .context("expected released token")?;
     assert_eq!(error_code(&lost)?, ErrorCode::LockLost);
+    let missing = client
+        .lock(with_authorization(
+            LockRequest {
+                object_id: ObjectId::new_v7(),
+                lock_id: None,
+            },
+            &authorization,
+        )?)
+        .await
+        .err()
+        .context("expected missing object")?;
+    assert_eq!(error_code(&missing)?, ErrorCode::NotFound);
     let replacement = client
         .lock(with_authorization(
             LockRequest {

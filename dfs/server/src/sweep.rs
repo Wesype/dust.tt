@@ -56,9 +56,6 @@ async fn sweep() -> Result<()> {
         sweep_expired_receipts(now_ms),
         sweep_expired_locks(now_ms),
     );
-    if let Err(error) = locks {
-        tracing::error!(error = format!("{error:#}"), "expired lock cleanup failed");
-    }
     if let Err(error) = sessions {
         tracing::error!(
             error = format!("{error:#}"),
@@ -70,6 +67,9 @@ async fn sweep() -> Result<()> {
             error = format!("{error:#}"),
             "expired receipt cleanup failed"
         );
+    }
+    if let Err(error) = locks {
+        tracing::error!(error = format!("{error:#}"), "expired lock cleanup failed");
     }
     Ok(())
 }
@@ -123,13 +123,21 @@ async fn sweep_expired_receipts(now_ms: u64) -> Result<()> {
     }
 }
 
+/**
+ * @cc [owner:id13,label:backend;concurrency] lock-sweep-batches
+ * A pass MUST drain expired lock entries using the same timestamp for every batch, in fresh
+ * ordinary transactions without further delays. The completed pass MUST log its total.
+ */
 async fn sweep_expired_locks(now_ms: u64) -> Result<()> {
+    let mut cleared_locks = 0;
     loop {
-        let processed = fdb::with_transaction(|tx| async move {
+        let cleared = fdb::with_transaction(|tx| async move {
             ObjectResource::clear_expired_locks(&tx, now_ms).await
         })
         .await?;
-        if processed == 0 {
+        cleared_locks += cleared;
+        if cleared == 0 {
+            tracing::info!(cleared_locks, "expired lock cleanup completed");
             return Ok(());
         }
     }
