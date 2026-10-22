@@ -22,6 +22,7 @@ DEV_WORKSPACE_SID=MyWorkspace npx tsx scripts/seed/<folder>/seed.ts --execute
 - `conversational_building/` - Creates a skill with conversational suggestions and a Dust conversation rendering them, for testing the conversational builder
 - `frames/` - Publishes Frames v2 (client-only and shared publicly, functions and database) with conversations linking to them, for testing Frames and their caller policies
 - `governance/` - Creates users and skills for testing admin governance
+- `inference_hooks/` - Enables inference hooks and creates a blocking and a monitoring `dust` hook
 - `mcp_tools/` - Creates data-source-backed agents with internal MCP tools
 - `pagination/` - Creates 100 agents and 100 skills for testing search, sorting and pagination on the Manage pages
 - `reinforcement/` - Creates skills with conversations, feedbacks, Dust conversations with JIT skills for testing reinforcement

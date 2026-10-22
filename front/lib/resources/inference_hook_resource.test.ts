@@ -1,4 +1,4 @@
-import { Authenticator } from "@app/lib/auth";
+import type { Authenticator } from "@app/lib/auth";
 import {
   InferenceHookCheckpointModel,
   InferenceHookEvaluationModel,
@@ -12,14 +12,12 @@ import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import { InferenceHookCheckpointFactory } from "@app/tests/utils/InferenceHookCheckpointFactory";
 import { InferenceHookEvaluationFactory } from "@app/tests/utils/InferenceHookEvaluationFactory";
 import { InferenceHookFactory } from "@app/tests/utils/InferenceHookFactory";
-import { UserFactory } from "@app/tests/utils/UserFactory";
-import { WorkspaceFactory } from "@app/tests/utils/WorkspaceFactory";
 import { isAgentMessageType } from "@app/types/assistant/conversation";
 import type { ModelId } from "@app/types/shared/model_id";
-import type { LightWorkspaceType, WorkspaceType } from "@app/types/user";
+import type { LightWorkspaceType } from "@app/types/user";
 import { beforeEach, describe, expect, it } from "vitest";
 
-async function countRows(workspace: WorkspaceType) {
+async function countRows(workspace: LightWorkspaceType) {
   return {
     hooks: await InferenceHookModel.count({
       where: { workspaceId: workspace.id },
@@ -31,48 +29,156 @@ async function countRows(workspace: WorkspaceType) {
 }
 
 describe("InferenceHookResource", () => {
-  describe("deleteAllForWorkspace", () => {
-    it("deletes the hooks and versions of the workspace only", async () => {
-      const user = await UserFactory.basic();
-      const workspace = await WorkspaceFactory.basic();
-      const otherWorkspace = await WorkspaceFactory.basic();
-      await InferenceHookFactory.basic(workspace, user);
-      await InferenceHookFactory.basic(workspace, user);
-      await InferenceHookFactory.basic(otherWorkspace, user);
+  describe("makeNew", () => {
+    it("creates the hook with its first version as the current one", async () => {
+      const { authenticator } = await createResourceTest({ role: "admin" });
 
-      await InferenceHookResource.deleteAllForWorkspace(
-        await Authenticator.internalAdminForWorkspace(workspace.sId)
+      const hook = await InferenceHookResource.makeNew(authenticator, {
+        name: "Block keyword",
+        provider: "dust",
+        events: ["before_model_call"],
+        enforcement: "block",
+        onError: "deny",
+        timeoutMs: 2_000,
+      });
+
+      const hooks = await InferenceHookResource.listByWorkspace(authenticator);
+      expect(hooks.map((h) => h.toJSON())).toEqual([
+        {
+          sId: hook.sId,
+          name: "Block keyword",
+          provider: "dust",
+          version: 1,
+          events: ["before_model_call"],
+          enforcement: "block",
+          onError: "deny",
+          timeoutMs: 2_000,
+          excludedGroupIds: [],
+        },
+      ]);
+    });
+
+    it("refuses non-admins", async () => {
+      const { authenticator } = await createResourceTest({ role: "user" });
+
+      await expect(InferenceHookFactory.basic(authenticator)).rejects.toThrow();
+    });
+  });
+
+  describe("listByWorkspace", () => {
+    it("returns non-archived hooks at their current version", async () => {
+      const { authenticator } = await createResourceTest({ role: "admin" });
+      const hook = await InferenceHookFactory.basic(authenticator, {
+        enforcement: "monitor",
+      });
+      await InferenceHookFactory.withNewVersion(authenticator, hook, {
+        events: ["after_model_call"],
+        enforcement: "block",
+      });
+      await InferenceHookFactory.archived(authenticator);
+
+      const hooks = await InferenceHookResource.listByWorkspace(authenticator);
+
+      expect(hooks.map((h) => h.toJSON())).toEqual([
+        expect.objectContaining({
+          sId: hook.sId,
+          version: 2,
+          events: ["after_model_call"],
+          enforcement: "block",
+        }),
+      ]);
+    });
+  });
+
+  describe("fetchById", () => {
+    it("returns the current version, or the given one even if no longer current", async () => {
+      const { authenticator } = await createResourceTest({ role: "admin" });
+      const hook = await InferenceHookFactory.basic(authenticator, {
+        enforcement: "monitor",
+      });
+      await InferenceHookFactory.withNewVersion(authenticator, hook, {
+        events: ["before_model_call"],
+        enforcement: "block",
+      });
+
+      const current = await InferenceHookResource.fetchById(
+        authenticator,
+        hook.sId
+      );
+      const pinned = await InferenceHookResource.fetchById(
+        authenticator,
+        hook.sId,
+        { version: 1 }
       );
 
+      expect(current?.toJSON()).toEqual(
+        expect.objectContaining({ version: 2, enforcement: "block" })
+      );
+      expect(pinned?.toJSON()).toEqual(
+        expect.objectContaining({ version: 1, enforcement: "monitor" })
+      );
+      expect(
+        await InferenceHookResource.fetchById(authenticator, hook.sId, {
+          version: 3,
+        })
+      ).toBeNull();
+    });
+  });
+
+  describe("deleteAllForWorkspace", () => {
+    it("deletes the hooks and versions of the workspace only", async () => {
+      const { authenticator, workspace } = await createResourceTest({
+        role: "admin",
+      });
+      const other = await createResourceTest({ role: "admin" });
+      await InferenceHookFactory.basic(authenticator);
+      await InferenceHookFactory.basic(authenticator);
+      await InferenceHookFactory.basic(other.authenticator);
+
+      await InferenceHookResource.deleteAllForWorkspace(authenticator);
+
       expect(await countRows(workspace)).toEqual({ hooks: 0, versions: 0 });
-      expect(await countRows(otherWorkspace)).toEqual({
+      expect(await countRows(other.workspace)).toEqual({
         hooks: 1,
         versions: 1,
       });
+    });
+
+    it("refuses non-admins", async () => {
+      const { authenticator } = await createResourceTest({ role: "user" });
+
+      await expect(
+        InferenceHookResource.deleteAllForWorkspace(authenticator)
+      ).rejects.toThrow();
     });
   });
 
   describe("delete", () => {
     it("deletes the hook and its versions", async () => {
-      const user = await UserFactory.basic();
-      const workspace = await WorkspaceFactory.basic();
-      const hook = await InferenceHookFactory.basic(workspace, user);
-      const otherHook = await InferenceHookFactory.basic(workspace, user);
+      const { authenticator, workspace } = await createResourceTest({
+        role: "admin",
+      });
+      const hook = await InferenceHookFactory.basic(authenticator);
+      const kept = await InferenceHookFactory.basic(authenticator);
 
-      const result = await hook.delete(
-        await Authenticator.internalAdminForWorkspace(workspace.sId),
-        {}
-      );
+      const result = await hook.delete(authenticator, {});
 
       expect(result.isOk()).toBe(true);
-      const remainingHooks = await InferenceHookModel.findAll({
-        where: { workspaceId: workspace.id },
-      });
-      const remainingVersions = await InferenceHookVersionModel.findAll({
-        where: { workspaceId: workspace.id },
-      });
-      expect(remainingHooks.map((h) => h.id)).toEqual([otherHook.id]);
-      expect(remainingVersions.map((v) => v.hookId)).toEqual([otherHook.id]);
+      expect(
+        await InferenceHookModel.findOne({
+          where: { id: hook.id, workspaceId: workspace.id },
+        })
+      ).toBeNull();
+      expect(
+        await InferenceHookVersionModel.count({
+          where: { hookId: hook.id, workspaceId: workspace.id },
+        })
+      ).toBe(0);
+      expect(
+        await InferenceHookVersionModel.count({
+          where: { hookId: kept.id, workspaceId: workspace.id },
+        })
+      ).toBe(1);
     });
   });
 
@@ -84,10 +190,10 @@ describe("InferenceHookResource", () => {
     let hook: InferenceHookResource;
 
     beforeEach(async () => {
-      const setup = await createResourceTest({});
+      const setup = await createResourceTest({ role: "admin" });
       auth = setup.authenticator;
       workspace = setup.workspace;
-      hook = await InferenceHookFactory.basic(workspace, setup.user);
+      hook = await InferenceHookFactory.basic(auth);
 
       const agent = await AgentConfigurationFactory.createTestAgent(auth);
       const conversation = await ConversationFactory.create(auth, {

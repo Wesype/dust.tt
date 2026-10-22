@@ -937,16 +937,19 @@ describe("destroyConversation", () => {
     if (!agentMessage) {
       throw new Error("Agent message should exist");
     }
+    const admin = await UserFactory.basic();
+    await MembershipFactory.associate(workspace, admin, { role: "admin" });
+    const adminAuth = await Authenticator.fromUserIdAndWorkspaceId(
+      admin.sId,
+      workspace.sId
+    );
     const checkpoint = await InferenceHookCheckpointFactory.basic(workspace, {
       conversationModelId: conversation.id,
       agentMessageModelId: agentMessage.agentMessageId,
     });
     await InferenceHookEvaluationFactory.basic(workspace, {
       checkpoint,
-      hook: await InferenceHookFactory.basic(
-        workspace,
-        auth.getNonNullableUser()
-      ),
+      hook: await InferenceHookFactory.basic(adminAuth),
     });
 
     const result = await destroyConversation(auth, { conversation });

@@ -1,5 +1,5 @@
-import type { InferenceHookLifecycleEvent } from "@app/lib/inference_hook";
 import { InferenceHookCheckpointModel } from "@app/lib/models/inference_hook";
+import type { InferenceHookLifecycleEvent } from "@app/types/inference_hook";
 import type { ModelId } from "@app/types/shared/model_id";
 import type { LightWorkspaceType } from "@app/types/user";
 

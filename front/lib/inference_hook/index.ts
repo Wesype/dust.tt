@@ -8,6 +8,10 @@ import type {
   ModelConversationTypeMultiActions,
   NormalizedModelOutput,
 } from "@app/types/assistant/generation";
+import type {
+  InferenceHookLifecycleEvent,
+  InferenceHookOnError,
+} from "@app/types/inference_hook";
 import type { WhitelistableFeature } from "@app/types/shared/feature_flags";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
@@ -23,14 +27,6 @@ export type InferenceHookDenyVerdict = {
 export type InferenceHookVerdict =
   | { action: "allow" }
   | InferenceHookDenyVerdict;
-
-export const INFERENCE_HOOK_LIFECYCLE_EVENTS = [
-  "before_model_call",
-  "after_model_call",
-] as const;
-
-export type InferenceHookLifecycleEvent =
-  (typeof INFERENCE_HOOK_LIFECYCLE_EVENTS)[number];
 
 type BeforeModelCallCheckpointRef = ConversationWindowCheckpointIdentity & {
   lifecycleEvent: "before_model_call";
@@ -88,10 +84,6 @@ export interface InferenceHookProvider {
   ): Promise<InferenceHookVerdict>;
 }
 
-export type InferenceHookOnError = "allow" | "deny";
-
-export type InferenceHookProviderIdType = "datadog_ai_guard" | "dust";
-
 export type InferenceHookCheckpointDecision = "pending" | "allowed" | "blocked";
 
 export type InferenceHookEvaluationStatus =
@@ -115,20 +107,6 @@ export type InferenceHookEvaluationErrorCode =
   | "invalid_credentials"
   | "provider_error"
   | "invalid_response";
-
-export type InferenceHookEnforcement = "monitor" | "block";
-
-type DatadogAIGuardProviderConfig = {
-  site: string;
-  service: string;
-  env: string;
-};
-
-type DustProviderConfig = Record<string, never>;
-
-export type InferenceHookProviderConfig =
-  | DatadogAIGuardProviderConfig
-  | DustProviderConfig;
 
 export type InferenceHook = {
   provider: InferenceHookProvider;

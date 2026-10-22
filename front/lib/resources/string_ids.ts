@@ -106,6 +106,9 @@ export const RESOURCES_PREFIX = {
   // Provider credentials (BYOK).
   provider_credential: "pcr",
 
+  // Inference hooks.
+  inference_hook: "ihk",
+
   // User project notification preferences.
   user_project_notification_preference: "upnp",
 

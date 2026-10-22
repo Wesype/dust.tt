@@ -2,9 +2,9 @@ import type {
   EnforcedInferenceHook,
   InferenceHookProvider,
   InferenceHookInput,
-  InferenceHookOnError,
   InferenceHookVerdict,
 } from "@app/lib/inference_hook";
+import type { InferenceHookOnError } from "@app/types/inference_hook";
 
 export interface FakeInferenceHookProvider extends InferenceHookProvider {
   readonly inputs: InferenceHookInput[];

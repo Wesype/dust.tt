@@ -1,13 +1,8 @@
 import type {
   InferenceHookCheckpointDecision,
-  InferenceHookEnforcement,
   InferenceHookEvaluationErrorCode,
   InferenceHookEvaluationOutcome,
   InferenceHookEvaluationStatus,
-  InferenceHookLifecycleEvent,
-  InferenceHookOnError,
-  InferenceHookProviderConfig,
-  InferenceHookProviderIdType,
   InferenceHookVerdict,
 } from "@app/lib/inference_hook";
 import {
@@ -21,6 +16,13 @@ import {
 } from "@app/lib/resources/storage/data_types";
 import { UserModel } from "@app/lib/resources/storage/models/user";
 import { WorkspaceAwareModel } from "@app/lib/resources/storage/wrappers/workspace_models";
+import type {
+  InferenceHookEnforcement,
+  InferenceHookLifecycleEvent,
+  InferenceHookOnError,
+  InferenceHookProviderConfig,
+  InferenceHookProviderIdType,
+} from "@app/types/inference_hook";
 import type { ModelId } from "@app/types/shared/model_id";
 import type { CreationOptional, ForeignKey } from "sequelize";
 
