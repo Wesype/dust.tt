@@ -510,9 +510,13 @@ impl Filesystem for Adapter {
         _datasync: bool,
         reply: ReplyEmpty,
     ) {
-        // TODO(writes): pending write support, which waits here for every acknowledged change to
-        // commit.
-        reply.ok();
+        let fs = self.fs.clone();
+        self.runtime.spawn(async move {
+            match fs.fsync().await {
+                Ok(()) => reply.ok(),
+                Err(e) => reply.error(errno(e)),
+            }
+        });
     }
 
     /// Opens a directory and returns a handle, which the `readdir` and `releasedir` calls on that
@@ -601,9 +605,13 @@ impl Filesystem for Adapter {
         _datasync: bool,
         reply: ReplyEmpty,
     ) {
-        // TODO(writes): pending write support, which waits here for every acknowledged change to
-        // commit.
-        reply.ok();
+        let fs = self.fs.clone();
+        self.runtime.spawn(async move {
+            match fs.fsync().await {
+                Ok(()) => reply.ok(),
+                Err(e) => reply.error(errno(e)),
+            }
+        });
     }
 
     /// Returns the filesystem's size and free space, for `statfs` and `df`. Reports plenty of free

@@ -62,6 +62,11 @@ struct Cli {
  * while acknowledged changes commit. If `drain` failed, `main` MUST still unmount, then exit with
  * an error.
  */
+/**
+ * @cc [owner:fontanierh,label:product] commit-before-mount
+ * `main` MUST start `Fs::commit` before mounting and keep it running until `drain` returns:
+ * without it, no change leaves and `fsync` and `drain` never return.
+ */
 fn main() -> Result<()> {
     let cli = Cli::parse();
     tracing_subscriber::fmt()
@@ -84,6 +89,10 @@ fn main() -> Result<()> {
         .block_on(refresh_session(&remote))
         .context("refresh the session")?;
     let fs = Arc::new(Fs::new(remote.clone(), cli.folders).context("invalid folders")?);
+    runtime.spawn({
+        let fs = fs.clone();
+        async move { fs.commit().await }
+    });
     let adapter = Adapter::new(fs.clone(), runtime.handle().clone());
     let session = fuser::Session::new(adapter, &cli.mountpoint, &adapter::config())
         .with_context(|| format!("mount {}", cli.mountpoint.display()))?
@@ -166,9 +175,8 @@ async fn refresh_session(remote: &Remote) -> Result<()> {
 
 /// Waits until every change the mount acknowledged is committed, so none is lost on exit. Fails
 /// with the first failure since the last `fsync`.
-async fn drain(_fs: &Fs) -> Result<()> {
-    // The library acknowledges no changes yet.
-    Ok(())
+async fn drain(fs: &Fs) -> Result<()> {
+    Ok(fs.fsync().await?)
 }
 
 /// Refreshes the session periodically until a SIGINT or SIGTERM, or until the filesystem is

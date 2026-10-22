@@ -22,7 +22,7 @@ use dfs_api::{
         },
     },
 };
-use dfs_mount::{DirEntry, Errno, Folder, Fs, Kind, ROOT_INO, Remote};
+use dfs_mount::{DirEntry, Errno, Folder, Fs, Kind, ROOT_INO, Remote, WriteLog};
 use dfs_protocol::{
     LIST_MAX_ENTRIES, LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, READ_FILES_MAX_OBJECTS,
     READ_MAX_BYTES, STAT_MAX_REFERENCES,
@@ -32,7 +32,10 @@ use dfs_protocol::{
         dfs_client::DfsClient, grant, operation::Operation,
     },
 };
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 use tokio::net::TcpListener;
 use tonic::{Request, transport::Channel};
 
@@ -46,6 +49,8 @@ const MANY_REFERENCES: usize = STAT_MAX_REFERENCES + 4;
 const MANY_TARGETS: usize = LOOKUP_MAX_TARGETS + 3;
 /// More entries than one `List` page holds.
 const MANY_ENTRIES: u32 = LIST_MAX_ENTRIES + 3;
+/// More operations than one `Apply` of the write log carries.
+const MANY_OPERATIONS: usize = 600;
 /// Most children one seeding transaction creates, to stay well within FoundationDB's transaction
 /// time and size limits.
 const SEED_BATCH_SIZE: usize = 512;
@@ -75,7 +80,8 @@ fn mount() -> Result<()> {
         apply_returns_one_ordered_result_per_operation(&channel, &tenant).await?;
         read_files_returns_one_ordered_result_per_object(&channel, &tenant).await?;
         folders_list_readable_children(&channel, &tenant).await?;
-        files_read_in_ranges(&channel, &tenant).await
+        files_read_in_ranges(&channel, &tenant).await?;
+        write_log_commits_in_order(&channel, &tenant).await
     })
 }
 
@@ -679,5 +685,72 @@ async fn files_read_in_ranges(channel: &Channel, tenant: &Tenant) -> Result<()> 
     // Once the kernel forgets it, the inode is unknown.
     fs.forget(report, 1);
     assert_eq!(fs.read(report, 0, 1).await, Err(Errno::ENOENT));
+    Ok(())
+}
+
+async fn write_log_commits_in_order(channel: &Channel, tenant: &Tenant) -> Result<()> {
+    let remote = tenant.remote(channel).await?;
+    let log = Arc::new(WriteLog::new());
+    tokio::spawn({
+        let log = log.clone();
+        let remote = remote.clone();
+        async move { log.run(&remote).await }
+    });
+    let create = |parent_id, name: &str, object_id, kind: ObjectKind| {
+        Operation::Create(CreateOperation {
+            parent_id,
+            name: name.to_owned(),
+            object_id,
+            kind: kind.into(),
+            mime_type: None,
+            xattrs: BTreeMap::new(),
+        })
+    };
+
+    // Each change needs the one before it, across more than one `Apply`.
+    let directory = ObjectId::new_v7();
+    log.push(create(
+        tenant.root_id,
+        "logged",
+        directory,
+        ObjectKind::Directory,
+    ));
+    for index in 0..MANY_OPERATIONS {
+        let name = format!("file-{index}");
+        log.push(create(
+            directory,
+            &name,
+            ObjectId::new_v7(),
+            ObjectKind::File,
+        ));
+    }
+    let file = ObjectId::new_v7();
+    log.push(create(directory, "last.txt", file, ObjectKind::File));
+    log.push(Operation::Write(WriteOperation {
+        object_id: file,
+        offset: 0,
+        data: FILE_CONTENT.to_vec(),
+        append: false,
+    }));
+    log.sync().await?;
+    let entries = remote.list(directory.into()).await?;
+    assert_eq!(entries.len(), MANY_OPERATIONS + 1);
+    assert_eq!(
+        remote.read(file, 0, READ_MAX_BYTES).await?.data,
+        FILE_CONTENT
+    );
+
+    // A failed change is dropped without stopping the next, and reported to one `sync` only.
+    log.push(create(
+        directory,
+        "last.txt",
+        ObjectId::new_v7(),
+        ObjectKind::File,
+    ));
+    let next = ObjectId::new_v7();
+    log.push(create(directory, "next.txt", next, ObjectKind::File));
+    assert_eq!(log.sync().await, Err(Errno(libc::EEXIST)));
+    assert!(remote.read(next, 0, 1).await.is_ok());
+    assert_eq!(log.sync().await, Ok(()));
     Ok(())
 }

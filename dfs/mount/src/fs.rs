@@ -1,4 +1,4 @@
-use crate::{errno::Errno, inodes::Inodes, remote::Remote};
+use crate::{errno::Errno, inodes::Inodes, remote::Remote, write_log::WriteLog};
 use dfs_protocol::{
     ObjectId, ObjectRef, READ_MAX_BYTES, is_valid_name,
     rpc::{Attr, LookupTarget, ObjectKind},
@@ -62,6 +62,7 @@ pub struct Fs {
     remote: Remote,
     root_entries: Vec<RootEntry>,
     inodes: Mutex<Inodes>,
+    log: WriteLog,
     /// When the mount started: the root's timestamps.
     started: SystemTime,
 }
@@ -94,8 +95,22 @@ impl Fs {
             remote,
             root_entries,
             inodes: Mutex::new(inodes),
+            log: WriteLog::new(),
             started: SystemTime::now(),
         })
+    }
+
+    /// Sends acknowledged changes to the server, forever. The caller runs it as one task per `Fs`,
+    /// for as long as the mount is up: changes only leave, and `fsync` only returns, while it runs.
+    pub async fn commit(&self) {
+        self.log.run(&self.remote).await;
+    }
+
+    /// Waits until every change acknowledged before the call is committed or dropped, and fails with
+    /// the first failure since the previous `fsync`. Covers the whole mount, whatever file or
+    /// directory it is called on.
+    pub async fn fsync(&self) -> Result<(), Errno> {
+        self.log.sync().await
     }
 
     /// Fails with `ENOENT` for an inode the kernel does not know.

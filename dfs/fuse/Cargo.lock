@@ -264,7 +264,9 @@ dependencies = [
  "dfs-protocol",
  "libc",
  "prost",
+ "tokio",
  "tonic",
+ "tracing",
 ]
 
 [[package]]
