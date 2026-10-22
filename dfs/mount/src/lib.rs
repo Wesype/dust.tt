@@ -3,12 +3,14 @@
 //! - `remote`: the connection to the dfs server, authenticated with a session key.
 //! - `fs`: the filesystem operations, in FUSE terms but independent of the FUSE library.
 //! - `budget`: how the configured maximum delay splits between the write delay and the cache TTL.
+//! - `cache`: server replies served again while younger than the cache TTL.
 //! - `write_log`: acknowledged changes, sent to the server in order, one `Apply` at a time.
 //!
 //! The mount root is built by the mount itself: it lists the folders the caller configures.
 
 mod attributes;
 mod budget;
+mod cache;
 mod errno;
 mod fs;
 mod inodes;

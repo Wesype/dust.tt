@@ -1,4 +1,6 @@
-use crate::{errno::Errno, inodes::Inodes, remote::Remote, write_log::WriteLog};
+use crate::{
+    budget::Budget, cache::Cache, errno::Errno, inodes::Inodes, remote::Remote, write_log::WriteLog,
+};
 use dfs_protocol::{
     ObjectId, ObjectRef, READ_MAX_BYTES, is_valid_name,
     rpc::{Attr, LookupTarget, ObjectKind},
@@ -6,7 +8,7 @@ use dfs_protocol::{
 use std::{
     collections::HashSet,
     sync::{Mutex, MutexGuard, PoisonError},
-    time::SystemTime,
+    time::{Instant, SystemTime},
 };
 
 /// A FUSE inode number. dfs object IDs are 128 bits, so the mount gives each object a 64-bit number.
@@ -62,6 +64,7 @@ pub struct Fs {
     remote: Remote,
     root_entries: Vec<RootEntry>,
     inodes: Mutex<Inodes>,
+    cache: Mutex<Cache>,
     log: WriteLog,
     /// When the mount started: the root's timestamps.
     started: SystemTime,
@@ -74,7 +77,12 @@ impl Fs {
      * `new` MUST fail with `EINVAL` unless every folder name is a valid object name, no name appears
      * twice, and no folder ID appears twice.
      */
-    pub fn new(remote: Remote, folders: Vec<Folder>) -> Result<Self, Errno> {
+    /**
+     * @cc [owner:fontanierh,label:product] cache-within-budget
+     * The `Fs` MUST serve a cached server reply only until `budget.cache_ttl()` has passed since its
+     * request was sent.
+     */
+    pub fn new(remote: Remote, folders: Vec<Folder>, budget: Budget) -> Result<Self, Errno> {
         let mut names = HashSet::new();
         let mut ids = HashSet::new();
         for folder in &folders {
@@ -95,6 +103,7 @@ impl Fs {
             remote,
             root_entries,
             inodes: Mutex::new(inodes),
+            cache: Mutex::new(Cache::new(budget.cache_ttl())),
             log: WriteLog::new(),
             started: SystemTime::now(),
         })
@@ -163,19 +172,18 @@ impl Fs {
     }
 
     /// Finds `name` in the dfs directory `parent`. A parent the session cannot read looks missing.
+    /**
+     * @cc [owner:fontanierh,label:product] lookup-caches-names
+     * `lookup_in` MUST keep what the server's `Lookup` returns for a name, found or `ENOENT`, and
+     * answer from it while it is live, a found name only with the object's live attributes. Other
+     * errors MUST NOT be kept.
+     */
     async fn lookup_in(&self, parent: Ino, name: &str) -> Result<Attributes, Errno> {
         let parent = self.inodes().object(parent).ok_or(Errno::ENOENT)?;
-        let mut results = self
-            .remote
-            .lookup(&[LookupTarget {
-                parent_id: parent.into(),
-                name: name.to_owned(),
-            }])
-            .await?;
-        let attr = results.pop().ok_or(Errno::EIO)??;
-        // Only the virtual root and `shared` are not objects, and neither is in a dfs directory.
-        let ObjectRef::Object(object) = attr.id else {
-            return Err(Errno::EIO);
+        let (object, attr) = match self.cached_name(parent, name) {
+            Some(Some((object, attr))) => (object, attr),
+            Some(None) => return Err(Errno::ENOENT),
+            None => self.lookup_remote(parent, name).await?,
         };
         // Converted before the lookup is counted, so an object the mount cannot show counts none.
         let mut attributes = Attributes::from_attr(ROOT_INO, &attr)?;
@@ -207,9 +215,14 @@ impl Fs {
             .iter()
             .map(|entry| entry.folder.id.into())
             .collect();
+        let sent = Instant::now();
         let results = self.remote.stat(&references).await?;
         let mut entries = Vec::new();
         for (entry, result) in self.root_entries.iter().zip(results) {
+            if let Ok(attr) = &result {
+                self.cache()
+                    .install_attr(entry.folder.id, attr.clone(), sent);
+            }
             match result {
                 Ok(attr) if attr.kind() == ObjectKind::Directory => entries.push(DirEntry {
                     ino: entry.ino,
@@ -295,9 +308,71 @@ impl Fs {
         Ok(listed)
     }
 
+    /// Must not be held across an `.await`.
+    fn cache(&self) -> MutexGuard<'_, Cache> {
+        self.cache.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// What the cache holds for `name` in `directory`: the object it names, with its attributes, or
+    /// `Some(None)` when it names none. `None` when the cache cannot answer.
+    fn cached_name(&self, directory: ObjectId, name: &str) -> Option<Option<(ObjectId, Attr)>> {
+        let cache = self.cache();
+        // Taken once the lock is held, so waiting for it cannot serve an expired reply.
+        let now = Instant::now();
+        match cache.name(directory, name, now)? {
+            Some(object) => Some(Some((object, cache.attr(object, now)?.clone()))),
+            None => Some(None),
+        }
+    }
+
+    /// Looks up `name` in `directory` on the server and keeps the reply, found or missing.
+    async fn lookup_remote(
+        &self,
+        directory: ObjectId,
+        name: &str,
+    ) -> Result<(ObjectId, Attr), Errno> {
+        let sent = Instant::now();
+        let mut results = self
+            .remote
+            .lookup(&[LookupTarget {
+                parent_id: directory.into(),
+                name: name.to_owned(),
+            }])
+            .await?;
+        let attr = match results.pop().ok_or(Errno::EIO)? {
+            Ok(attr) => attr,
+            Err(Errno::ENOENT) => {
+                self.cache()
+                    .install_name(directory, name.to_owned(), None, sent);
+                return Err(Errno::ENOENT);
+            }
+            Err(errno) => return Err(errno),
+        };
+        // Only the virtual root and `shared` are not objects, and neither is in a dfs directory.
+        let ObjectRef::Object(object) = attr.id else {
+            return Err(Errno::EIO);
+        };
+        let mut cache = self.cache();
+        cache.install_name(directory, name.to_owned(), Some(object), sent);
+        cache.install_attr(object, attr.clone(), sent);
+        Ok((object, attr))
+    }
+
+    /// The attributes of `object`, from the cache while they are live.
+    /**
+     * @cc [owner:fontanierh,label:product] stat-caches-attributes
+     * `stat` MUST answer from live cached attributes, and otherwise keep what the server returns.
+     * Errors MUST NOT be kept.
+     */
     async fn stat(&self, object: ObjectId) -> Result<Attr, Errno> {
+        if let Some(attr) = self.cache().attr(object, Instant::now()) {
+            return Ok(attr.clone());
+        }
+        let sent = Instant::now();
         let mut results = self.remote.stat(&[object.into()]).await?;
-        results.pop().ok_or(Errno::EIO)?
+        let attr = results.pop().ok_or(Errno::EIO)??;
+        self.cache().install_attr(object, attr.clone(), sent);
+        Ok(attr)
     }
 }
 
@@ -315,7 +390,11 @@ mod tests {
 
     fn new_fs(folders: Vec<Folder>) -> Result<Fs, Errno> {
         let channel = Channel::from_static("http://127.0.0.1:1").connect_lazy();
-        Fs::new(Remote::new(channel, &"0".repeat(64))?, folders)
+        Fs::new(
+            Remote::new(channel, &"0".repeat(64))?,
+            folders,
+            Budget::default(),
+        )
     }
 
     #[tokio::test]

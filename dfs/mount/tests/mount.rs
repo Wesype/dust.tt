@@ -22,7 +22,7 @@ use dfs_api::{
         },
     },
 };
-use dfs_mount::{DirEntry, Errno, Folder, Fs, Kind, ROOT_INO, Remote, WriteLog};
+use dfs_mount::{Budget, DirEntry, Errno, Folder, Fs, Kind, ROOT_INO, Remote, WriteLog};
 use dfs_protocol::{
     LIST_MAX_ENTRIES, LOOKUP_MAX_TARGETS, ObjectId, ObjectRef, READ_FILES_MAX_OBJECTS,
     READ_MAX_BYTES, STAT_MAX_REFERENCES,
@@ -35,6 +35,7 @@ use dfs_protocol::{
 use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
+    time::Duration,
 };
 use tokio::net::TcpListener;
 use tonic::{Request, transport::Channel};
@@ -81,6 +82,7 @@ fn mount() -> Result<()> {
         read_files_returns_one_ordered_result_per_object(&channel, &tenant).await?;
         folders_list_readable_children(&channel, &tenant).await?;
         files_read_in_ranges(&channel, &tenant).await?;
+        replies_are_served_until_the_cache_ttl(&channel, &tenant).await?;
         write_log_commits_in_order(&channel, &tenant).await
     })
 }
@@ -311,7 +313,11 @@ async fn root_lists_readable_folders(channel: &Channel, tenant: &Tenant) -> Resu
         folder("missing", ObjectId::new_v7()),
     ];
 
-    let fs = Fs::new(tenant.remote(channel).await?, folders.clone())?;
+    let fs = Fs::new(
+        tenant.remote(channel).await?,
+        folders.clone(),
+        Budget::default(),
+    )?;
     let entries = fs.readdir(ROOT_INO).await?;
     assert_eq!(
         entries
@@ -327,7 +333,9 @@ async fn root_lists_readable_folders(channel: &Channel, tenant: &Tenant) -> Resu
     assert_eq!(fs.readdir(ROOT_INO).await?, entries);
 
     let remote = Remote::new(channel.clone(), &"fedcba9876543210".repeat(4))?;
-    let result = Fs::new(remote, folders)?.readdir(ROOT_INO).await;
+    let result = Fs::new(remote, folders, Budget::default())?
+        .readdir(ROOT_INO)
+        .await;
     assert_eq!(result, Err::<Vec<DirEntry>, _>(Errno::EACCES));
     Ok(())
 }
@@ -341,6 +349,7 @@ async fn root_looks_up_readable_folders(channel: &Channel, tenant: &Tenant) -> R
             folder("secret", tenant.unreadable_id),
             folder("missing", ObjectId::new_v7()),
         ],
+        Budget::default(),
     )?;
 
     let workspace = fs.lookup(ROOT_INO, "workspace").await?;
@@ -364,6 +373,7 @@ async fn folders_look_up_readable_children(channel: &Channel, tenant: &Tenant) -
     let fs = Fs::new(
         tenant.remote(channel).await?,
         vec![folder("workspace", tenant.root_id)],
+        Budget::default(),
     )?;
     let workspace = fs.lookup(ROOT_INO, "workspace").await?;
 
@@ -621,6 +631,7 @@ async fn folders_list_readable_children(channel: &Channel, tenant: &Tenant) -> R
     let fs = Fs::new(
         tenant.remote(channel).await?,
         vec![folder("workspace", tenant.root_id)],
+        Budget::default(),
     )?;
     let workspace = fs.lookup(ROOT_INO, "workspace").await?;
 
@@ -663,7 +674,11 @@ async fn files_read_in_ranges(channel: &Channel, tenant: &Tenant) -> Result<()> 
     sparse.record_content_change(&tx, clock::now_ms()?);
     tx.commit().await?;
 
-    let fs = Fs::new(remote, vec![folder("workspace", tenant.root_id)])?;
+    let fs = Fs::new(
+        remote,
+        vec![folder("workspace", tenant.root_id)],
+        Budget::default(),
+    )?;
     let workspace = fs.lookup(ROOT_INO, "workspace").await?.ino;
     let report = fs.lookup(workspace, "report.txt").await?.ino;
     let sparse = fs.lookup(workspace, "sparse.bin").await?.ino;
@@ -685,6 +700,78 @@ async fn files_read_in_ranges(channel: &Channel, tenant: &Tenant) -> Result<()> 
     // Once the kernel forgets it, the inode is unknown.
     fs.forget(report, 1);
     assert_eq!(fs.read(report, 0, 1).await, Err(Errno::ENOENT));
+    Ok(())
+}
+
+async fn replies_are_served_until_the_cache_ttl(channel: &Channel, tenant: &Tenant) -> Result<()> {
+    let remote = tenant.remote(channel).await?;
+    let tenant_id = remote.current_session().await?.tenant_id;
+    let mount = |budget| {
+        Fs::new(
+            remote.clone(),
+            vec![folder("workspace", tenant.root_id)],
+            budget,
+        )
+    };
+    // Long enough that nothing expires during the check, short enough to wait for, and no cache.
+    let cached = mount(Budget::new(Duration::from_secs(60)))?;
+    let short = Budget::new(Duration::from_millis(400));
+    let expiring = mount(short)?;
+    let uncached = mount(Budget::new(Duration::ZERO))?;
+    let sized = create_children(
+        &tenant_id,
+        tenant.root_id,
+        ObjectKind::File,
+        &["sized.txt".to_owned()],
+    )
+    .await?
+    .remove(0)
+    .object_id;
+    let mut workspaces = Vec::new();
+    let mut sized_inos = Vec::new();
+    for fs in [&cached, &expiring, &uncached] {
+        let workspace = fs.lookup(ROOT_INO, "workspace").await?.ino;
+        assert_eq!(fs.lookup(workspace, "later.txt").await, Err(Errno::ENOENT));
+        sized_inos.push(fs.lookup(workspace, "sized.txt").await?.ino);
+        workspaces.push(workspace);
+    }
+
+    // The attributes are served from the cache until they expire.
+    let tx = fdb::database()?.create_trx()?;
+    let resource = TenantResource::fetch(&tx, &tenant_id)
+        .await?
+        .context("missing tenant")?;
+    let mut file = ObjectResource::fetch(&tx, &resource, &sized)
+        .await?
+        .context("missing file")?;
+    file.size = 7;
+    file.record_content_change(&tx, clock::now_ms()?);
+    tx.commit().await?;
+    assert_eq!(cached.getattr(sized_inos[0]).await?.size, 0);
+    assert_eq!(uncached.getattr(sized_inos[2]).await?.size, 7);
+
+    create_children(
+        &tenant_id,
+        tenant.root_id,
+        ObjectKind::File,
+        &["later.txt".to_owned()],
+    )
+    .await?;
+    assert_eq!(
+        uncached.lookup(workspaces[2], "later.txt").await?.kind,
+        Kind::File
+    );
+    // The missing name is served from the cache until it expires.
+    assert_eq!(
+        cached.lookup(workspaces[0], "later.txt").await,
+        Err(Errno::ENOENT)
+    );
+    tokio::time::sleep(short.cache_ttl()).await;
+    assert_eq!(
+        expiring.lookup(workspaces[1], "later.txt").await?.kind,
+        Kind::File
+    );
+    assert_eq!(expiring.getattr(sized_inos[1]).await?.size, 7);
     Ok(())
 }
 

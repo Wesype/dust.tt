@@ -56,7 +56,7 @@ jobs:
             curl --fail --location --retry 3 --output "${package_file}.sha256" "${package_url}.sha256"
             sha256sum --check "${package_file}.sha256"
           done
-          sudo apt-get install -y --no-install-recommends libclang-dev fuse3 protobuf-compiler \
+          sudo apt-get install -y --no-install-recommends fuse3 protobuf-compiler \
             "./foundationdb-clients_${FDB_VERSION}-1_amd64.deb" \
             "./foundationdb-server_${FDB_VERSION}-1_amd64.deb"
           ready_deadline_seconds=$((SECONDS + 60))
@@ -76,6 +76,12 @@ jobs:
             dfs/server
             dfs/mount
             dfs/fuse
+
+      # Each crate has its own target directory, so the cache also restores builds of the dfs crates
+      # it depends on by path. Cargo reuses a build that looks newer than its sources, even if the
+      # sources changed since, so make every source newer than what the cache restored.
+      - name: Mark dfs sources as changed
+        run: find dfs -path '*/target' -prune -o -type f -exec touch {} +
 
       - name: Format
         run: |
