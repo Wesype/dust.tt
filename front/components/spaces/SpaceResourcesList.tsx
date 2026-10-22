@@ -106,9 +106,6 @@ function getTableColumns(
   const nameColumn: ColumnDef<RowData, string> = {
     id: "name",
     header: t(msg`Name`),
-    meta: {
-      className: "w-96",
-    },
     // We can define an accessorFn to read row.label:
     accessorFn: (row) => row.label,
     sortingFn: "text",
@@ -121,6 +118,9 @@ function getTableColumns(
   const managedByColumn: ColumnDef<RowData, string | undefined> = {
     id: "managedBy",
     header: t(msg`Managed by`),
+    meta: {
+      className: "w-32",
+    },
     cell: (ctx) => {
       const { dataSourceView } = ctx.row.original;
       const editedByUser = isGlobalOrSystemSpace
@@ -138,6 +138,9 @@ function getTableColumns(
   const usedByColumn: ColumnDef<RowData, number> = {
     id: "usedBy",
     header: t(msg`Used by`),
+    meta: {
+      className: "w-36",
+    },
     // Return a numeric count to allow numeric sorts if we want
     accessorFn: (row) => row.dataSourceView.usage?.count ?? 0,
     cell: (info) => (
@@ -155,7 +158,7 @@ function getTableColumns(
     id: "lastSync",
     header: t(msg`Last sync`),
     meta: {
-      className: "w-64",
+      className: "w-56",
     },
     accessorFn: (row) =>
       row.dataSourceView.dataSource.connector?.lastSyncSuccessfulTime,
@@ -185,6 +188,9 @@ function getTableColumns(
   // The "Connect" or "Manage" button
   const actionColumn: ColumnDef<RowData, unknown> = {
     id: "action",
+    meta: {
+      className: "w-32",
+    },
     cell: (ctx) => {
       const { dataSourceView, isLoading, isAdmin, buttonOnClick } =
         ctx.row.original;
@@ -232,7 +238,7 @@ function getTableColumns(
     id: "actions",
     header: "",
     meta: {
-      className: "flex justify-end items-center",
+      className: "w-12",
     },
     cell: (ctx) => (
       <DataTable.MoreButton menuItems={ctx.row.original.menuItems} />
@@ -668,8 +674,8 @@ export const SpaceResourcesList = ({
           pagination={pagination}
           setPagination={setPagination}
           columnsBreakpoints={{
-            lastSync: "md",
-            managedBy: "sm",
+            lastSync: "xl",
+            managedBy: "xl",
           }}
         />
       )}
