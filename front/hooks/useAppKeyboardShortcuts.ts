@@ -37,17 +37,14 @@ export function useAppKeyboardShortcuts(owner: LightWorkspaceType) {
         return;
       }
 
-      // Mod+B is bold in text editors, so only the legacy binding works there.
+      // Mod+Shift+S is strikethrough in editors that enable it (documents,
+      // comments); their keymap already called preventDefault, so let it win.
       if (
-        (matchesKeyboardShortcut(
+        matchesKeyboardShortcut(
           event,
           APP_KEYBOARD_SHORTCUTS.toggleNavigationBar
         ) &&
-          !isEditableTarget(event.target)) ||
-        matchesKeyboardShortcut(
-          event,
-          APP_KEYBOARD_SHORTCUTS.toggleNavigationBarLegacy
-        )
+        !event.defaultPrevented
       ) {
         event.preventDefault();
         toggleNavigationBar();

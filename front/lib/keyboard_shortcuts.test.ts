@@ -19,8 +19,8 @@ describe("matchesKeyboardShortcut", () => {
   it("matches the uppercase key Shift produces", () => {
     expect(
       matchesKeyboardShortcut(
-        keydown("B", { metaKey: true, shiftKey: true }),
-        "Mod+Shift+B"
+        keydown("S", { metaKey: true, shiftKey: true }),
+        "Mod+Shift+S"
       )
     ).toBe(true);
   });

@@ -3,9 +3,7 @@
 export const APP_KEYBOARD_SHORTCUTS = {
   newConversation: "C",
   openCommandPalette: "Mod+K",
-  toggleNavigationBar: "Mod+B",
-  // Older binding, still handled but not shown in the UI.
-  toggleNavigationBarLegacy: "Mod+Shift+B",
+  toggleNavigationBar: "Mod+Shift+S",
 } as const;
 
 // True when the event is exactly the shortcut: same key, same modifiers.
