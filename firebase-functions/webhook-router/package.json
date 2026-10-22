@@ -2,7 +2,7 @@
   "name": "webhook-router",
   "version": "1.0.0",
   "engines": {
-    "node": ">=22.22.0"
+    "node": ">=24"
   },
   "description": "Webhook router for multi-region deployment.",
   "type": "module",
@@ -28,7 +28,7 @@
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
-    "@types/node": "22.19.11",
+    "@types/node": "^24.12.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   }
