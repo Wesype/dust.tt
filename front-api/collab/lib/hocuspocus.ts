@@ -14,6 +14,7 @@ import {
   applyCommentRequest,
   dispatchSessionCommentMentions,
 } from "@front-api/collab/lib/comments";
+import type { LoadedCollabSession } from "@front-api/collab/lib/session_file";
 import { loadCollabSession } from "@front-api/collab/lib/session_file";
 import { YDOC_STATE_TIMEOUT_MS } from "@front-api/collab/lib/ydoc_state";
 
@@ -36,6 +37,8 @@ import {
   authenticateConnection,
   RESET_CONNECTION,
 } from "@front-api/collab/lib/connection_access";
+import type { DocumentOwnership } from "@front-api/collab/lib/ownership";
+import { createDocumentOwnership } from "@front-api/collab/lib/ownership";
 import type { CollabSession } from "@front-api/collab/lib/session";
 import {
   epochMessage,
@@ -130,6 +133,61 @@ function logUnexpected(
   };
 }
 
+// Never throws: a hook that rejects after Hocuspocus unloaded the document leaves it unloading for
+// good. Its record expires with the lease.
+async function releaseDocument(
+  ownership: DocumentOwnership,
+  documentName: string,
+  workspaceId: string | undefined
+): Promise<void> {
+  let released: Result<void, Error>;
+  try {
+    released = await ownership.release(documentName);
+  } catch (err) {
+    released = new Err(normalizeError(err));
+  }
+  if (released.isErr()) {
+    logger.warn(
+      { err: released.error, documentName, workspaceId },
+      "Collab document ownership not released"
+    );
+  }
+}
+
+/** Claims the document, then loads its session; rejects, as Hocuspocus expects, when either fails. */
+async function claimAndLoadSession(
+  ownership: DocumentOwnership,
+  documentName: string,
+  context: CollabContext
+): Promise<LoadedCollabSession> {
+  const { workspaceId } = context;
+  const claim = await ownership
+    .claim(documentName)
+    .catch(
+      logUnexpected(
+        { documentName, workspaceId },
+        "Collab document claim failed"
+      )
+    );
+  if (claim.isErr()) {
+    logger.error(
+      { err: claim.error, documentName, workspaceId },
+      "Collab document claim failed"
+    );
+    refuse(documentName, "The document could not be opened.");
+  }
+  if (claim.value.kind === "replica") {
+    refuse(documentName, "The document is open on another collab server.");
+  }
+  const loaded = await loadCollabSession(context).catch(
+    logUnexpected({ documentName, workspaceId }, "Collab document load failed")
+  );
+  if (loaded.isErr()) {
+    refuse(documentName, loaded.error);
+  }
+  return loaded.value;
+}
+
 /**
  * @cc [owner:PopDaph,label:error-handling] hocuspocus-hook-protocol
  * These hooks follow Hocuspocus's protocol, an exception to `no-catching-own-errors` and
@@ -160,7 +218,11 @@ function logUnexpected(
  * cannot write, which only another edit fixes. Every time the session's save state
  * (`toSaveState`) changes, every connection MUST be sent it as `save_state`, and a connection
  * opening while it differs from `DEFAULT_SAVE_STATE` MUST be sent it once connected. The state
- * includes the last copy kept after a save conflict (`collab-session-save-conflict`).
+ * includes the last copy kept after a save conflict (`collab-session-save-conflict`). Every
+ * load MUST first claim its document (`DocumentOwnership.claim`), and MUST be
+ * refused when the claim fails or another server owns it; a document whose load is refused or
+ * fails, or that unloads and is not loading again, MUST then be released
+ * (`DocumentOwnership.release`), and a failed release MUST be logged, never thrown.
  */
 /**
  * @cc [owner:PopDaph,label:product] collab-kept-epoch
@@ -170,7 +232,9 @@ function logUnexpected(
  * document never merges into another Yjs history. A connection with no epoch, or with its
  * document's, MUST sync as before.
  */
-export function createCollabHocuspocus(): Hocuspocus<CollabContext> {
+export function createCollabHocuspocus({
+  ownership = createDocumentOwnership(),
+}: { ownership?: DocumentOwnership } = {}): Hocuspocus<CollabContext> {
   const hocuspocus = new Hocuspocus<CollabContext>({
     debounce: STORE_DEBOUNCE_MS,
     maxDebounce: STORE_MAX_DEBOUNCE_MS,
@@ -219,22 +283,17 @@ export function createCollabHocuspocus(): Hocuspocus<CollabContext> {
     },
 
     async onLoadDocument({ context, document, documentName }) {
-      let loaded: Awaited<ReturnType<typeof loadCollabSession>>;
+      let loaded: LoadedCollabSession;
       try {
-        loaded = await loadCollabSession(context);
+        loaded = await claimAndLoadSession(ownership, documentName, context);
       } catch (err) {
         document.destroy();
-        return logUnexpected(
-          { documentName, workspaceId: context.workspaceId },
-          "Collab document load failed"
-        )(err);
-      }
-      if (loaded.isErr()) {
-        document.destroy();
-        refuse(documentName, loaded.error);
+        // An earlier load may still count it as owned.
+        await releaseDocument(ownership, documentName, context.workspaceId);
+        throw err;
       }
       const { content, lastSave, epoch, hasUnsavedEdits, shouldStoreState } =
-        loaded.value;
+        loaded;
       startSession(document, {
         comments: content.comments,
         lastSave,
@@ -335,6 +394,21 @@ export function createCollabHocuspocus(): Hocuspocus<CollabContext> {
       session.lastSave = saved.value;
       recordSaveResult(instance, document, "saved");
       storeSessionState(document);
+    },
+
+    async afterUnloadDocument({ documentName, instance }) {
+      // Opened again meanwhile: this server still owns it.
+      if (
+        instance.documents.has(documentName) ||
+        instance.loadingDocuments.has(documentName)
+      ) {
+        return;
+      }
+      await releaseDocument(
+        ownership,
+        documentName,
+        parseSessionName(documentName)?.workspaceId
+      );
     },
 
     async onDisconnect({ instance, document }) {

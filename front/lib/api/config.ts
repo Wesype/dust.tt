@@ -318,6 +318,9 @@ const config = {
   getCollabServerInternalSecret: (): string | undefined => {
     return EnvironmentConfig.getOptionalEnvVariable("COLLAB_INTERNAL_SECRET");
   },
+  getCollabServerPeerUrl: (): string => {
+    return EnvironmentConfig.getEnvVariable("COLLAB_PEER_URL");
+  },
   getEgressProxyTlsName: (): string | undefined => {
     return EnvironmentConfig.getOptionalEnvVariable("EGRESS_PROXY_TLS_NAME");
   },

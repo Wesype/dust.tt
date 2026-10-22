@@ -19,6 +19,7 @@ vi.mock("@app/lib/api/config", async (importOriginal) => {
     getAcademyJwtSecret: () => "test-academy-jwt-secret",
     getApiBaseUrl: () => "http://localhost:3000",
     getAppUrl: () => "http://localhost:3000",
+    getCollabServerPeerUrl: () => "http://localhost:3013",
     getCoreAPIConfig: () => ({
       url: "http://localhost:9999",
       apiKey: "foo",

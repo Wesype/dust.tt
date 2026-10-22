@@ -10,7 +10,7 @@ export type { RedisClientType };
 
 import { createClient } from "redis";
 
-const clients = new Map<string, RedisClientType>();
+const clients = new Map<string, Promise<RedisClientType>>();
 
 function redactRedisUri(redisUri: string): string {
   try {
@@ -58,6 +58,7 @@ export type RedisUsageTagsType =
   | "cache_diagnostics"
   | "cache_with_redis"
   | "cancel_message_generation"
+  | "collab_owner"
   | "collab_tickets"
   | "collab_ydoc_state"
   | "conversation_events"
@@ -146,6 +147,13 @@ async function createRedisClient({
   return newClient;
 }
 
+/**
+ * @cc [owner:tdraier,label:concurrency] one-client-per-uri
+ * Every caller asking for the same Redis URI, concurrent first callers included, MUST get the same
+ * client until `closeRedisClients`, so that commands sent through it without `isolated` reach
+ * Redis in the order they were sent, one sent after another's timeout included. A client that
+ * fails to connect MUST NOT be kept: the next caller creates a new one.
+ */
 async function getRedisClientByUri({
   origin,
   redisUri,
@@ -162,9 +170,16 @@ async function getRedisClientByUri({
     return existingClient;
   }
 
-  const newClient = await createRedisClient({ origin, redisUri });
+  const newClient = createRedisClient({ origin, redisUri });
   clients.set(redisUri, newClient);
-  return newClient;
+  try {
+    return await newClient;
+  } catch (err) {
+    if (clients.get(redisUri) === newClient) {
+      clients.delete(redisUri);
+    }
+    throw err;
+  }
 }
 
 export async function createRedisStreamClient({
@@ -178,6 +193,12 @@ export async function createRedisStreamClient({
   return createRedisClient({ origin, redisUri, options });
 }
 
+/**
+ * @cc [owner:tdraier,label:performance] main-redis-noeviction
+ * This client, and `runOnRedis`, MUST be on the main Redis (`REDIS_URI`), configured with
+ * `noeviction` in every region: a key written through it MUST stay until it expires or is deleted,
+ * never evicted under memory pressure, unlike the cache and collab Redis, which may evict.
+ */
 export async function getRedisStreamClient({
   origin,
 }: {
@@ -231,7 +252,7 @@ export async function runOnRedisCollab<T>(
 
 export async function closeRedisClients(): Promise<void> {
   for (const [, client] of clients) {
-    await client.quit();
+    await (await client).quit();
   }
   clients.clear();
 }

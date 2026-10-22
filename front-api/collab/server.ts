@@ -4,6 +4,8 @@ import "@front-api/lib/startup-log";
 
 import config from "@app/lib/api/config";
 import logger from "@app/logger/logger";
+import { parseSessionName } from "@app/types/collab";
+import { normalizeError } from "@app/types/shared/utils/error_utils";
 import { setupGlobalErrorHandler } from "@app/types/shared/utils/global_error_handler";
 import type { WebSocketLike } from "@hocuspocus/server";
 import { serve } from "@hono/node-server";
@@ -18,6 +20,10 @@ import {
   recheckAllConnections,
 } from "./lib/connection_access";
 import { saveAllSessions, createCollabHocuspocus } from "./lib/hocuspocus";
+import {
+  createDocumentOwnership,
+  OWNER_RENEW_INTERVAL_MS,
+} from "./lib/ownership";
 import { createCollabRoutes } from "./routes";
 
 /**
@@ -38,7 +44,18 @@ setupGlobalErrorHandler(logger);
 const port = config.getCollabServerPort();
 const hostname = config.getCollabServerHostname();
 
-const hocuspocus = createCollabHocuspocus();
+/**
+ * @cc [owner:tdraier,label:concurrency;error-handling] collab-server-ownership
+ * The server MUST refuse to start without `COLLAB_PEER_URL`, the address its documents' ownership
+ * records give the other servers. It MUST renew the documents it owns every
+ * `OWNER_RENEW_INTERVAL_MS`, unless the previous renewal is still running, including while it
+ * stops, until `saveAllSessions` resolved, then release them, so another server can take them at
+ * once. A renewal that throws MUST be logged and caught, an exception to
+ * `no-catching-own-errors`: it runs from a timer, with no caller to handle it, and MUST NOT keep
+ * the next renewals from running.
+ */
+const ownership = createDocumentOwnership();
+const hocuspocus = createCollabHocuspocus({ ownership });
 
 const app = createHono();
 app.route("/api/healthz", healthzApp);
@@ -123,6 +140,42 @@ const recheckTimer = setInterval(() => {
   });
 }, ACCESS_RECHECK_INTERVAL_MS);
 
+let renewing = false;
+async function renewOwnerships() {
+  if (renewing) {
+    logger.warn("Collab ownership renewal still running, skipping this one");
+    return;
+  }
+  renewing = true;
+  try {
+    const { lost, error } = await ownership.renew();
+    if (error) {
+      logger.error({ err: error }, "Collab ownership renewal failed");
+    }
+    // TODO(co-edition): stop saving a document another server owns now.
+    for (const documentName of lost) {
+      logger.warn(
+        {
+          documentName,
+          workspaceId: parseSessionName(documentName)?.workspaceId,
+        },
+        "Collab document ownership lost"
+      );
+    }
+  } catch (err) {
+    logger.error(
+      { err: normalizeError(err) },
+      "Collab ownership renewal threw"
+    );
+  } finally {
+    renewing = false;
+  }
+}
+const renewTimer = setInterval(
+  () => void renewOwnerships(),
+  OWNER_RENEW_INTERVAL_MS
+);
+
 // Save every document before exiting: edits waiting for a debounced store reach the file.
 async function shutdown(signal: NodeJS.Signals) {
   logger.info(
@@ -134,6 +187,15 @@ async function shutdown(signal: NodeJS.Signals) {
   // Terminated, not closed: no edit still on the wire may arrive during the saves.
   ws.closeAll(undefined, undefined, true);
   await saveAllSessions(hocuspocus);
+  // Renewed until here: a lease running out during the saves would let another server take over.
+  clearInterval(renewTimer);
+  const released = await ownership.releaseAll();
+  if (released.isErr()) {
+    logger.warn(
+      { err: released.error },
+      "Collab document ownerships not released before stopping"
+    );
+  }
   logger.info("Collab server stopped");
   process.exit(0);
 }

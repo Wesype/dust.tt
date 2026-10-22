@@ -16,6 +16,7 @@ and the DFM codec (`front/lib/markdown/dfm/`).
 | `middlewares/` | The internal secret check, and `withHocuspocus`, which gives the routes the server's Hocuspocus instance. |
 | `lib/hocuspocus.ts` | Builds Hocuspocus and its hooks: connect, load, change, save, unload. Parses and answers browsers' comment messages. Saves every session on shutdown (`saveAllSessions`). |
 | `lib/session.ts` | What the server holds for each open file (`CollabSession`), and reading and writing its source for front. |
+| `lib/ownership.ts` | Which server owns each open document, the one that saves it: a record in the main Redis, claimed on load, renewed, released on unload. |
 | `lib/connection_access.ts` | Who may stay connected: checked when a browser connects, then every 5 minutes. |
 | `lib/session_file.ts` | Loads a session from its file and saves it back, keeping a copy on a save conflict. |
 | `lib/ydoc_state.ts` | The Yjs state kept in Redis between saves, so a reload keeps its Yjs ids. |

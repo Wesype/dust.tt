@@ -7,7 +7,7 @@ import {
   yDocCommentedTexts,
   yDocToDfm,
 } from "@app/lib/api/collab/ydoc";
-import { runOnRedisCollab } from "@app/lib/api/redis";
+import { runOnRedis, runOnRedisCollab } from "@app/lib/api/redis";
 import { Authenticator } from "@app/lib/auth";
 import { onAgentActivity, onAgentEdit } from "@app/lib/client/collab/agents";
 import type { CommentChannel } from "@app/lib/client/collab/comments";
@@ -49,6 +49,10 @@ import {
   handleClientMessage,
   UNLOAD_GRACE_PERIOD_MS,
 } from "@front-api/collab/lib/hocuspocus";
+import {
+  DocumentOwnership,
+  getDocumentOwner,
+} from "@front-api/collab/lib/ownership";
 import {
   SAVE_RETRY_DELAY_MS,
   getSession,
@@ -1825,5 +1829,102 @@ describe("comment threads in a live session", () => {
 
       await vi.waitFor(() => expect(seen).toEqual(["Writer reading"]));
     }, 15_000);
+  });
+});
+
+describe("a document's ownership across collab servers", () => {
+  const SELF = { serverId: "this-server", url: "http://10.0.0.1:3000" };
+  const OTHER = { serverId: "other-server", url: "http://10.0.0.2:3000" };
+  const ownerKey = `collab_owner:${DOCUMENT_NAME}`;
+  let ownership: DocumentOwnership;
+
+  beforeEach(async () => {
+    vi.mocked(loadCollabSession).mockImplementation(loadSource);
+    saveNextRevision();
+    ownership = new DocumentOwnership(SELF);
+    await runOnRedis({ origin: "collab_owner" }, (redis) =>
+      redis.del(ownerKey)
+    );
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await ownership.releaseAll();
+    await runOnRedis({ origin: "collab_owner" }, (redis) =>
+      redis.del(ownerKey)
+    );
+  });
+
+  it("claims a document when it loads, and releases it once unloaded", async () => {
+    const hocuspocus = createCollabHocuspocus({ ownership });
+    const writer = await collabAccess(true);
+
+    const connection = await hocuspocus.openDirectConnection(
+      DOCUMENT_NAME,
+      writer
+    );
+    const owner = await getDocumentOwner(DOCUMENT_NAME);
+    expect(owner.isOk() && owner.value).toEqual(SELF);
+
+    vi.useFakeTimers();
+    await connection.disconnect();
+    await vi.advanceTimersByTimeAsync(UNLOAD_GRACE_PERIOD_MS);
+    vi.useRealTimers();
+    expect(hocuspocus.getDocumentsCount()).toBe(0);
+    await vi.waitFor(async () => {
+      const released = await getDocumentOwner(DOCUMENT_NAME);
+      expect(released.isOk() && released.value).toBeNull();
+    });
+  });
+
+  it("unloads a document again after its release threw", async () => {
+    const hocuspocus = createCollabHocuspocus({ ownership });
+    const writer = await collabAccess(true);
+    vi.spyOn(ownership, "release").mockRejectedValueOnce(
+      new Error("Redis client unavailable")
+    );
+
+    vi.useFakeTimers();
+    for (let opening = 0; opening < 2; opening++) {
+      const connection = await hocuspocus.openDirectConnection(
+        DOCUMENT_NAME,
+        writer
+      );
+      await connection.disconnect();
+      await vi.advanceTimersByTimeAsync(UNLOAD_GRACE_PERIOD_MS);
+      expect(hocuspocus.getDocumentsCount()).toBe(0);
+    }
+    vi.useRealTimers();
+    await vi.waitFor(async () => {
+      const released = await getDocumentOwner(DOCUMENT_NAME);
+      expect(released.isOk() && released.value).toBeNull();
+    });
+  });
+
+  it("refuses a document another server owns, without loading it", async () => {
+    await runOnRedis({ origin: "collab_owner" }, (redis) =>
+      redis.set(ownerKey, JSON.stringify(OTHER), { PX: 30_000 })
+    );
+    const hocuspocus = createCollabHocuspocus({ ownership });
+    const writer = await collabAccess(true);
+
+    await expect(
+      hocuspocus.openDirectConnection(DOCUMENT_NAME, writer)
+    ).rejects.toThrow("The document is open on another collab server.");
+    expect(loadCollabSession).not.toHaveBeenCalled();
+    const owner = await getDocumentOwner(DOCUMENT_NAME);
+    expect(owner.isOk() && owner.value).toEqual(OTHER);
+  });
+
+  it("releases a document whose load failed", async () => {
+    vi.mocked(loadCollabSession).mockResolvedValue(new Err("File not found."));
+    const hocuspocus = createCollabHocuspocus({ ownership });
+    const writer = await collabAccess(true);
+
+    await expect(
+      hocuspocus.openDirectConnection(DOCUMENT_NAME, writer)
+    ).rejects.toThrow("File not found.");
+    const owner = await getDocumentOwner(DOCUMENT_NAME);
+    expect(owner.isOk() && owner.value).toBeNull();
   });
 });

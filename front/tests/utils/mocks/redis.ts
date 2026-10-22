@@ -217,6 +217,61 @@ class RedisMock {
             return 0;
           }
 
+          // Collab ownership: a key is free when missing, expired, or holding ARGV[1].
+          const isFreeFor = (key: string, record: string) => {
+            const entry = this.stringStore.get(key);
+            return (
+              !entry ||
+              entry.value === record ||
+              (entry.expiresAtMs > 0 && Date.now() > entry.expiresAtMs)
+            );
+          };
+
+          // Collab ownership claim: take or renew KEYS[1] for ARGV[1], return its holder.
+          if (
+            script.includes(
+              'redis.call("set", KEYS[1], ARGV[1], "PX", ARGV[2])'
+            )
+          ) {
+            const [key] = keys;
+            const [record, leaseMs] = args;
+            if (!isFreeFor(key, record)) {
+              return this.stringStore.get(key)?.value;
+            }
+            this.stringStore.set(key, {
+              value: record,
+              expiresAtMs: Date.now() + Number(leaseMs),
+            });
+            return record;
+          }
+
+          // Collab ownership renewal: renew or re-create each key free for ARGV[1].
+          if (
+            script.includes('redis.call("set", key, ARGV[1], "PX", ARGV[2])')
+          ) {
+            const [record, leaseMs] = args;
+            return keys.map((key) => {
+              if (!isFreeFor(key, record)) {
+                return 0;
+              }
+              this.stringStore.set(key, {
+                value: record,
+                expiresAtMs: Date.now() + Number(leaseMs),
+              });
+              return 1;
+            });
+          }
+
+          // Collab ownership release: delete each key still holding ARGV[1].
+          if (script.includes('redis.call("del", key)')) {
+            const [record] = args;
+            return keys.filter(
+              (key) =>
+                this.stringStore.get(key)?.value === record &&
+                this.stringStore.delete(key)
+            ).length;
+          }
+
           // cacheWithRedis invalidate: DEL value + INCR generation per key.
           if (script.includes('key .. ":generation"')) {
             for (const key of keys) {

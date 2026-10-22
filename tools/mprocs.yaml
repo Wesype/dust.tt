@@ -79,6 +79,7 @@ procs:
       NODE_ENV: "development"
       COLLAB_HOSTNAME: "localhost"
       COLLAB_PORT: "3013"
+      COLLAB_PEER_URL: "http://localhost:3013"
       COLLAB_INTERNAL_SECRET: "dev-collab-secret"
       READY_FILE: "../sdks/js/dist/client.esm.js.map"
     shell: |
