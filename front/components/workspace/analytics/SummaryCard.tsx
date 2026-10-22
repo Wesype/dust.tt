@@ -19,7 +19,7 @@ export function SummaryCard({
   return (
     <div
       className={cn(
-        "flex flex-1 flex-col justify-center h-24 gap-1 rounded-xl",
+        "flex flex-1 flex-col justify-center min-h-24 gap-1 rounded-xl",
         "border border-border bg-panel-background p-4",
         className
       )}

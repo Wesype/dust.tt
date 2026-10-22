@@ -76,26 +76,28 @@ export function WebAgentBrowser({
       {/* Search bar */}
       <div
         id="search-container"
-        className="mb-2 flex w-full flex-row items-center justify-center gap-2 align-middle"
+        className="mb-2 flex w-full flex-row flex-wrap items-center justify-center gap-2 align-middle"
       >
-        <AgentBrowserSearchDropdown
-          assistantSearch={assistantSearch}
-          setAssistantSearch={setAssistantSearch}
-          filteredTags={filteredTags}
-          filteredAgents={filteredAgents}
-          isLoading={isLoading}
-          onTagClick={handleTagClick}
-          onAgentClick={(agent) => {
-            handleAgentClick(agent);
-            setAssistantSearch("");
-          }}
-          onAgentMoreClick={(agentId) =>
-            setQueryParam(router, "agentDetails", agentId)
-          }
-          trackAgentBrowserEvents
-        />
+        <div className="min-w-48 flex-1">
+          <AgentBrowserSearchDropdown
+            assistantSearch={assistantSearch}
+            setAssistantSearch={setAssistantSearch}
+            filteredTags={filteredTags}
+            filteredAgents={filteredAgents}
+            isLoading={isLoading}
+            onTagClick={handleTagClick}
+            onAgentClick={(agent) => {
+              handleAgentClick(agent);
+              setAssistantSearch("");
+            }}
+            onAgentMoreClick={(agentId) =>
+              setQueryParam(router, "agentDetails", agentId)
+            }
+            trackAgentBrowserEvents
+          />
+        </div>
 
-        <div className="hidden sm:block">
+        <div className="ml-auto hidden sm:block">
           <div className="flex gap-2">
             {canCreate && (
               <div ref={createAgentButtonRef}>
@@ -108,8 +110,8 @@ export function WebAgentBrowser({
       </div>
 
       {/* Agent tabs */}
-      <div className="w-full">
-        <ScrollArea aria-orientation="horizontal">
+      <div className="flex w-full flex-wrap items-start gap-2">
+        <ScrollArea aria-orientation="horizontal" className="min-w-0 grow">
           <Tabs value={viewTab} onValueChange={setSelectedTab}>
             <TabsList>
               {AGENTS_TABS.map((tab) => (
@@ -120,35 +122,35 @@ export function WebAgentBrowser({
                   label={t(tab.label)}
                 />
               ))}
-              <div className="ml-auto"></div>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    isSelect
-                    variant="outline"
-                    label={sortTypeLabel}
-                    size="sm"
-                  />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem
-                    label={t`By popularity`}
-                    onClick={() => setSortType("popularity")}
-                  />
-                  <DropdownMenuItem
-                    label={t`Alphabetical`}
-                    onClick={() => setSortType("alphabetical")}
-                  />
-                  <DropdownMenuItem
-                    label={t`Recently updated`}
-                    onClick={() => setSortType("updated")}
-                  />
-                </DropdownMenuContent>
-              </DropdownMenu>
             </TabsList>
           </Tabs>
           <ScrollBar orientation="horizontal" className="hidden" />
         </ScrollArea>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              isSelect
+              variant="outline"
+              label={sortTypeLabel}
+              size="sm"
+              className="ml-auto"
+            />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem
+              label={t`By popularity`}
+              onClick={() => setSortType("popularity")}
+            />
+            <DropdownMenuItem
+              label={t`Alphabetical`}
+              onClick={() => setSortType("alphabetical")}
+            />
+            <DropdownMenuItem
+              label={t`Recently updated`}
+              onClick={() => setSortType("updated")}
+            />
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Content */}

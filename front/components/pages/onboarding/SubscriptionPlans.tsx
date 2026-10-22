@@ -71,7 +71,7 @@ export function PlanCard({
   const iconColorClass = getSeatIconColorClass(seatType);
 
   return (
-    <div className="flex w-full flex-col rounded-2xl border border-border bg-background p-6">
+    <div className="flex flex-1 flex-col rounded-2xl border border-border bg-background p-6">
       <div className="flex items-center gap-2">
         <div
           className={cn(

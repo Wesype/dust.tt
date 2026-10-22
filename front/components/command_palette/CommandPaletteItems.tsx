@@ -85,7 +85,7 @@ export function KeyboardHints({ hints }: { hints: KeyboardHint[] }) {
   return (
     <div
       className={cn(
-        "flex items-center justify-end gap-4 border-t px-4 py-2",
+        "flex flex-wrap items-center justify-end gap-4 border-t px-4 py-2",
         "border-separator",
         "text-xs text-muted-foreground"
       )}

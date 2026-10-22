@@ -518,7 +518,7 @@ export function SubscriptionPage() {
                   <div className="pt-2">
                     {isMetronomeCheckout ? (
                       <>
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
                           <Page.H variant="h5">
                             <Trans>Choose a plan</Trans>
                           </Page.H>
@@ -527,7 +527,7 @@ export function SubscriptionPage() {
                             onValueChange={setBillingPeriod}
                           />
                         </div>
-                        <div className="flex w-full flex-col gap-4 pt-4 sm:flex-row">
+                        <div className="flex w-full flex-wrap gap-4 pt-4">
                           <PaidPlanCards
                             billingPeriod={billingPeriod}
                             onSubscribe={(seatType) =>
@@ -538,7 +538,7 @@ export function SubscriptionPage() {
                       </>
                     ) : (
                       <>
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
                           <div>
                             <Page.H variant="h5">
                               <Trans>Choose a plan</Trans>

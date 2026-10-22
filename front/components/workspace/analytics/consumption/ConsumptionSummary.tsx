@@ -161,7 +161,7 @@ export function ConsumptionSummaryView({
         className={
           responsiveLayout
             ? "grid grid-cols-1 gap-4 sm:grid-cols-3"
-            : "flex items-stretch gap-6"
+            : "flex flex-wrap items-stretch gap-6"
         }
       >
         <SummaryCard
@@ -254,13 +254,13 @@ function AgentConsumptionSummaryView({
         }
       >
         <SummaryCard
-          className="h-20"
+          className="min-h-20"
           label={t`Active users`}
           value={formatNumber(overview.members.active)}
           hint={null}
         />
         <SummaryCard
-          className="h-20"
+          className="min-h-20"
           label={t`Messages / active user`}
           value={formatNumber(messagesPerActiveUser)}
           hint={null}
@@ -274,13 +274,13 @@ function AgentConsumptionSummaryView({
         }
       >
         <SummaryCard
-          className="h-20"
+          className="min-h-20"
           label={t`Total cost`}
           value={formatCreditValue(overview.totalCredits, t)}
           hint={null}
         />
         <SummaryCard
-          className="h-20"
+          className="min-h-20"
           label={t`Avg. cost/msg`}
           value={averageCost ?? "—"}
           hint={null}

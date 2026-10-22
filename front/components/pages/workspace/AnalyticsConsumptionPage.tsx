@@ -236,7 +236,7 @@ export function AnalyticsConsumptionPage() {
         <Page.Vertical align="stretch" gap="md">
           <Page.Header
             title={
-              <div className="flex w-full flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex w-full flex-wrap items-center justify-between gap-4">
                 <Page.H variant="h3">{t`Analytics`}</Page.H>
                 <AnalyticsConsumptionSelectors
                   owner={owner}

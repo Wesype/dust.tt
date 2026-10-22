@@ -69,7 +69,7 @@ export function AnalyticsAutomationsPage() {
       <Page.Vertical align="stretch" gap="xl">
         <Page.Header
           title={
-            <div className="flex w-full flex-row justify-between">
+            <div className="flex w-full flex-row flex-wrap justify-between gap-4">
               <div className="flex flex-col gap-1">
                 <Page.H variant="h3">
                   <Trans>Automations</Trans>

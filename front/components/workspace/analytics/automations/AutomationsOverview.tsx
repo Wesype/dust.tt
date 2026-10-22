@@ -38,7 +38,7 @@ export function AutomationsOverview({
       : null;
 
   return (
-    <div className="flex items-stretch gap-6">
+    <div className="flex flex-wrap items-stretch gap-6">
       <SummaryCard
         label={t`Credits`}
         value={formatCredits(automationCredits)}

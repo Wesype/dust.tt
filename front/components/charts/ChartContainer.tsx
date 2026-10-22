@@ -61,7 +61,7 @@ export function ChartContainer({
       <div className="observability-chart-container rounded-lg border border-border bg-background p-4">
         <div
           className={cn(
-            "flex items-center justify-between",
+            "flex flex-wrap items-center justify-between gap-2",
             showHeaderDivider && "border-b border-border pb-3"
           )}
         >
@@ -71,7 +71,7 @@ export function ChartContainer({
             )}
             {statusChip}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {additionalControls}
             {isAllowFullScreen && (
               <Button

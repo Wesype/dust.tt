@@ -256,39 +256,42 @@ export function SecretsPageContent() {
 
       <AdminSectionAnchor sectionId={ADMIN_SECTION_IDS.secrets.secrets}>
         <Page.Vertical align="stretch" gap="md">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <SearchInput
-              className="flex-grow"
+              className="min-w-48 flex-1"
               name="secrets-search"
               placeholder={t`Search secrets`}
               value={searchQuery}
               onChange={setSearchQuery}
             />
-            <Button
-              label={t`API reference`}
-              size="sm"
-              variant="outline"
-              icon={BookOpen01}
-              onClick={() => {
-                window.open(
-                  "https://docs.dust.tt/reference/developer-platform-overview#developer-secrets",
-                  "_blank"
-                );
-              }}
-            />
-            {isAdmin && (
+            <div className="ml-auto flex gap-2">
               <Button
-                label={t`Create secret`}
-                variant="primary"
+                label={t`API reference`}
+                size="sm"
+                variant="outline"
+                icon={BookOpen01}
                 onClick={() => {
-                  setNewDustAppSecret(defaultSecret);
-                  setIsInputNameDisabled(false);
-                  setIsNewSecretPromptOpen(true);
+                  window.open(
+                    "https://docs.dust.tt/reference/developer-platform-overview#developer-secrets",
+                    "_blank",
+                    "noopener,noreferrer"
+                  );
                 }}
-                icon={Plus}
-                disabled={isGenerating || isRevoking}
               />
-            )}
+              {isAdmin && (
+                <Button
+                  label={t`Create secret`}
+                  variant="primary"
+                  onClick={() => {
+                    setNewDustAppSecret(defaultSecret);
+                    setIsInputNameDisabled(false);
+                    setIsNewSecretPromptOpen(true);
+                  }}
+                  icon={Plus}
+                  disabled={isGenerating || isRevoking}
+                />
+              )}
+            </div>
           </div>
           <SecretsTable
             isLoading={isSecretsLoading}

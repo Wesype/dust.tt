@@ -69,8 +69,8 @@ describe("ConsumptionSummary", () => {
     const activeUsersCard = screen
       .getByText("Active users")
       .closest(".bg-panel-background");
-    expect(activeUsersCard).toHaveClass("h-20");
-    expect(activeUsersCard).not.toHaveClass("h-24");
+    expect(activeUsersCard).toHaveClass("min-h-20");
+    expect(activeUsersCard).not.toHaveClass("min-h-24");
     expect(
       screen.getByText("Messages / active user").closest(".bg-panel-background")
     ).toBeInTheDocument();
@@ -110,7 +110,7 @@ describe("ConsumptionSummary", () => {
     expect(screen.getByText("0.2 credits / message")).toBeInTheDocument();
     expect(
       screen.getByText("Top agent").closest(".bg-panel-background")
-    ).toHaveClass("h-24");
+    ).toHaveClass("min-h-24");
     expect(container.firstElementChild).toHaveClass("gap-4");
     expect(screen.queryByText("Active users")).not.toBeInTheDocument();
     expect(screen.queryByText("Total cost")).not.toBeInTheDocument();

@@ -642,7 +642,7 @@ export function BaseProgrammaticCostChart({
   return (
     <ChartContainer
       title={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span>
             <Trans>Usage cost graph</Trans>
           </span>
@@ -685,7 +685,7 @@ export function BaseProgrammaticCostChart({
         chartData.length === 0 ? t`No cost data for this month.` : undefined
       }
       additionalControls={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {hasFilters && (
             <Button
               label={t`Clear filters`}
