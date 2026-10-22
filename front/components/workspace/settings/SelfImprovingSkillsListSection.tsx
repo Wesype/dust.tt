@@ -97,7 +97,6 @@ function getColumns(
           </DataTable.CellContent>
         );
       },
-      meta: { className: "w-36 @lg:w-full" },
     },
     {
       header: headers.editors,
@@ -115,7 +114,7 @@ function getColumns(
           <DataTable.CellContent avatarStack={{ items, nbVisibleItems: 4 }} />
         );
       },
-      meta: { className: "w-28" },
+      meta: { className: "hidden w-28 @lg:table-cell" },
     },
     {
       header: headers.enabled,
@@ -151,7 +150,7 @@ function getColumns(
           label={info.row.original.currentSpentFormatted}
         />
       ),
-      meta: { type: "numeric", className: "w-60" },
+      meta: { type: "numeric", className: "hidden w-60 @4xl:table-cell" },
     },
     {
       header: headers.cap,
@@ -173,7 +172,12 @@ function getColumns(
           </DataTable.CellContent>
         );
       },
-      meta: { className: unit === "awu_credits" ? "w-60 pl-8" : "w-48 pl-8" },
+      meta: {
+        className:
+          unit === "awu_credits"
+            ? "hidden w-60 pl-8 @sm:table-cell"
+            : "hidden w-48 pl-8 @sm:table-cell",
+      },
     },
     {
       header: headers.lockState,
