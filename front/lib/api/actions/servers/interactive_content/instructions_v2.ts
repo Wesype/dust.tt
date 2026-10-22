@@ -46,8 +46,9 @@ content file using the \`Slideshow\` and \`Slide\` components.
 
 **Content guidelines:**
 - Give each slide one main idea and enough space to read comfortably.
-- Use a consistent background color across slides for cohesion, such as \`bg-background\`.
-  Use 1-2 accent colors for emphasis elements.
+- Take every slide's colors from the theme. Vary slides with the theme's surfaces, such as
+  \`bg-primary text-primary-foreground\` for a section opener or \`bg-card\` for a panel, not with
+  colors outside it.
 - Structure content with clear hierarchy: title, then visuals or key points, then supporting text.
 - For data-heavy slides, prefer charts (Recharts) over tables or bullet lists.
 
@@ -96,13 +97,14 @@ GOOD:
 
 ### Color And Visual Identity
 
-- Tailwind classes are precompiled. Any arbitrary value in a className, such as \`h-[600px]\`, \`text-[14px]\`, \`bg-[#ff0000]\`, or \`grid-cols-[200px_1fr]\`, fails validation. Use predefined utilities such as \`h-96\`, \`text-sm\`, and \`bg-red-500\`, or use the \`style\` prop for exact values.
-- Use \`bg-background\` and \`bg-card\` for surfaces instead of hardcoded \`bg-white\`.
-- Every frame needs at least one explicit accent color chosen to suit the user's brand or content. Use literal Tailwind chroma classes or a small hex palette constant.
-- Apply the accent deliberately on headings, primary actions, important metrics, and selected state. Do not leave color only in tiny status pills.
-- The default \`bg-primary\`, \`text-primary\`, and shadcn button style are near-black. Set \`--primary\` in the theme to use your accent color.
-- \`bg-background\`, \`bg-card\`, \`bg-secondary\`, \`text-foreground\`, and \`text-muted-foreground\` are structural neutrals. They are not a palette by themselves.
-- Keep the palette small: one accent family plus neutrals is usually enough. Leaving the frame colorless is wrong.
+- Tailwind classes are precompiled. Any arbitrary value in a className, such as \`h-[600px]\`, \`text-[14px]\`, \`bg-[#ff0000]\`, or \`grid-cols-[200px_1fr]\`, fails validation. Use predefined utilities such as \`h-96\` and \`text-sm\`, or use the \`style\` prop for exact values.
+- The theme is the Frame's only palette. Set every color in \`theme.ts\`: surfaces, text, \`--primary\`, \`--secondary\` and \`--accent\` with their foregrounds, \`--border\`, and \`--chart-1\` through \`--chart-5\`.
+- In JSX, color only with the semantic utilities generated for those variables: \`bg-\`, \`text-\`, \`border-\`, \`fill-\` and \`stroke-\` followed by \`background\`, \`foreground\`, \`card\`, \`muted\`, \`primary\`, \`secondary\`, \`accent\`, their \`-foreground\` pairs, \`border\`, or \`chart-1\` through \`chart-5\`. For example \`bg-card\`, \`text-primary\`, \`bg-accent text-accent-foreground\`, \`fill-chart-2\`.
+- Do not use Tailwind palette classes such as \`bg-emerald-50\` or \`text-slate-500\`, or hex values in JSX or palette constants. They bypass the theme, so the slides drift from it and a later theme edit misses them.
+- Opacity modifiers on semantic colors, such as \`bg-primary/10\`, are not generated. Set a light tint as its own theme variable, typically \`--accent\` or \`--muted\`.
+- Need another named color? Add it to the theme as a custom variable and read it with \`style={{ color: "var(--highlight)" }}\`.
+- Choose the palette from the subject, audience and any brand, background included: dark, tinted or saturated backgrounds are fine when they suit the subject. Do not fall back to a house style such as off-white with a navy or teal accent: two unrelated Frames should not look alike.
+- Apply \`--primary\` deliberately on headings, primary actions, important metrics, and selected state. Do not leave color only in tiny status pills. Leaving the frame colorless is wrong.
 - Use lucide-react icons instead of emojis.
 - Use shadcn/ui components for a polished baseline. Use Cards for individual charts, data visualizations, and key metrics or KPIs. Do not wrap controls, inputs, navigation, or simple text content in Cards. Avoid nested Cards.
 - For shadcn Buttons, use semantic variants such as \`variant="default"\`, \`variant="secondary"\`, \`variant="outline"\`, and \`variant="destructive"\`. Let shadcn handle hover states unless an active or selected state needs a visible accent.
@@ -118,7 +120,7 @@ GOOD:
 - Do not rely on a chart wrapper's default width.
 - Use \`chartConfig\` with chart color variables for series colors, for example \`{ revenue: { label: "Revenue", color: "var(--chart-1)" } }\`.
 - Reference chart config colors from chart elements with \`var(--color-revenue)\`. Direct \`var(--chart-1)\` through \`var(--chart-5)\` is also acceptable for simple examples.
-- Chart series fills and strokes use shadcn chart variables. Brand identity still needs a literal Tailwind chroma accent or hex palette elsewhere in the frame.
+- Set \`--chart-1\` through \`--chart-5\` in the theme so series colors belong to the Frame's palette. Without them, charts keep the host's default colors.
 - Use \`<Cell>\` for per-bar or per-slice colors. Do not insert raw \`<rect>\` elements for data colors.
 - Keep margins large enough for axes, labels, and legends at narrow iframe widths, for example \`margin={{ top: 20, right: 30, left: 20, bottom: 20 }}\`.
 - Tooltip \`formatter\` must be a function returning \`[value, name]\`; \`labelFormatter\` must be a function returning a string.

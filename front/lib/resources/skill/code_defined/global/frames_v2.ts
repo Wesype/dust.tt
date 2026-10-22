@@ -694,10 +694,16 @@ export default function App() {
 \`\`\`
 
 Use the existing semantic variables: \`--background\` and \`--foreground\`, \`--primary\` and
-\`--primary-foreground\`, \`--card\` and \`--card-foreground\`, \`--muted\` and \`--muted-foreground\`,
-\`--border\` and \`--radius\`. Set \`--font-sans\`, \`--font-serif\` or \`--font-mono\` for the corresponding
-font classes. Values are ordinary CSS strings. Fonts must be available in the browser or loaded by
-the Frame. Keep related foreground and background colors legible together.
+\`--primary-foreground\`, \`--secondary\` and \`--secondary-foreground\`, \`--accent\` and
+\`--accent-foreground\`, \`--card\` and \`--card-foreground\`, \`--muted\` and \`--muted-foreground\`,
+\`--border\`, \`--chart-1\` through \`--chart-5\`, and \`--radius\`. Set \`--font-sans\`, \`--font-serif\` or
+\`--font-mono\` for the corresponding font classes. Values are ordinary CSS strings. Fonts must be
+available in the browser or loaded by the Frame. Keep related foreground and background colors
+legible together.
+
+The theme is the whole palette: every color the Frame shows comes from these variables through
+their semantic classes (\`bg-accent\`, \`text-primary\`, \`fill-chart-2\`). Tailwind palette classes such
+as \`bg-emerald-50\` and hex values in JSX bypass it.
 
 Keep shared values in \`theme.ts\` so custom visuals and components using those semantic classes
 follow the same direction. Extend the theme with normal object spreads. A nested FrameRoot inherits

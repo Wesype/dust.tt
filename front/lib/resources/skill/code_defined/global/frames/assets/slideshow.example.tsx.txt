@@ -1,32 +1,56 @@
 import { Slideshow, Slide } from "@dust/slideshow/v2";
+import { Bar, BarChart, XAxis } from "recharts";
+import { ChartContainer, type ChartConfig } from "shadcn";
+import { theme } from "./theme";
+
+const revenue = [
+  { quarter: "Q1", revenue: 3.1 },
+  { quarter: "Q2", revenue: 3.6 },
+  { quarter: "Q3", revenue: 4.2 },
+];
+
+const chartConfig = {
+  revenue: { label: "Revenue ($M)", color: "var(--chart-1)" },
+} satisfies ChartConfig;
 
 export default function App() {
   return (
-    <Slideshow>
-      <Slide className="bg-background">
-        <h1 className="text-6xl font-bold text-foreground mb-4">Q4 Revenue Analysis</h1>
-        <p className="text-xl text-muted-foreground">Annual review & key insights</p>
+    <Slideshow theme={theme}>
+      <Slide className="bg-primary text-primary-foreground">
+        <h1 className="font-serif text-6xl font-bold mb-4">Q4 Revenue Analysis</h1>
+        <p className="text-xl">Annual review & key insights</p>
       </Slide>
-      <Slide className="bg-background">
-        <h2 className="text-4xl font-semibold mb-8">Key Metrics</h2>
+      <Slide>
+        <h2 className="font-serif text-4xl font-semibold mb-8">Key Metrics</h2>
         <div className="grid grid-cols-3 gap-8">
-          <div className="text-center">
+          <div className="rounded-lg bg-card p-6 text-center text-card-foreground">
             <p className="text-5xl font-bold text-primary">+25%</p>
             <p className="text-lg text-muted-foreground mt-2">YoY Growth</p>
           </div>
-          <div className="text-center">
+          <div className="rounded-lg bg-card p-6 text-center text-card-foreground">
             <p className="text-5xl font-bold text-primary">92%</p>
             <p className="text-lg text-muted-foreground mt-2">Retention</p>
           </div>
-          <div className="text-center">
-            <p className="text-5xl font-bold text-primary">1.2k</p>
-            <p className="text-lg text-muted-foreground mt-2">New Customers</p>
+          <div className="rounded-lg bg-accent p-6 text-center text-accent-foreground">
+            <p className="text-5xl font-bold">1.2k</p>
+            <p className="text-lg mt-2">New Customers</p>
           </div>
         </div>
       </Slide>
-      <Slide className="bg-background">
-        <h2 className="text-4xl font-semibold mb-6">Next Steps</h2>
-        <ul className="space-y-4 text-xl text-foreground">
+      <Slide>
+        <h2 className="font-serif text-4xl font-semibold mb-6">Revenue by Quarter</h2>
+        <div className="w-full max-w-3xl">
+          <ChartContainer config={chartConfig} className="h-72 w-full">
+            <BarChart data={revenue}>
+              <XAxis dataKey="quarter" tickLine={false} axisLine={false} />
+              <Bar dataKey="revenue" fill="var(--color-revenue)" radius={6} />
+            </BarChart>
+          </ChartContainer>
+        </div>
+      </Slide>
+      <Slide className="bg-secondary text-secondary-foreground">
+        <h2 className="font-serif text-4xl font-semibold mb-6">Next Steps</h2>
+        <ul className="space-y-4 text-xl">
           <li>Expand into EU markets</li>
           <li>Launch premium tier</li>
           <li>Revamp onboarding flow</li>

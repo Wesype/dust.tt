@@ -36,3 +36,8 @@ Frames without a manifest MUST skip this check.
 @cc [owner:flvndvd,label:security] frame-types-verified-cache
 Downloaded archives MUST match the manifest checksum and size before extraction. A cache entry
 MUST become visible only after extraction succeeds. A changed manifest id MUST select new types.
+
+@cc [owner:flvndvd,label:product] frame-theme-starter
+The attached theme.ts MUST set every semantic variable the authoring guidance tells the model to
+set, with neutral gray placeholder values. It MUST NOT suggest a palette: generated Frames copy
+its values.
