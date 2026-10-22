@@ -314,7 +314,7 @@ export const runAgent = async (
       toolsetsToAdd: toolsetsToAdd ?? null,
       fileOrContentFragmentIds: fileOrContentFragmentIds ?? null,
       filePaths: filePaths ?? null,
-      conversationId: isHandoff ? mainConversation.sId : null,
+      isHandoff,
       originMessage: toolContext.runContext.agentMessage,
     }
   );

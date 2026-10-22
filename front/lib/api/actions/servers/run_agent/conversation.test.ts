@@ -162,7 +162,7 @@ function buildRequest(
     toolsetsToAdd: null,
     fileOrContentFragmentIds: null,
     filePaths: null,
-    conversationId: null,
+    isHandoff: false,
     ...overrides,
   };
 }
@@ -208,7 +208,7 @@ describe("getOrCreateConversation", () => {
         toolsetsToAdd: null,
         fileOrContentFragmentIds: null,
         filePaths: null,
-        conversationId: null,
+        isHandoff: false,
       }
     );
 
@@ -266,7 +266,7 @@ describe("getOrCreateConversation", () => {
         toolsetsToAdd: null,
         fileOrContentFragmentIds: null,
         filePaths: null,
-        conversationId: null,
+        isHandoff: false,
       }
     );
 
@@ -382,7 +382,7 @@ describe("getOrCreateConversation", () => {
           toolsetsToAdd: null,
           fileOrContentFragmentIds: null,
           filePaths: null,
-          conversationId: null,
+          isHandoff: false,
         }
       );
 
@@ -442,7 +442,7 @@ describe("getOrCreateConversation", () => {
         toolsetsToAdd: null,
         fileOrContentFragmentIds: null,
         filePaths: null,
-        conversationId: null,
+        isHandoff: false,
       }
     );
 
@@ -494,7 +494,7 @@ describe("getOrCreateConversation", () => {
         toolsetsToAdd: null,
         fileOrContentFragmentIds: null,
         filePaths: null,
-        conversationId: null,
+        isHandoff: false,
       }
     );
 
@@ -595,7 +595,7 @@ describe("getOrCreateConversation", () => {
       api,
       {} as Authenticator,
       fixtures.agentLoopContext,
-      buildRequest(fixtures, { conversationId: fixtures.mainConversation.sId })
+      buildRequest(fixtures, { isHandoff: true })
     );
 
     expect(result.isErr()).toBe(true);

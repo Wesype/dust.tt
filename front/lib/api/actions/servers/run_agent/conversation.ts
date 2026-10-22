@@ -158,7 +158,7 @@ export async function getOrCreateConversation(
     toolsetsToAdd,
     fileOrContentFragmentIds,
     filePaths,
-    conversationId,
+    isHandoff,
   }: {
     childAgentBlob: ChildAgentBlob;
     childAgentId: string;
@@ -169,7 +169,9 @@ export async function getOrCreateConversation(
     toolsetsToAdd: string[] | null;
     fileOrContentFragmentIds: string[] | null;
     filePaths: string[] | null;
-    conversationId: string | null;
+    // Hands the query off to the child agent in the main conversation instead of creating a
+    // sub-conversation.
+    isHandoff: boolean;
   }
 ): Promise<
   Result<
@@ -308,12 +310,10 @@ export async function getOrCreateConversation(
         : false,
   });
 
-  if (conversationId) {
-    const agenticMessageType =
-      mainConversation.sId !== conversationId ? "run_agent" : "agent_handover";
+  if (isHandoff) {
     const result = await postMessageAndFetchConversation(api, {
-      conversationId,
-      message: makeSubAgentMessage(agenticMessageType),
+      conversationId: mainConversation.sId,
+      message: makeSubAgentMessage("agent_handover"),
     });
     if (result.isErr()) {
       return result;
