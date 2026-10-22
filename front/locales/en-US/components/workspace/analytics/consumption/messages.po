@@ -186,6 +186,10 @@ msgid "{creditCount, plural, one {{total} credit total} other {{total} credits t
 msgstr "{creditCount, plural, one {{total} credit total} other {{total} credits total}}"
 
 #: front/components/workspace/analytics/consumption/ConsumptionChart.tsx
+msgid "Others"
+msgstr "Others"
+
+#: front/components/workspace/analytics/consumption/ConsumptionChart.tsx
 msgid "Consumption"
 msgstr "Consumption"
 

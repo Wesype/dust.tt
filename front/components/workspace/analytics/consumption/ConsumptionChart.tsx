@@ -27,6 +27,7 @@ import {
 } from "@app/lib/client/credits";
 import { getActiveLocale } from "@app/lib/i18n/active_locale";
 import type { ConsumptionScopeFilter } from "@app/types/api/analytics/consumption";
+import { OTHERS_GROUP_KEY } from "@app/types/api/analytics/consumption";
 import { ButtonsSwitch, ButtonsSwitchList, cn } from "@dust-tt/sparkle";
 import type { MessageDescriptor } from "@lingui/core";
 import { msg, plural } from "@lingui/core/macro";
@@ -327,7 +328,15 @@ export function ConsumptionDailyChart({
     () => new Set<string>()
   );
   const displayActiveUsers = showActiveUsers && isActiveUsersVisible;
-  const groups = useMemo(() => timeseries?.groups ?? [], [timeseries]);
+  const groups = useMemo(
+    () =>
+      (timeseries?.groups ?? []).map((group) =>
+        group.groupKey === OTHERS_GROUP_KEY
+          ? { ...group, name: t`Others` }
+          : group
+      ),
+    [timeseries, t]
+  );
   const totalUsers = timeseries?.workspaceMemberCount ?? null;
   const chartData = useMemo(() => timeseries?.points ?? [], [timeseries]);
 

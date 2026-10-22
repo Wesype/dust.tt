@@ -2,16 +2,16 @@ import { resolveDimensionDisplayNames } from "@app/lib/api/analytics/consumption
 import type { ConsumptionPeriod } from "@app/lib/api/analytics/consumption/period";
 import type { ConsumptionScopeDimension } from "@app/lib/api/analytics/consumption/scope";
 import { CONSUMPTION_DIMENSION_FIELDS } from "@app/lib/api/analytics/consumption/scope";
-import {
-  fetchConsumptionTimeseries,
-  OTHERS_GROUP_KEY,
-  TOTAL_GROUP_KEY,
-} from "@app/lib/api/analytics/consumption/timeseries";
+import { fetchConsumptionTimeseries } from "@app/lib/api/analytics/consumption/timeseries";
 import { searchConsumptionAnalytics } from "@app/lib/api/elasticsearch";
 import { Authenticator } from "@app/lib/auth";
 import { MembershipFactory } from "@app/tests/utils/MembershipFactory";
 import { UserFactory } from "@app/tests/utils/UserFactory";
 import { WorkspaceFactory } from "@app/tests/utils/WorkspaceFactory";
+import {
+  OTHERS_GROUP_KEY,
+  TOTAL_GROUP_KEY,
+} from "@app/types/api/analytics/consumption";
 import { Ok } from "@app/types/shared/result";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

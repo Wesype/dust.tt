@@ -69,3 +69,7 @@ export type ConsumptionTopSortOrder =
 export const CONSUMPTION_TOP_RANK_BY = ["credits", "count"] as const;
 
 export type ConsumptionTopRankBy = (typeof CONSUMPTION_TOP_RANK_BY)[number];
+
+export const TOTAL_GROUP_KEY = "total";
+
+export const OTHERS_GROUP_KEY = "others";

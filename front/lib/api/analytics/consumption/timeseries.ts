@@ -24,6 +24,10 @@ import {
 } from "@app/lib/api/elasticsearch";
 import type { Authenticator } from "@app/lib/auth";
 import { MembershipResource } from "@app/lib/resources/membership_resource";
+import {
+  OTHERS_GROUP_KEY,
+  TOTAL_GROUP_KEY,
+} from "@app/types/api/analytics/consumption";
 import type { Result } from "@app/types/shared/result";
 import { Ok } from "@app/types/shared/result";
 import type { estypes } from "@elastic/elasticsearch";
@@ -31,10 +35,6 @@ import { resolveDimensionDisplayNames } from "./labels";
 
 export type ConsumptionGranularity = "day" | "week" | "month";
 export type ConsumptionTimeseriesMode = "period" | "cumulative";
-
-export const TOTAL_GROUP_KEY = "total";
-
-export const OTHERS_GROUP_KEY = "others";
 
 export type ConsumptionBreakdownDimension = ConsumptionScopeDimension;
 
