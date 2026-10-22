@@ -67,7 +67,7 @@ export function TopUpsHistoryTable({ owner }: TopUpsHistoryTableProps) {
           accessorKey: "name",
           header: t`Top-up`,
           enableSorting: false,
-          meta: { className: "w-[44%]" },
+          meta: { className: "w-[38%]" },
           cell: ({ row }) => (
             <span className="text-sm">{row.original.name}</span>
           ),
@@ -77,7 +77,7 @@ export function TopUpsHistoryTable({ owner }: TopUpsHistoryTableProps) {
           accessorKey: "credits",
           header: t`Credits`,
           enableSorting: false,
-          meta: { headerAlign: "right", className: "w-[18%]" },
+          meta: { headerAlign: "right", className: "w-[19%]" },
           cell: ({ row }) => (
             <span className="block text-right text-sm">
               {row.original.credits}
@@ -89,7 +89,7 @@ export function TopUpsHistoryTable({ owner }: TopUpsHistoryTableProps) {
           accessorKey: "expiration",
           header: t`Expiration`,
           enableSorting: false,
-          meta: { headerAlign: "right", className: "w-[20%]" },
+          meta: { headerAlign: "right", className: "w-[25%]" },
           cell: ({ row }) => (
             <span className="block text-right text-sm text-muted-foreground">
               {row.original.expiration}
