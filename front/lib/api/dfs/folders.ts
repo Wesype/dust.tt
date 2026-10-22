@@ -315,7 +315,10 @@ async function getOrCreateConversationOwnerFolder(
   conversation: ConversationResource,
   { user }: { user?: UserResource }
 ): Promise<Result<DfsObjectId, DfsError>> {
-  const owner = user ?? (await getEligibleParticipants(auth, conversation))[0];
+  if (user) {
+    return getOrCreateUserFolder(auth, context, user);
+  }
+  const owner = await fetchConversationOwner(auth, conversation);
   if (!owner) {
     return new Err(
       new DfsError(
@@ -325,6 +328,37 @@ async function getOrCreateConversationOwnerFolder(
     );
   }
   return getOrCreateUserFolder(auth, context, owner);
+}
+
+/**
+ * The owner of `conversation`, whose user folder holds its folder when it is created without a
+ * user: its first participant who can still access it, since losing access to a requested space
+ * keeps the participant row. Null without such a participant.
+ */
+export async function fetchConversationOwner(
+  auth: Authenticator,
+  conversation: ConversationResource
+): Promise<UserResource | null> {
+  const participants = await ConversationResource.listParticipantDetails(
+    auth,
+    conversation
+  );
+  // Sequential on purpose: the first participant is usually the owner, so this stops after one
+  // access check.
+  for (const participant of participants) {
+    const user = await UserResource.fetchByModelId(participant.userId);
+    if (!user) {
+      continue;
+    }
+    const access = await getUserConversationAccess(auth, {
+      userId: user.sId,
+      conversationId: conversation.sId,
+    });
+    if (access === "allowed") {
+      return user;
+    }
+  }
+  return null;
 }
 
 /**

@@ -120,6 +120,9 @@ export interface DfsSession {
 
 // Grants. Modes use r=4 and w=2 only (at most 0o6); directory traversal follows read access.
 
+export const DFS_READ_MODE = 0o4;
+export const DFS_READ_WRITE_MODE = 0o6;
+
 export type DfsGrant =
   // Adds `mode` for sessions holding exactly `subject`; "superuser" is reserved and rejected.
   | { type: "allow"; subject: string; mode: number }

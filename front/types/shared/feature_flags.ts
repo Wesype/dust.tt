@@ -1,4 +1,9 @@
 export const WHITELISTABLE_FEATURES_CONFIG = {
+  dfs_conversation_sharing: {
+    description: "Rely on DFS for conversation grants",
+    stage: "dust_only",
+    owner: "aubin-tchoi",
+  },
   dfs_gcs_replication: {
     description:
       "Replicate this workspace's GCS pod and conversation files into DFS",

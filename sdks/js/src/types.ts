@@ -875,6 +875,7 @@ const WhitelistableFeaturesSchema = FlexibleEnumSchema<
   | "group_limits"
   | "claude_fable_5_feature"
   | "deepseek_feature"
+  | "dfs_conversation_sharing"
   | "dfs_gcs_replication"
   | "exa_people_and_company"
   | "disable_formatting_prompt"
