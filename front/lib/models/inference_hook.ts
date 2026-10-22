@@ -1,10 +1,15 @@
 import type {
+  InferenceHookCheckpointDecision,
   InferenceHookEnforcement,
   InferenceHookLifecycleEvent,
   InferenceHookOnError,
   InferenceHookProviderConfig,
   InferenceHookProviderIdType,
 } from "@app/lib/inference_hook";
+import {
+  AgentMessageModel,
+  ConversationModel,
+} from "@app/lib/models/agent/conversation";
 import { frontSequelize } from "@app/lib/resources/storage";
 import { DataTypes } from "@app/lib/resources/storage/data_types";
 import { UserModel } from "@app/lib/resources/storage/models/user";
@@ -173,4 +178,121 @@ UserModel.hasMany(InferenceHookVersionModel, {
 });
 InferenceHookVersionModel.belongsTo(UserModel, {
   foreignKey: { name: "authorId", allowNull: false },
+});
+
+/**
+ * @cc [owner:sfriquet,label:backend] inference-hook-checkpoint-unique-per-run
+ * At most one row MUST exist per `(agentMessageId, step, event, dustRunId)`, with a NULL
+ * `dustRunId` counted as a value: one `before_model_call` checkpoint per agent message step, and
+ * one `after_model_call` checkpoint per model run of that step.
+ */
+/**
+ * @cc [owner:sfriquet,label:backend] inference-hook-checkpoint-run-id-matches-event
+ * `dustRunId` MUST be NULL when `event` is `before_model_call` and MUST NOT be NULL when `event` is
+ * `after_model_call`; creating or saving a row that breaks this MUST fail.
+ */
+export class InferenceHookCheckpointModel extends WorkspaceAwareModel<InferenceHookCheckpointModel> {
+  declare createdAt: CreationOptional<Date>;
+  declare updatedAt: CreationOptional<Date>;
+
+  declare event: InferenceHookLifecycleEvent;
+  declare step: number;
+  declare dustRunId: string | null;
+  declare decision: InferenceHookCheckpointDecision;
+  declare decidedAt: Date | null;
+
+  declare conversationId: ForeignKey<ConversationModel["id"]>;
+  declare agentMessageId: ForeignKey<AgentMessageModel["id"]>;
+  declare userId: ForeignKey<UserModel["id"]> | null;
+}
+
+InferenceHookCheckpointModel.init(
+  {
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    event: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    step: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    dustRunId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    decision: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    decidedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+  },
+  {
+    modelName: "inference_hook_checkpoint",
+    sequelize: frontSequelize,
+    indexes: [
+      { fields: ["workspaceId"], concurrently: true },
+      {
+        name: "inference_hook_checkpoints_agent_message_step_event_run",
+        fields: ["agentMessageId", "step", "event", "dustRunId"],
+        unique: true,
+        concurrently: true,
+      },
+      {
+        name: "inference_hook_checkpoints_agent_message_step_event_no_run",
+        fields: ["agentMessageId", "step", "event"],
+        unique: true,
+        where: { dustRunId: null },
+        concurrently: true,
+      },
+      { fields: ["conversationId"], concurrently: true },
+      { fields: ["userId"], concurrently: true },
+    ],
+    validate: {
+      dustRunIdMatchesEvent(this: InferenceHookCheckpointModel): void {
+        const hasDustRunId = this.dustRunId !== null;
+        if (hasDustRunId !== (this.event === "after_model_call")) {
+          throw new Error(
+            "dustRunId must be set for after_model_call checkpoints only"
+          );
+        }
+      },
+    },
+  }
+);
+
+ConversationModel.hasMany(InferenceHookCheckpointModel, {
+  foreignKey: { name: "conversationId", allowNull: false },
+  onDelete: "RESTRICT",
+});
+InferenceHookCheckpointModel.belongsTo(ConversationModel, {
+  foreignKey: { name: "conversationId", allowNull: false },
+});
+
+AgentMessageModel.hasMany(InferenceHookCheckpointModel, {
+  foreignKey: { name: "agentMessageId", allowNull: false },
+  onDelete: "RESTRICT",
+});
+InferenceHookCheckpointModel.belongsTo(AgentMessageModel, {
+  foreignKey: { name: "agentMessageId", allowNull: false },
+});
+
+UserModel.hasMany(InferenceHookCheckpointModel, {
+  foreignKey: { name: "userId", allowNull: true },
+  onDelete: "RESTRICT",
+});
+InferenceHookCheckpointModel.belongsTo(UserModel, {
+  foreignKey: { name: "userId", allowNull: true },
 });

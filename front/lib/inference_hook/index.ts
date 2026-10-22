@@ -92,6 +92,8 @@ export type InferenceHookOnError = "allow" | "deny";
 
 export type InferenceHookProviderIdType = "datadog_ai_guard" | "dust";
 
+export type InferenceHookCheckpointDecision = "pending" | "allowed" | "blocked";
+
 export type InferenceHookEnforcement = "monitor" | "block";
 
 type DatadogAIGuardProviderConfig = {

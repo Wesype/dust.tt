@@ -13,6 +13,7 @@ import {
   UserMessageModel,
 } from "@app/lib/models/agent/conversation";
 import { ConversationSelectedSpaceModel } from "@app/lib/models/agent/conversation_selected_space";
+import { InferenceHookCheckpointModel } from "@app/lib/models/inference_hook";
 import { getReinforcedSkillsMetadata } from "@app/lib/reinforcement/types";
 import { AgentMessageConsumptionItemResource } from "@app/lib/resources/agent_message_consumption_item_resource";
 import { ConversationForkResource } from "@app/lib/resources/conversation_fork_resource";
@@ -30,6 +31,7 @@ import * as wakeUpTemporalClient from "@app/temporal/triggers/wakeup_client";
 import { AgentConfigurationFactory } from "@app/tests/utils/AgentConfigurationFactory";
 import { ConversationFactory } from "@app/tests/utils/ConversationFactory";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
+import { InferenceHookCheckpointFactory } from "@app/tests/utils/InferenceHookCheckpointFactory";
 import { KeyFactory } from "@app/tests/utils/KeyFactory";
 import { MembershipFactory } from "@app/tests/utils/MembershipFactory";
 import { RemoteMCPServerFactory } from "@app/tests/utils/RemoteMCPServerFactory";
@@ -41,6 +43,7 @@ import { WorkspaceFactory } from "@app/tests/utils/WorkspaceFactory";
 import type { LightAgentConfigurationType } from "@app/types/assistant/agent";
 import { GLOBAL_AGENTS_SID } from "@app/types/assistant/assistant";
 import type { ConversationWithoutContentType } from "@app/types/assistant/conversation";
+import { isAgentMessageType } from "@app/types/assistant/conversation";
 import { Err, Ok } from "@app/types/shared/result";
 import type { LightWorkspaceType } from "@app/types/user";
 import { assert, beforeEach, describe, expect, it, vi } from "vitest";
@@ -901,6 +904,44 @@ describe("destroyConversation", () => {
     expect(result.isOk()).toBe(true);
     await expect(
       ConversationSelectedSpaceModel.count({
+        where: {
+          workspaceId: workspace.id,
+          conversationId: conversation.id,
+        },
+      })
+    ).resolves.toBe(0);
+  });
+
+  it("should delete inference hook checkpoints before deleting agent messages", async () => {
+    const conversationType = await ConversationFactory.create(auth, {
+      agentConfigurationId,
+      messagesCreatedAt: [new Date()],
+    });
+    const conversation = await ConversationResource.fetchById(
+      auth,
+      conversationType.sId
+    );
+    if (!conversation) {
+      throw new Error("Conversation should exist");
+    }
+
+    const workspace = auth.getNonNullableWorkspace();
+    const agentMessage = conversationType.content
+      .flat()
+      .find(isAgentMessageType);
+    if (!agentMessage) {
+      throw new Error("Agent message should exist");
+    }
+    await InferenceHookCheckpointFactory.basic(workspace, {
+      conversationModelId: conversation.id,
+      agentMessageModelId: agentMessage.agentMessageId,
+    });
+
+    const result = await destroyConversation(auth, { conversation });
+
+    expect(result.isOk()).toBe(true);
+    await expect(
+      InferenceHookCheckpointModel.count({
         where: {
           workspaceId: workspace.id,
           conversationId: conversation.id,
@@ -7138,6 +7179,7 @@ const KNOWN_CONVERSATION_RELATED_MODELS = [
   "conversation_selected_spaces",
   "conversation_skills",
   "data_source",
+  "inference_hook_checkpoint",
   "message",
   "project_todo_conversation",
   "sandbox_owner",

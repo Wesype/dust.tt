@@ -58,6 +58,7 @@ import { ExtensionConfigurationModel } from "@app/lib/models/extension";
 import { FeatureFlagModel } from "@app/lib/models/feature_flag";
 import { GlobalFeatureFlagModel } from "@app/lib/models/global_feature_flag";
 import {
+  InferenceHookCheckpointModel,
   InferenceHookModel,
   InferenceHookVersionModel,
 } from "@app/lib/models/inference_hook";
@@ -254,6 +255,7 @@ export function loadAllModels() {
     MentionModel,
     AgentDataRetentionModel,
     AgentStepContentModel,
+    InferenceHookCheckpointModel,
     AgentMCPActionModel,
     AgentMCPActionOutputItemModel,
     AgentMessageConsumptionItemModel,

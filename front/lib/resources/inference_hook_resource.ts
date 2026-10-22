@@ -1,5 +1,6 @@
 import type { Authenticator } from "@app/lib/auth";
 import {
+  InferenceHookCheckpointModel,
   InferenceHookModel,
   InferenceHookVersionModel,
 } from "@app/lib/models/inference_hook";
@@ -7,13 +8,20 @@ import { BaseResource } from "@app/lib/resources/base_resource";
 import type { ReadonlyAttributesType } from "@app/lib/resources/storage/types";
 import type { ModelStaticWorkspaceAware } from "@app/lib/resources/storage/wrappers/workspace_models";
 import { withTransaction } from "@app/lib/utils/sql_utils";
+import type { ModelId } from "@app/types/shared/model_id";
 import type { Result } from "@app/types/shared/result";
 import { Ok } from "@app/types/shared/result";
 import assert from "assert";
 import type { Attributes, Transaction } from "sequelize";
+import { Op } from "sequelize";
 
 export interface InferenceHookResource extends ReadonlyAttributesType<InferenceHookModel> {}
 
+/**
+ * @cc [owner:sfriquet,label:architecture;backend] inference-hook-models-behind-resource
+ * Runtime code MUST read and write the inference hook models of `lib/models/inference_hook.ts`
+ * (hooks, their versions, checkpoints and evaluations) only through `InferenceHookResource`.
+ */
 export class InferenceHookResource extends BaseResource<InferenceHookModel> {
   static model: ModelStaticWorkspaceAware<InferenceHookModel> =
     InferenceHookModel;
@@ -37,6 +45,18 @@ export class InferenceHookResource extends BaseResource<InferenceHookModel> {
         where: { workspaceId },
         transaction,
       });
+    });
+  }
+
+  static async deleteCheckpointsByAgentMessageModelIds(
+    auth: Authenticator,
+    { agentMessageModelIds }: { agentMessageModelIds: ModelId[] }
+  ): Promise<number> {
+    return InferenceHookCheckpointModel.destroy({
+      where: {
+        workspaceId: auth.getNonNullableWorkspace().id,
+        agentMessageId: { [Op.in]: agentMessageModelIds },
+      },
     });
   }
 
