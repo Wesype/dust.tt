@@ -95,7 +95,7 @@ function useCommandPalettePods({
 }) {
   const isSearchActive = isOpen && trimmedQuery.length > 0;
 
-  // Same readable-pods search as the sidebar (member + open pods).
+  // Same readable-pods search as the sidebar (member + open pods), with member pods first.
   const {
     pods: searchablePods,
     isSearching: isSearchingPods,
@@ -106,6 +106,7 @@ function useCommandPalettePods({
     query: trimmedQuery,
     enabled: isSearchActive,
     limit: MAX_DISPLAYED_PODS,
+    orderColumn: "ownership",
   });
 
   const hasCurrentResults = isSearchActive && searchQuery === trimmedQuery;

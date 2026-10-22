@@ -4,7 +4,10 @@ import { SpaceResource } from "@app/lib/resources/space_resource";
 import { UserProjectPreferencesResource } from "@app/lib/resources/user_project_preferences_resource";
 import { removeDiacritics } from "@app/lib/utils";
 import logger from "@app/logger/logger";
-import type { SearchProjectsResponseBody } from "@app/types/api/projects/list";
+import type {
+  ProjectSearchOrderColumn,
+  SearchProjectsResponseBody,
+} from "@app/types/api/projects/list";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
 import type { EnrichedSpaceType, PodType } from "@app/types/space";
@@ -50,6 +53,7 @@ export async function searchReadablePods(
     pagination: {
       limit: number;
       lastValue?: string;
+      orderColumn: ProjectSearchOrderColumn;
       orderDirection: "asc" | "desc";
     };
   }
@@ -143,6 +147,7 @@ export async function listPodsForScope(
       pagination: {
         limit,
         lastValue,
+        orderColumn: "name",
         orderDirection: "asc",
       },
     });

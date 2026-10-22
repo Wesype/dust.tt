@@ -2217,7 +2217,7 @@ describe("searchProjectsByNamePaginated", () => {
     );
 
     const result = await SpaceResource.searchProjectsByNamePaginated(userAuth, {
-      pagination: { limit: 20, orderDirection: "asc" },
+      pagination: { limit: 20, orderColumn: "name", orderDirection: "asc" },
     });
 
     expect(result.spaces.some((s) => s.id === permittedSpace.id)).toBe(true);
@@ -2237,7 +2237,7 @@ describe("searchProjectsByNamePaginated", () => {
     );
 
     const result = await SpaceResource.searchProjectsByNamePaginated(userAuth, {
-      pagination: { limit: 20, orderDirection: "asc" },
+      pagination: { limit: 20, orderColumn: "name", orderDirection: "asc" },
     });
 
     expect(result.spaces).toHaveLength(0);
@@ -2270,7 +2270,7 @@ describe("searchProjectsByNamePaginated", () => {
 
     const result = await SpaceResource.searchProjectsByNamePaginated(userAuth, {
       query: "project",
-      pagination: { limit: 20, orderDirection: "asc" },
+      pagination: { limit: 20, orderColumn: "name", orderDirection: "asc" },
     });
 
     expect(result.spaces.some((s) => s.id === permittedSpace1.id)).toBe(true);
@@ -2307,7 +2307,7 @@ describe("searchProjectsByNamePaginated", () => {
     );
 
     const result = await SpaceResource.searchProjectsByNamePaginated(userAuth, {
-      pagination: { limit: 3, orderDirection: "asc" },
+      pagination: { limit: 3, orderColumn: "name", orderDirection: "asc" },
     });
 
     expect(result.spaces).toHaveLength(1);

@@ -21,6 +21,7 @@ import { UserResource } from "@app/lib/resources/user_resource";
 import { concurrentExecutor } from "@app/lib/utils/async_utils";
 import { withTransaction } from "@app/lib/utils/sql_utils";
 import tracer from "@app/logger/tracer";
+import type { ProjectSearchOrderColumn } from "@app/types/api/projects/list";
 import type { SpaceGroupAccessType } from "@app/types/api/spaces";
 import type { DfsObjectId } from "@app/types/dfs";
 import type {
@@ -60,6 +61,7 @@ import type {
   Attributes,
   CreationAttributes,
   Includeable,
+  Order,
   Transaction,
   WhereOptions,
 } from "sequelize";
@@ -579,6 +581,12 @@ export class SpaceResource extends BaseResource<SpaceModel> {
    * the SQL `limit` under-fills pages (including empty pages) when unreadable Pods sort
    * ahead of readable ones — the command palette surfaces this.
    */
+  /**
+   * @cc [owner:aubin-tchoi,label:product] ownership-order
+   * With `orderColumn: "ownership"`, Pods the caller is a member of MUST come before the other
+   * readable Pods, each group sorted by name. That order only serves a first page: it MUST NOT be
+   * given a `lastValue` and returns a null `lastValue`.
+   */
   static async searchProjectsByNamePaginated(
     auth: Authenticator,
     {
@@ -589,6 +597,7 @@ export class SpaceResource extends BaseResource<SpaceModel> {
       pagination: {
         limit: number;
         lastValue?: string;
+        orderColumn: ProjectSearchOrderColumn;
         orderDirection: "asc" | "desc";
       };
     }
@@ -608,13 +617,18 @@ export class SpaceResource extends BaseResource<SpaceModel> {
       return { spaces: [], hasMore: false, lastValue: null };
     }
 
+    assert(
+      pagination.orderColumn === "name" || !pagination.lastValue,
+      "The ownership order only serves a first page."
+    );
+
     const cursorOperator = pagination.orderDirection === "desc" ? Op.lt : Op.gt;
 
     const fetchLimit = pagination.limit + 1;
     const orderDirection =
       pagination.orderDirection === "desc" ? "DESC" : "ASC";
 
-    const spaces = await this.baseFetch(auth, {
+    const spaces = await this.fetchProjectSearchPage(auth, {
       where: {
         kind: "project",
         ...(readableSpaces.kind === "ids"
@@ -633,19 +647,76 @@ export class SpaceResource extends BaseResource<SpaceModel> {
       },
       order: [[Sequelize.literal(`LOWER("spaces"."name")`), orderDirection]],
       limit: fetchLimit,
+      orderColumn: pagination.orderColumn,
     });
 
     const hasMore = spaces.length > pagination.limit;
     const resultSpaces = hasMore ? spaces.slice(0, pagination.limit) : spaces;
 
     const lastSpace = resultSpaces[resultSpaces.length - 1];
-    const lastValue = lastSpace?.name ?? null;
+    const lastValue =
+      pagination.orderColumn === "name" ? (lastSpace?.name ?? null) : null;
 
     return {
       spaces: resultSpaces,
       hasMore,
       lastValue,
     };
+  }
+
+  // The `ownership` order runs the name-ordered query over the caller's member Pods first, then
+  // over the other readable Pods to fill the page.
+  private static async fetchProjectSearchPage(
+    auth: Authenticator,
+    {
+      where,
+      order,
+      limit,
+      orderColumn,
+    }: {
+      where: WhereOptions<SpaceModel>;
+      order: Order;
+      limit: number;
+      orderColumn: ProjectSearchOrderColumn;
+    }
+  ): Promise<SpaceResource[]> {
+    switch (orderColumn) {
+      case "name":
+        return this.baseFetch(auth, { where, order, limit });
+      case "ownership": {
+        // Same membership as `listWorkspacePodsAsMember`. A type-wide grant makes the caller a
+        // member of every Pod, so the name order is enough.
+        const memberSpaces = auth.getResourceIdsWithVerb(
+          "space",
+          POD_SPACE_MEMBERSHIP_VERB
+        );
+        if (memberSpaces.kind === "all") {
+          return this.baseFetch(auth, { where, order, limit });
+        }
+
+        const memberPods = await this.baseFetch(auth, {
+          where: {
+            [Op.and]: [where, { id: { [Op.in]: memberSpaces.resourceIds } }],
+          },
+          order,
+          limit,
+        });
+        if (memberPods.length === limit) {
+          return memberPods;
+        }
+
+        const otherPods = await this.baseFetch(auth, {
+          where: {
+            [Op.and]: [where, { id: { [Op.notIn]: memberSpaces.resourceIds } }],
+          },
+          order,
+          limit: limit - memberPods.length,
+        });
+        return [...memberPods, ...otherPods];
+      }
+      default:
+        assertNever(orderColumn);
+    }
   }
 
   static async listWorkspaceDefaultSpaces(

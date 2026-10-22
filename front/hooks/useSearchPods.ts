@@ -3,7 +3,10 @@ import {
   useFetcher,
   useSWRInfiniteWithDefaults,
 } from "@app/lib/swr/swr";
-import type { SearchProjectsResponseBody } from "@app/types/api/projects/list";
+import type {
+  ProjectSearchOrderColumn,
+  SearchProjectsResponseBody,
+} from "@app/types/api/projects/list";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Fetcher } from "swr";
 
@@ -14,6 +17,7 @@ interface UseSearchPodsParams {
   enabled?: boolean;
   query?: string;
   limit?: number;
+  orderColumn?: ProjectSearchOrderColumn;
   /** Set to 0 when the caller already debounces the search term. */
   debounceMs?: number;
 }
@@ -23,6 +27,7 @@ export function useSearchPods({
   enabled = true,
   query = "",
   limit = 20,
+  orderColumn = "name",
   debounceMs = 300,
 }: UseSearchPodsParams) {
   const { fetcher } = useFetcher();
@@ -60,13 +65,15 @@ export function useSearchPods({
           return null;
         }
 
+        const url = `/api/w/${workspaceId}/spaces/search_projects?query=${encodeURIComponent(debouncedQuery)}&limit=${limit}&orderColumn=${orderColumn}`;
+
         // First page - no lastValue
         if (previousPageData === null) {
-          return `/api/w/${workspaceId}/spaces/search_projects?query=${encodeURIComponent(debouncedQuery)}&limit=${limit}`;
+          return url;
         }
 
         // Subsequent pages - include lastValue
-        return `/api/w/${workspaceId}/spaces/search_projects?query=${encodeURIComponent(debouncedQuery)}&limit=${limit}&lastValue=${previousPageData.lastValue}`;
+        return `${url}&lastValue=${previousPageData.lastValue}`;
       },
       searchFetcher,
       {
