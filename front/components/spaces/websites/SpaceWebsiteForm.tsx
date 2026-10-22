@@ -112,137 +112,141 @@ export function SpaceWebsiteForm({
           </Trans>
         </Page.P>
       </Page.Layout>
-      <div className="mr-1 grid grid-cols-2 gap-x-6 gap-y-8">
-        <Page.Layout direction="vertical" sizing="grow">
-          <Page.SectionHeader
-            title={t`Crawling strategy`}
-            description={t`Do you want to limit to child pages or not?`}
-          />
-          <RadioGroup
-            value={state.crawlMode}
-            onValueChange={(value) =>
-              dispatch({
-                type: "SET_FIELD",
-                field: "crawlMode",
-                value: value === "child" ? "child" : "website",
-              })
-            }
-            className="flex flex-col gap-1"
-          >
-            <RadioGroupItem
-              value="child"
-              className="gap-2"
-              label={t`Only child pages of the provided URL`}
-              id="child-pages"
+      <div className="mr-1 flex flex-col gap-y-8">
+        <div className="flex flex-wrap gap-x-6 gap-y-8">
+          <Page.Layout direction="vertical" sizing="grow">
+            <Page.SectionHeader
+              title={t`Crawling strategy`}
+              description={t`Do you want to limit to child pages or not?`}
             />
-            <RadioGroupItem
-              value="website"
-              className="gap-2 text-sm"
-              label={t`Follow all the links within the domain`}
-              id="all-pages"
+            <RadioGroup
+              value={state.crawlMode}
+              onValueChange={(value) =>
+                dispatch({
+                  type: "SET_FIELD",
+                  field: "crawlMode",
+                  value: value === "child" ? "child" : "website",
+                })
+              }
+              className="flex flex-col gap-1"
+            >
+              <RadioGroupItem
+                value="child"
+                className="gap-2"
+                label={t`Only child pages of the provided URL`}
+                id="child-pages"
+              />
+              <RadioGroupItem
+                value="website"
+                className="gap-2 text-sm"
+                label={t`Follow all the links within the domain`}
+                id="all-pages"
+              />
+            </RadioGroup>
+          </Page.Layout>
+          <Page.Layout direction="vertical" sizing="grow">
+            <Page.SectionHeader
+              title={t`Refresh schedule`}
+              description={t`How often would you like to check for updates?`}
             />
-          </RadioGroup>
-        </Page.Layout>
-        <Page.Layout direction="vertical" sizing="grow">
-          <Page.SectionHeader
-            title={t`Refresh schedule`}
-            description={t`How often would you like to check for updates?`}
-          />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                label={t(FREQUENCY_LABELS[state.crawlFrequency])}
-                isSelect
-              />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuRadioGroup>
-                {CrawlingFrequencies.filter(
-                  (freq) =>
-                    state.crawlFrequency === "daily" ? true : freq !== "daily" // Only display the 'daily' option if the crawler has it
-                ).map((frequency) => (
-                  <DropdownMenuRadioItem
-                    key={frequency}
-                    value={frequency}
-                    label={t(FREQUENCY_LABELS[frequency])}
-                    disabled={frequency === "daily"}
-                    onClick={() =>
-                      dispatch({
-                        type: "SET_FIELD",
-                        field: "crawlFrequency",
-                        value: frequency,
-                      })
-                    }
-                  />
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </Page.Layout>
-        <Page.Layout direction="vertical" sizing="grow">
-          <Page.SectionHeader
-            title={t`Depth of search`}
-            description={t`How far from the initial page would you like to go?`}
-          />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                label={getDepthLabel(state.depth)}
-                isSelect
-              />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuRadioGroup>
-                {DepthOptions.map((depthOption) => (
-                  <DropdownMenuRadioItem
-                    key={depthOption}
-                    value={depthOption.toString()}
-                    label={getDepthLabel(depthOption)}
-                    onClick={() =>
-                      dispatch({
-                        type: "SET_FIELD",
-                        field: "depth",
-                        value: depthOption,
-                      })
-                    }
-                  />
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </Page.Layout>
-        <Page.Layout direction="vertical" sizing="grow">
-          <Page.SectionHeader
-            title={t`Page limit`}
-            description={t`What is the maximum number of pages you'd like to index?`}
-          />
-          <Input
-            placeholder={WEBCRAWLER_MAX_PAGES.toString()}
-            value={state.maxPages?.toString() || ""}
-            onChange={(e) => {
-              const parsed = parseInt(e.target.value);
-              dispatch({
-                type: "SET_FIELD",
-                field: "maxPages",
-                value: !isNaN(parsed)
-                  ? parsed
-                  : e.target.value === ""
-                    ? null
-                    : state.maxPages,
-              });
-            }}
-            message={
-              state.maxPages &&
-              (state.maxPages > WEBCRAWLER_MAX_PAGES || state.maxPages < 1)
-                ? t`Maximum pages must be between 1 and ${WEBCRAWLER_MAX_PAGES}`
-                : undefined
-            }
-            messageStatus="error"
-            name="maxPages"
-          />
-        </Page.Layout>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  label={t(FREQUENCY_LABELS[state.crawlFrequency])}
+                  isSelect
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuRadioGroup>
+                  {CrawlingFrequencies.filter(
+                    (freq) =>
+                      state.crawlFrequency === "daily" ? true : freq !== "daily" // Only display the 'daily' option if the crawler has it
+                  ).map((frequency) => (
+                    <DropdownMenuRadioItem
+                      key={frequency}
+                      value={frequency}
+                      label={t(FREQUENCY_LABELS[frequency])}
+                      disabled={frequency === "daily"}
+                      onClick={() =>
+                        dispatch({
+                          type: "SET_FIELD",
+                          field: "crawlFrequency",
+                          value: frequency,
+                        })
+                      }
+                    />
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </Page.Layout>
+        </div>
+        <div className="flex flex-wrap gap-x-6 gap-y-8">
+          <Page.Layout direction="vertical" sizing="grow">
+            <Page.SectionHeader
+              title={t`Depth of search`}
+              description={t`How far from the initial page would you like to go?`}
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  label={getDepthLabel(state.depth)}
+                  isSelect
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuRadioGroup>
+                  {DepthOptions.map((depthOption) => (
+                    <DropdownMenuRadioItem
+                      key={depthOption}
+                      value={depthOption.toString()}
+                      label={getDepthLabel(depthOption)}
+                      onClick={() =>
+                        dispatch({
+                          type: "SET_FIELD",
+                          field: "depth",
+                          value: depthOption,
+                        })
+                      }
+                    />
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </Page.Layout>
+          <Page.Layout direction="vertical" sizing="grow">
+            <Page.SectionHeader
+              title={t`Page limit`}
+              description={t`What is the maximum number of pages you'd like to index?`}
+            />
+            <Input
+              placeholder={WEBCRAWLER_MAX_PAGES.toString()}
+              value={state.maxPages?.toString() || ""}
+              onChange={(e) => {
+                const parsed = parseInt(e.target.value);
+                dispatch({
+                  type: "SET_FIELD",
+                  field: "maxPages",
+                  value: !isNaN(parsed)
+                    ? parsed
+                    : e.target.value === ""
+                      ? null
+                      : state.maxPages,
+                });
+              }}
+              message={
+                state.maxPages &&
+                (state.maxPages > WEBCRAWLER_MAX_PAGES || state.maxPages < 1)
+                  ? t`Maximum pages must be between 1 and ${WEBCRAWLER_MAX_PAGES}`
+                  : undefined
+              }
+              messageStatus="error"
+              name="maxPages"
+            />
+          </Page.Layout>
+        </div>
       </div>
       <Page.Layout direction="vertical" gap="md">
         <Page.H variant="h3">

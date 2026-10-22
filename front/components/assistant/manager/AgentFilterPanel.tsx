@@ -130,7 +130,7 @@ export function AgentFilterPanel({
             />
             <Label
               htmlFor="agent-filter-hidden-agents"
-              className="cursor-pointer text-sm leading-none"
+              className="cursor-pointer text-sm"
             >
               <Trans>Hidden agents</Trans>
             </Label>
