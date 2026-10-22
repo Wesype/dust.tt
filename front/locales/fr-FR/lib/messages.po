@@ -838,6 +838,14 @@ msgid "This conversation can't be moved into or out of this Pod yet."
 msgstr "Cette conversation ne peut pas encore être déplacée vers ce Pod ou en dehors."
 
 #: front/lib/api_error_messages.ts
+msgid "Pod conversations are shared with the Pod's members."
+msgstr "Les conversations d’un Pod sont partagées avec les membres du Pod."
+
+#: front/lib/api_error_messages.ts
+msgid "This conversation can't be shared yet."
+msgstr "Cette conversation ne peut pas encore être partagée."
+
+#: front/lib/api_error_messages.ts
 msgid "Spaces can't be selected in a Pod conversation."
 msgstr "Impossible de sélectionner des espaces dans une conversation de Pod."
 

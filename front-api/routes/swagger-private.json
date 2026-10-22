@@ -9082,6 +9082,58 @@
         }
       }
     },
+    "/api/w/{wId}/assistant/conversations/{cId}/sharing": {
+      "get": {
+        "summary": "Get conversation sharing",
+        "description": "Returns who a conversation is shared with, from the grants of its DFS folder.",
+        "tags": [
+          "Private Conversations"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wId",
+            "required": true,
+            "description": "ID of the workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "cId",
+            "required": true,
+            "description": "ID of the conversation",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateConversationSharingResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Conversation sharing is not enabled for the workspace, or the conversation isn't shared with the user\n"
+          },
+          "404": {
+            "description": "Conversation not found"
+          }
+        }
+      }
+    },
     "/api/w/{wId}/assistant/conversations/{cId}/wakeups/{wuId}": {
       "delete": {
         "summary": "Cancel a wake-up",
@@ -14982,6 +15034,71 @@
           },
           "step": {
             "type": "integer"
+          }
+        }
+      },
+      "PrivateLightUser": {
+        "type": "object",
+        "properties": {
+          "sId": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string",
+            "nullable": true
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "PrivateConversationSharingResponse": {
+        "type": "object",
+        "properties": {
+          "sharing": {
+            "type": "object",
+            "properties": {
+              "canManage": {
+                "type": "boolean"
+              },
+              "owner": {
+                "type": "object",
+                "nullable": true,
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PrivateLightUser"
+                  }
+                ]
+              },
+              "members": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/PrivateLightUser"
+                    },
+                    "permission": {
+                      "type": "string",
+                      "enum": [
+                        "read",
+                        "write"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },

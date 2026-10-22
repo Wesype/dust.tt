@@ -2257,4 +2257,44 @@
  *           type: string
  *         step:
  *           type: integer
+ *     PrivateLightUser:
+ *       type: object
+ *       properties:
+ *         sId:
+ *           type: string
+ *         firstName:
+ *           type: string
+ *         lastName:
+ *           type: string
+ *           nullable: true
+ *         fullName:
+ *           type: string
+ *         image:
+ *           type: string
+ *           nullable: true
+ *         email:
+ *           type: string
+ *     PrivateConversationSharingResponse:
+ *       type: object
+ *       properties:
+ *         sharing:
+ *           type: object
+ *           properties:
+ *             canManage:
+ *               type: boolean
+ *             owner:
+ *               type: object
+ *               nullable: true
+ *               allOf:
+ *                 - $ref: '#/components/schemas/PrivateLightUser'
+ *             members:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   user:
+ *                     $ref: '#/components/schemas/PrivateLightUser'
+ *                   permission:
+ *                     type: string
+ *                     enum: [read, write]
  */
