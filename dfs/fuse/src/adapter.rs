@@ -4,10 +4,12 @@ use dfs_mount::{Attributes, DirEntry, Errno, Fs, Ino, Kind};
 use dfs_protocol::READ_MAX_BYTES;
 use fuser::{
     AccessFlags, BsdFileFlags, Config, FileAttr, FileHandle, FileType, Filesystem, FopenFlags,
-    Generation, INodeNo, InitFlags, IoctlFlags, KernelConfig, LockOwner, MountOption, OpenFlags,
-    RenameFlags, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry,
-    ReplyIoctl, ReplyOpen, ReplyStatfs, ReplyWrite, Request, SessionACL, TimeOrNow, WriteFlags,
+    Generation, INodeNo, InitFlags, IoctlFlags, KernelConfig, LockOwner, MountOption, OpenAccMode,
+    OpenFlags, RenameFlags, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty,
+    ReplyEntry, ReplyIoctl, ReplyOpen, ReplyStatfs, ReplyWrite, Request, SessionACL, TimeOrNow,
+    WriteFlags,
 };
+use nix::fcntl::OFlag;
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -81,7 +83,7 @@ pub(crate) struct Adapter {
     owner: Owner,
     /// The listings `opendir` took, by file handle.
     dirs: Arc<Mutex<HashMap<u64, OpenDir>>>,
-    /// The handle number the next `opendir` hands out. Numbers are never reused.
+    /// The handle number the next `open` or `opendir` hands out. Numbers are never reused.
     next_fh: AtomicU64,
 }
 
@@ -299,9 +301,10 @@ impl Filesystem for Adapter {
         _chgtime: Option<SystemTime>,
         _bkuptime: Option<SystemTime>,
         _flags: Option<BsdFileFlags>,
-        _reply: ReplyAttr,
+        reply: ReplyAttr,
     ) {
-        todo!()
+        // TODO(writes): pending write support.
+        reply.error(fuser::Errno::EOPNOTSUPP);
     }
 
     /// Creates a file in a directory, for `mknod` (the kernel uses `create` for `open` with
@@ -315,9 +318,10 @@ impl Filesystem for Adapter {
         _mode: u32,
         _umask: u32,
         _rdev: u32,
-        _reply: ReplyEntry,
+        reply: ReplyEntry,
     ) {
-        todo!()
+        // TODO(writes): pending write support.
+        reply.error(fuser::Errno::EOPNOTSUPP);
     }
 
     /// Creates a directory, for `mkdir`.
@@ -328,19 +332,22 @@ impl Filesystem for Adapter {
         _name: &OsStr,
         _mode: u32,
         _umask: u32,
-        _reply: ReplyEntry,
+        reply: ReplyEntry,
     ) {
-        todo!()
+        // TODO(writes): pending write support.
+        reply.error(fuser::Errno::EOPNOTSUPP);
     }
 
     /// Removes a name that is not a directory, for `unlink`.
-    fn unlink(&self, _req: &Request, _parent: INodeNo, _name: &OsStr, _reply: ReplyEmpty) {
-        todo!()
+    fn unlink(&self, _req: &Request, _parent: INodeNo, _name: &OsStr, reply: ReplyEmpty) {
+        // TODO(writes): pending write support.
+        reply.error(fuser::Errno::EOPNOTSUPP);
     }
 
     /// Removes an empty directory, for `rmdir`.
-    fn rmdir(&self, _req: &Request, _parent: INodeNo, _name: &OsStr, _reply: ReplyEmpty) {
-        todo!()
+    fn rmdir(&self, _req: &Request, _parent: INodeNo, _name: &OsStr, reply: ReplyEmpty) {
+        // TODO(writes): pending write support.
+        reply.error(fuser::Errno::EOPNOTSUPP);
     }
 
     /// Creates a symbolic link, for `symlink`. Fails with `EPERM`, as POSIX asks of a filesystem
@@ -366,9 +373,10 @@ impl Filesystem for Adapter {
         _newparent: INodeNo,
         _newname: &OsStr,
         _flags: RenameFlags,
-        _reply: ReplyEmpty,
+        reply: ReplyEmpty,
     ) {
-        todo!()
+        // TODO(writes): pending write support.
+        reply.error(fuser::Errno::EOPNOTSUPP);
     }
 
     /// Adds a name for an existing file, for `link`. Fails with `EPERM`, as POSIX asks of a
@@ -385,24 +393,52 @@ impl Filesystem for Adapter {
     }
 
     /// Opens a file and returns a handle, which the `read`, `write`, `flush` and `release` calls on
-    /// that open file carry. Opens with direct I/O, and truncates for `O_TRUNC`.
-    fn open(&self, _req: &Request, _ino: INodeNo, _flags: OpenFlags, _reply: ReplyOpen) {
-        todo!()
+    /// that open file carry. Opens with direct I/O. Opens for reading only: writes are not supported
+    /// yet.
+    fn open(&self, _req: &Request, ino: INodeNo, flags: OpenFlags, reply: ReplyOpen) {
+        let mask = match flags.acc_mode() {
+            OpenAccMode::O_RDONLY => AccessFlags::R_OK,
+            OpenAccMode::O_WRONLY => AccessFlags::W_OK,
+            OpenAccMode::O_RDWR => AccessFlags::R_OK | AccessFlags::W_OK,
+        };
+        let writes = mask.contains(AccessFlags::W_OK) || flags.0 & OFlag::O_TRUNC.bits() != 0;
+        let fh = self.next_fh.fetch_add(1, Ordering::Relaxed);
+        let fs = self.fs.clone();
+        self.runtime.spawn(async move {
+            let opened = async {
+                check(&fs, ino.0, mask).await?;
+                // TODO(writes): pending write support.
+                if writes {
+                    return Err(Errno::EOPNOTSUPP);
+                }
+                Ok(())
+            };
+            match opened.await {
+                Ok(()) => reply.opened(FileHandle(fh), FopenFlags::FOPEN_DIRECT_IO),
+                Err(e) => reply.error(errno(e)),
+            }
+        });
     }
 
     /// Returns the bytes of a file from `offset`: `size` of them, or fewer at the end of the file.
     fn read(
         &self,
         _req: &Request,
-        _ino: INodeNo,
+        ino: INodeNo,
         _fh: FileHandle,
-        _offset: u64,
-        _size: u32,
+        offset: u64,
+        size: u32,
         _flags: OpenFlags,
         _lock_owner: Option<LockOwner>,
-        _reply: ReplyData,
+        reply: ReplyData,
     ) {
-        todo!()
+        let fs = self.fs.clone();
+        self.runtime.spawn(async move {
+            match fs.read(ino.0, offset, size).await {
+                Ok(data) => reply.data(&data),
+                Err(e) => reply.error(errno(e)),
+            }
+        });
     }
 
     /// Writes `data` into a file at `offset`, and returns how many bytes it wrote.
@@ -416,27 +452,38 @@ impl Filesystem for Adapter {
         _write_flags: WriteFlags,
         _flags: OpenFlags,
         _lock_owner: Option<LockOwner>,
-        _reply: ReplyWrite,
+        reply: ReplyWrite,
     ) {
-        todo!()
+        // TODO(writes): pending write support.
+        reply.error(fuser::Errno::EOPNOTSUPP);
     }
 
     /// Runs on each `close` of a file descriptor. Several descriptors can share an open file (after
     /// `dup` or `fork`), so this does not end it. Succeeds without waiting for the server: `fsync`
     /// is the durability barrier.
+    /**
+     * @cc [owner:fontanierh,label:performance] flush-never-waits
+     * `flush` MUST reply without waiting for the server.
+     */
     fn flush(
         &self,
         _req: &Request,
         _ino: INodeNo,
         _fh: FileHandle,
         _lock_owner: LockOwner,
-        _reply: ReplyEmpty,
+        reply: ReplyEmpty,
     ) {
-        todo!()
+        // TODO(writes): pending write support, which hands the file's buffered writes to the
+        // write log here.
+        reply.ok();
     }
 
     /// Ends an open file once its last descriptor is closed, freeing the handle `open` returned.
     /// Hands the file's buffered writes to the write log, without waiting for the server.
+    /**
+     * @cc [owner:fontanierh,label:performance] release-never-waits
+     * `release` MUST reply without waiting for the server.
+     */
     fn release(
         &self,
         _req: &Request,
@@ -445,9 +492,11 @@ impl Filesystem for Adapter {
         _flags: OpenFlags,
         _lock_owner: Option<LockOwner>,
         _flush: bool,
-        _reply: ReplyEmpty,
+        reply: ReplyEmpty,
     ) {
-        todo!()
+        // TODO(writes): pending write support, which seals the file's leftover writes and frees what
+        // the mount keeps for it here.
+        reply.ok();
     }
 
     /// Makes changes durable, for `fsync` and `fdatasync`. Waits until every change acknowledged
@@ -459,9 +508,11 @@ impl Filesystem for Adapter {
         _ino: INodeNo,
         _fh: FileHandle,
         _datasync: bool,
-        _reply: ReplyEmpty,
+        reply: ReplyEmpty,
     ) {
-        todo!()
+        // TODO(writes): pending write support, which waits here for every acknowledged change to
+        // commit.
+        reply.ok();
     }
 
     /// Opens a directory and returns a handle, which the `readdir` and `releasedir` calls on that
@@ -548,9 +599,11 @@ impl Filesystem for Adapter {
         _ino: INodeNo,
         _fh: FileHandle,
         _datasync: bool,
-        _reply: ReplyEmpty,
+        reply: ReplyEmpty,
     ) {
-        todo!()
+        // TODO(writes): pending write support, which waits here for every acknowledged change to
+        // commit.
+        reply.ok();
     }
 
     /// Returns the filesystem's size and free space, for `statfs` and `df`. Reports plenty of free
@@ -589,9 +642,10 @@ impl Filesystem for Adapter {
         _mode: u32,
         _umask: u32,
         _flags: i32,
-        _reply: ReplyCreate,
+        reply: ReplyCreate,
     ) {
-        todo!()
+        // TODO(writes): pending write support.
+        reply.error(fuser::Errno::EOPNOTSUPP);
     }
 
     /// Runs a device-specific command on an open file, for `ioctl`. Fails with `ENOTTY`, the answer

@@ -74,7 +74,8 @@ fn mount() -> Result<()> {
         list_returns_every_page(&channel, &tenant).await?;
         apply_returns_one_ordered_result_per_operation(&channel, &tenant).await?;
         read_files_returns_one_ordered_result_per_object(&channel, &tenant).await?;
-        folders_list_readable_children(&channel, &tenant).await
+        folders_list_readable_children(&channel, &tenant).await?;
+        files_read_in_ranges(&channel, &tenant).await
     })
 }
 
@@ -628,5 +629,55 @@ async fn folders_list_readable_children(channel: &Channel, tenant: &Tenant) -> R
     assert!(!entries.iter().any(|entry| entry.name == "secret.txt"));
     // A listing counts no lookup, so the kernel cannot ask about a listed inode before looking it up.
     assert_eq!(fs.getattr(report.ino).await, Err(Errno::ENOENT));
+    Ok(())
+}
+
+async fn files_read_in_ranges(channel: &Channel, tenant: &Tenant) -> Result<()> {
+    let remote = tenant.remote(channel).await?;
+    // A file one `Read` request cannot hold. Never written, so it reads as zeros.
+    let tenant_id = remote.current_session().await?.tenant_id;
+    let tx = fdb::database()?.create_trx()?;
+    let resource = TenantResource::fetch(&tx, &tenant_id)
+        .await?
+        .context("missing tenant")?;
+    let root = ObjectResource::fetch(&tx, &resource, &tenant.root_id)
+        .await?
+        .context("missing root")?;
+    let mut sparse = DirectoryResource::try_from(root)?
+        .create_child(
+            &tx,
+            ObjectId::new_v7(),
+            "sparse.bin".to_owned(),
+            ObjectKind::File,
+            None,
+            HashMap::new(),
+        )
+        .await?;
+    sparse.size = u64::from(READ_MAX_BYTES) + 2;
+    sparse.record_content_change(&tx, clock::now_ms()?);
+    tx.commit().await?;
+
+    let fs = Fs::new(remote, vec![folder("workspace", tenant.root_id)])?;
+    let workspace = fs.lookup(ROOT_INO, "workspace").await?.ino;
+    let report = fs.lookup(workspace, "report.txt").await?.ino;
+    let sparse = fs.lookup(workspace, "sparse.bin").await?.ino;
+
+    assert_eq!(fs.read(report, 1, 3).await?, &FILE_CONTENT[1..4]);
+    // Reads stop at the end of the file.
+    assert_eq!(fs.read(report, 2, 10).await?, &FILE_CONTENT[2..]);
+    let end = FILE_CONTENT.len() as u64;
+    assert!(fs.read(report, end, 10).await?.is_empty());
+
+    // Larger than one `Read` request: the rest of the file, all of it.
+    let rest = READ_MAX_BYTES as usize + 1;
+    let data = fs.read(sparse, 1, READ_MAX_BYTES + 1).await?;
+    assert_eq!(data.len(), rest);
+    assert!(data.iter().all(|byte| *byte == 0));
+    assert_eq!(fs.read(sparse, 1, READ_MAX_BYTES + 5).await?.len(), rest);
+
+    assert_eq!(fs.read(workspace, 0, 1).await, Err(Errno(libc::EISDIR)));
+    // Once the kernel forgets it, the inode is unknown.
+    fs.forget(report, 1);
+    assert_eq!(fs.read(report, 0, 1).await, Err(Errno::ENOENT));
     Ok(())
 }
