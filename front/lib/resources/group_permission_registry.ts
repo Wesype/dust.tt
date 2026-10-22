@@ -87,6 +87,14 @@ interface RoleDefinition {
  * to invite active workspace members.
  */
 /**
+ * @cc [owner:achilleburah,label:security;product] frame-app-create-capability
+ * `create` on the `frame_app` type means publishing a Frame App: a Frame whose manifest declares
+ * functions or databases (see `isFrameAppManifest`). Every publish of such a manifest, the first one
+ * and every new version, and every make-live of a draft whose manifest declares them, MUST require
+ * `hasWorkspacePermission("create", "frame_app")`, resolved from the caller's full workspace groups,
+ * including when an agent publishes from a sandbox.
+ */
+/**
  * @cc [owner:fabiencelier,label:security;product] group-read-analytics-verb
  * `read_analytics` on a `group` means accessing and exporting the consumption analytics of that group's
  * members.
@@ -115,6 +123,9 @@ export const ROLE_REGISTRY: Record<
   frame: {
     invite: { verbs: ["invite"], levels: ["type"] },
     publish: { verbs: ["publish"], levels: ["type"] },
+  },
+  frame_app: {
+    create: { verbs: ["create"], levels: ["type"] },
   },
   billing: {
     admin: { verbs: ["admin"], levels: ["type"] },

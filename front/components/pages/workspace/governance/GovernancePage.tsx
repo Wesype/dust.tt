@@ -21,7 +21,11 @@ import { useAdminPageTab } from "@app/hooks/useAdminPageTab";
 import { useFrameSharingToggle } from "@app/hooks/useFrameSharingToggle";
 import type { AdminSectionId } from "@app/lib/admin/adminSectionIds";
 import { ADMIN_SECTION_IDS } from "@app/lib/admin/adminSectionIds";
-import { useAuth, useWorkspace } from "@app/lib/auth/AuthContext";
+import {
+  useAuth,
+  useFeatureFlags,
+  useWorkspace,
+} from "@app/lib/auth/AuthContext";
 import { useIsSelfImprovementAvailable } from "@app/lib/client/self_improvement";
 import {
   getWorkspaceDefaultSelfImprovementCapPerSkillAwuCredits,
@@ -44,6 +48,8 @@ import {
   GOVERNANCE_CAPABILITIES,
 } from "@app/types/group_permissions";
 import { MANAGEABLE_GROUP_KINDS } from "@app/types/groups";
+import type { WhitelistableFeature } from "@app/types/shared/feature_flags";
+import { isFramesV2FunctionsEnabled } from "@app/types/shared/feature_flags";
 import { removeNulls } from "@app/types/shared/utils/general";
 import type { WorkspaceSharingPolicy } from "@app/types/user";
 import {
@@ -59,14 +65,17 @@ import { Trans, useLingui } from "@lingui/react/macro";
 const GOVERNANCE_TABS = ["agents", "pods", "features"] as const;
 type GovernanceTab = (typeof GOVERNANCE_TABS)[number];
 
-// Frame governance permissions are only relevant when the workspace sharing policy actually
-// enables the underlying capability: email invites require external email sharing, and public
-// links require unrestricted sharing.
+// Frame governance permissions are only relevant when the workspace actually enables the
+// underlying capability: Frame Apps require Frame functions, email invites require external email
+// sharing, and public links require unrestricted sharing.
 function isFrameCapabilityEnabled(
   grantType: GrantType,
-  sharingPolicy: WorkspaceSharingPolicy
+  sharingPolicy: WorkspaceSharingPolicy,
+  featureFlags: WhitelistableFeature[]
 ): boolean {
   switch (grantType) {
+    case "create":
+      return isFramesV2FunctionsEnabled(featureFlags);
     case "invite":
       return (
         sharingPolicy === "workspace_and_emails" ||
@@ -122,6 +131,7 @@ export const GovernancePage = () => {
   const { sharingPolicy, doUpdateSharingPolicy, isChanging } =
     useFrameSharingToggle({ owner });
 
+  const { featureFlags } = useFeatureFlags();
   const hasSelfImprovement = useIsSelfImprovementAvailable();
   const reinforcementUnit = useReinforcementBillingUnit({ owner });
   const defaultCapPerSkill =
@@ -142,7 +152,7 @@ export const GovernancePage = () => {
     groupGovernancePermissionsBySection(governancePermissions);
 
   const framePermissions = frames.filter((permission) =>
-    isFrameCapabilityEnabled(permission.grantType, sharingPolicy)
+    isFrameCapabilityEnabled(permission.grantType, sharingPolicy, featureFlags)
   );
 
   const agentsSections: {

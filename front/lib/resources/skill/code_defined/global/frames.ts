@@ -1,3 +1,4 @@
+import { canCreateFrameApps } from "@app/lib/api/frames/permissions";
 import { doesWorkspaceServePublicFunctions } from "@app/lib/api/sandbox_functions/workspace_user";
 import type { Authenticator } from "@app/lib/auth";
 import { getFeatureFlags } from "@app/lib/auth";
@@ -14,10 +15,13 @@ import {
 
 /**
  * @cc [owner:davidebbo,label:product] frame-functions-disclosure
- * Function, database and persistent-file authoring guidance MUST be included only when Frame functions are enabled (see isFramesV2FunctionsEnabled). Guidance for functions
- * served to visitors of a public link MUST be included only when the workspace serves public Frame
- * functions to visitors (see doesWorkspaceServePublicFunctions). Draft and make-live guidance MUST
- * be included only when Frame drafts are enabled (see isFramesV2DraftsEnabled).
+ * Function, database and persistent-file authoring guidance MUST be included only when Frame
+ * functions are enabled (see isFramesV2FunctionsEnabled). Guidance for functions served to visitors
+ * of a public link MUST be included only when the workspace serves public Frame functions to
+ * visitors (see doesWorkspaceServePublicFunctions). Draft and make-live guidance MUST be included
+ * only when Frame drafts are enabled (see isFramesV2DraftsEnabled). When the user may not create
+ * Frame Apps (see `frame-app-create-capability`), the instructions MUST say so in place of the
+ * durable-state default, before any function or database guidance.
  */
 export const framesSkill = {
   sId: "frames",
@@ -52,6 +56,7 @@ export const framesSkill = {
       }),
       hasDrafts: isFramesV2DraftsEnabled(flags),
       hasSchedules: isFramesV2SchedulesEnabled(flags),
+      canCreateFrameApps: await canCreateFrameApps(auth),
       isPod: conversation ? isPodConversation(conversation) : false,
     });
   },
@@ -59,6 +64,6 @@ export const framesSkill = {
   files: FRAME_SKILL_FILES,
   // Frames authoring runs entirely through the Computer.
   warmsConversationSandbox: async () => true,
-  version: 18,
+  version: 19,
   icon: "ActionFrameIcon",
 } as const satisfies GlobalSkillDefinition;

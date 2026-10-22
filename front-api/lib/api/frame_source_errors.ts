@@ -4,6 +4,15 @@ import { isPublishFrameError } from "@app/lib/api/viz/publish_frame";
 import { isDustFileSystemError } from "@app/types/file_system";
 import { assertNever } from "@app/types/shared/utils/assert_never";
 
+export function isFrameAppCreationNotAllowedError(
+  error: PublishFrameFromSourceError
+): boolean {
+  return (
+    isFramePublicationError(error) &&
+    error.code === "frame_app_creation_not_allowed"
+  );
+}
+
 export function frameSourceErrorStatus(
   error: PublishFrameFromSourceError
 ): 400 | 403 | 500 {
@@ -15,7 +24,10 @@ export function frameSourceErrorStatus(
   }
 
   if (isFramePublicationError(error)) {
-    return error.code === "unauthorized" ? 403 : 400;
+    return error.code === "unauthorized" ||
+      error.code === "frame_app_creation_not_allowed"
+      ? 403
+      : 400;
   }
 
   if (isPublishFrameError(error)) {

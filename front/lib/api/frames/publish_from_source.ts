@@ -8,6 +8,7 @@ import {
 } from "@app/lib/api/frames/build_and_publish";
 import { reconcileFramePublicationDatabasesOnStagedSource } from "@app/lib/api/frames/database_reconciliation";
 import { withFrameSourceLock } from "@app/lib/api/frames/operation_lock";
+import { canCreateFrameApps } from "@app/lib/api/frames/permissions";
 import type { FramePublicationSourceFile } from "@app/lib/api/frames/publication_storage";
 import {
   buildFramePublicationContracts,
@@ -37,6 +38,7 @@ import logger from "@app/logger/logger";
 import type { FrameManifest } from "@app/types/api/frame_manifest";
 import {
   FRAME_MANIFEST_FILE,
+  isFrameAppManifest,
   isSafeFrameRelativePath,
   parseFrameManifest,
 } from "@app/types/api/frame_manifest";
@@ -82,7 +84,7 @@ async function checkFrameFunctionsFeature(
   auth: Authenticator,
   manifest: FrameManifest
 ): Promise<Result<void, FramePublicationError>> {
-  if (manifest.functions.length === 0 && manifest.databases.length === 0) {
+  if (!isFrameAppManifest(manifest)) {
     return new Ok(undefined);
   }
   const featureFlags = await getFeatureFlags(auth);
@@ -117,6 +119,30 @@ async function checkFrameSchedulesFeature(
     "invalid_manifest",
     "Frame schedules are not enabled for this workspace. Remove `schedules` from the manifest's " +
       "functions."
+  );
+}
+
+/**
+ * Refuses, before the build, a Frame App manifest when the caller may not create Frame Apps (see
+ * `frame-app-create-capability`). The previous publication stays live.
+ */
+export async function checkFrameAppCreatePermission(
+  auth: Authenticator,
+  manifest: FrameManifest
+): Promise<Result<void, FramePublicationError>> {
+  if (!isFrameAppManifest(manifest)) {
+    return new Ok(undefined);
+  }
+
+  if (await canCreateFrameApps(auth)) {
+    return new Ok(undefined);
+  }
+
+  return frameError(
+    "frame_app_creation_not_allowed",
+    "You are not allowed to create or update Frame Apps (Frames with functions or databases) in " +
+      "this workspace. An admin can allow it in Governance (Create Frame Apps). Tell the user the " +
+      "publish was refused."
   );
 }
 
@@ -556,6 +582,11 @@ async function replaceLegacyFrameFromSource(
       return schedulesCheck;
     }
 
+    const createCheck = await checkFrameAppCreatePermission(auth, manifest);
+    if (createCheck.isErr()) {
+      return createCheck;
+    }
+
     const sharingCheck = await checkFrameFunctionSharing(auth, {
       frame: legacyFrame,
       manifest,
@@ -973,6 +1004,11 @@ async function publishFrameV2FromCapturedSourceWithSourceLockHeld(
   const schedulesCheck = await checkFrameSchedulesFeature(auth, manifest);
   if (schedulesCheck.isErr()) {
     return schedulesCheck;
+  }
+
+  const createCheck = await checkFrameAppCreatePermission(auth, manifest);
+  if (createCheck.isErr()) {
+    return createCheck;
   }
 
   const sharingCheck = await checkFrameFunctionSharing(auth, {

@@ -331,6 +331,7 @@ const API_ERROR_TYPES = [
   "frame_sharing_not_allowed",
   "frame_files_unverifiable",
   "frame_user_required",
+  "frame_app_creation_not_allowed",
   "file_already_exists",
   "folder_required",
   "folder_too_large_to_download",

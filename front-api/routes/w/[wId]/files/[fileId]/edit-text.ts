@@ -12,7 +12,10 @@ import {
   isInteractiveContentType,
 } from "@app/types/files";
 import { assertNever } from "@app/types/shared/utils/assert_never";
-import { frameSourceErrorStatus } from "@front-api/lib/api/frame_source_errors";
+import {
+  frameSourceErrorStatus,
+  isFrameAppCreationNotAllowedError,
+} from "@front-api/lib/api/frame_source_errors";
 import { workspaceApp } from "@front-api/middlewares/ctx";
 import { apiError } from "@front-api/middlewares/utils";
 import { validate } from "@front-api/middlewares/validator";
@@ -125,7 +128,12 @@ app.post(
           case 403:
             return apiError(ctx, {
               status_code: 403,
-              api_error: { type: "file_read_only", message },
+              api_error: {
+                type: isFrameAppCreationNotAllowedError(editResult.error)
+                  ? "frame_app_creation_not_allowed"
+                  : "file_read_only",
+                message,
+              },
             });
           case 500:
             return apiError(ctx, {

@@ -142,6 +142,7 @@ describe("Authenticator.getWorkspacePermissions", () => {
       agent: ["create", "publish"],
       skill: ["create", "publish", "make_discoverable"],
       frame: ["invite", "publish"],
+      frame_app: ["create"],
       billing: ["admin"],
       security: ["admin"],
       dust_app: ["admin"],

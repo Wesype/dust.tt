@@ -305,6 +305,7 @@ export const API_ERROR_MESSAGES: Record<APIErrorType, MessageDescriptor> = {
   frame_sharing_not_allowed: msg`This Frame can't be shared this way.`,
   frame_files_unverifiable: msg`This Frame uses files that can't be verified.`,
   frame_user_required: msg`This Frame must be created or updated by a user signed in to Dust.`,
+  frame_app_creation_not_allowed: msg`You can't create or update Frame Apps in this workspace.`,
   file_already_exists: msg`A file or folder with this name already exists.`,
   folder_required: msg`Only folders can be downloaded as a ZIP.`,
   folder_too_large_to_download: msg`This folder is too large to download.`,

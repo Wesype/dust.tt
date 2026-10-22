@@ -1,6 +1,8 @@
 import type { Authenticator } from "@app/lib/auth";
+import { getFeatureFlags } from "@app/lib/auth";
 import { GroupPermissionResource } from "@app/lib/resources/group_permission_resource";
 import type { CapabilitySpec } from "@app/types/group_permissions";
+import { isFramesV2FunctionsEnabled } from "@app/types/shared/feature_flags";
 import { assertNever } from "@app/types/shared/utils/assert_never";
 
 /**
@@ -36,6 +38,16 @@ export const CAPABILITY_SEEDERS: CapabilitySeeder[] = [
   {
     capability: { grantType: "reader", resourceType: "skill" },
     resolveTarget: async (_auth) => "everyone",
+  },
+  // A fresh workspace has no flags, so it starts admins only. The "everyone" branch is for one seed
+  // run right after the deploy that adds the capability: a later run would turn an explicit
+  // "admins only" into "everyone", since both leave no rows.
+  {
+    capability: { grantType: "create", resourceType: "frame_app" },
+    resolveTarget: async (auth) =>
+      isFramesV2FunctionsEnabled(await getFeatureFlags(auth))
+        ? "everyone"
+        : "admins_only",
   },
   // it's safe to set them to "everyone" because there is another workspace level permission check
   // if inviting/publishing is allowed or not. We only check permission table if the feature itself is enabled

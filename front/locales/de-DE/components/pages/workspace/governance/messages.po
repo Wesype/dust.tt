@@ -175,6 +175,18 @@ msgid "@dust discover skills"
 msgstr "@dust discover skills Fähigkeiten entdecken"
 
 #: front/components/pages/workspace/governance/capabilityMetadata.ts
+msgid "Create Frame Apps"
+msgstr "Frame-Apps erstellen"
+
+#: front/components/pages/workspace/governance/capabilityMetadata.ts
+msgid "Who can create Frame Apps"
+msgstr "Wer Frame-Apps erstellen kann"
+
+#: front/components/pages/workspace/governance/capabilityMetadata.ts
+msgid "frames apps functions backend"
+msgstr "Frames Apps Funktionen Backend"
+
+#: front/components/pages/workspace/governance/capabilityMetadata.ts
 msgid "Invite people by email"
 msgstr "Personen per E-Mail einladen"
 

@@ -11,6 +11,7 @@ import { ConversationFactory } from "@app/tests/utils/ConversationFactory";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import {
   createTestConversationFrameFile,
+  enableFrameApps,
   enablePublicFrameFunctions,
   makeTestFrameFunction,
 } from "@app/tests/utils/FrameFunctionFactory";
@@ -18,6 +19,7 @@ import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import { fileStorageMock } from "@app/tests/utils/mocks/file_storage";
 import { FrameManifestSchema } from "@app/types/api/frame_manifest";
 import { GLOBAL_AGENTS_SID } from "@app/types/assistant/assistant";
+import type { MembershipRoleType } from "@app/types/memberships";
 import type { Result } from "@app/types/shared/result";
 import assert from "assert";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -78,11 +80,11 @@ vi.mock("@app/lib/api/frames/permissions", async (importActual) => {
   };
 });
 
-async function setupFrame(): Promise<{
+async function setupFrame(role: MembershipRoleType = "user"): Promise<{
   frame: FileResource;
   auth: Authenticator;
 }> {
-  const { authenticator } = await createResourceTest({});
+  const { authenticator } = await createResourceTest({ role });
   await FeatureFlagFactory.basic(authenticator, "frames_v2_drafts");
   const conversation = await ConversationFactory.create(authenticator, {
     agentConfigurationId: GLOBAL_AGENTS_SID.DUST,
@@ -405,7 +407,7 @@ describe("makeFrameDraftLive", () => {
   });
 
   it("fails on the function sharing check like a publish would", async () => {
-    const { auth, frame } = await setupFrame();
+    const { auth, frame } = await setupFrame("admin");
     await FeatureFlagFactory.basic(auth, "frames_v2_functions");
     const liveId = await publishBundle(auth, frame, CODE_A, "live");
     const published = await publishFramePublication(auth, {
@@ -433,7 +435,7 @@ describe("makeFrameDraftLive", () => {
   });
 
   it("refuses a draft with no public function onto a public share", async () => {
-    const { auth, frame } = await setupFrame();
+    const { auth, frame } = await setupFrame("admin");
     await enablePublicFrameFunctions(auth);
     const liveId = await publishBundle(auth, frame, CODE_A, "live");
     const published = await publishFramePublication(auth, {
@@ -458,5 +460,38 @@ describe("makeFrameDraftLive", () => {
     expect(result.error.message).toContain("none of its functions declares");
     const metadata = await metadataOf(auth, frame);
     expect(metadata?.activePublicationId).toBe(liveId);
+  });
+
+  it("refuses a Frame App draft to a member who may not create Frame Apps and keeps the live publication", async () => {
+    const { auth, frame } = await setupFrame();
+    await enableFrameApps(auth);
+    expect(auth.hasWorkspacePermission("create", "frame_app")).toBe(false);
+    const liveId = await publishBundle(auth, frame, CODE_A, "live");
+    const published = await publishFramePublication(auth, {
+      frame,
+      functionArtifacts,
+      manifest: manifestWithFunction,
+      sourceFiles: sourceFilesWithFunction,
+      uiBundleCode: CODE_B,
+      mode: "draft",
+    });
+    assert(published.isOk(), "draft publish succeeds");
+    const draftId = published.value.publicationId;
+
+    const result = await makeFrameDraftLive(auth, {
+      frame,
+      draftPublicationId: draftId,
+    });
+
+    assert(result.isErr(), "make live is refused");
+    expect(result.error).toMatchObject({
+      code: "frame_app_creation_not_allowed",
+    });
+    expect(result.error.message).toContain(
+      "not allowed to create or update Frame Apps"
+    );
+    const metadata = await metadataOf(auth, frame);
+    expect(metadata?.activePublicationId).toBe(liveId);
+    expect(metadata?.latestPublicationId).toBe(draftId);
   });
 });

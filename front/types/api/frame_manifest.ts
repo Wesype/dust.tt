@@ -271,6 +271,10 @@ export type FrameManifest = z.infer<typeof FrameManifestSchema>;
 export type FrameFunctionManifest = FrameManifest["functions"][number];
 export type FrameScheduleManifest = FrameFunctionManifest["schedules"][number];
 
+export function isFrameAppManifest(manifest: FrameManifest): boolean {
+  return manifest.functions.length > 0 || manifest.databases.length > 0;
+}
+
 export function parseFrameManifest(
   buffer: Buffer
 ): Result<FrameManifest, string> {

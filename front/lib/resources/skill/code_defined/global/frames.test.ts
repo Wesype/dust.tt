@@ -1,12 +1,19 @@
 import { InternalMCPServerInMemoryResource } from "@app/lib/resources/internal_mcp_server_in_memory_resource";
 import { framesSkill } from "@app/lib/resources/skill/code_defined/global/frames";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
+import { enableFrameApps } from "@app/tests/utils/FrameFunctionFactory";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import type { AgentLoopExecutionData } from "@app/types/assistant/agent_run";
 import { describe, expect, it } from "vitest";
 
 const POD_V2_PLACEMENT_MARKER =
   "new Frames still go in the conversation folder";
+
+const CANNOT_CREATE_FRAME_APPS_MARKER =
+  "This user cannot create or update Frame Apps";
+
+const DURABLE_DEFAULT_MARKER =
+  "declare the database plus the read and mutation functions";
 
 function agentLoopDataInPod(spaceId: string | null): AgentLoopExecutionData {
   return {
@@ -16,7 +23,7 @@ function agentLoopDataInPod(spaceId: string | null): AgentLoopExecutionData {
 
 describe("framesSkill.fetchInstructions", () => {
   it("uses the dsbx lifecycle and keeps MCP export", async () => {
-    const { authenticator: auth } = await createResourceTest({});
+    const { authenticator: auth } = await createResourceTest({ role: "admin" });
     await FeatureFlagFactory.basic(auth, "frames_v2_functions");
 
     const instructions = await framesSkill.fetchInstructions(auth, {
@@ -246,6 +253,34 @@ describe("framesSkill.fetchInstructions", () => {
     expect(instructions).toContain(
       "do not parse the Frame ID from the CLI output"
     );
+  });
+
+  it("replaces the durable-state default with a notice for a member who cannot create Frame Apps", async () => {
+    const { authenticator: auth } = await createResourceTest({ role: "user" });
+    await enableFrameApps(auth);
+
+    const instructions = await framesSkill.fetchInstructions(auth, {
+      spaceIds: [],
+    });
+
+    expect(instructions).not.toContain(DURABLE_DEFAULT_MARKER);
+    const noticeIndex = instructions.indexOf(CANNOT_CREATE_FRAME_APPS_MARKER);
+    expect(noticeIndex).toBeGreaterThan(-1);
+    expect(noticeIndex).toBeLessThan(
+      instructions.indexOf("## Authoring a function")
+    );
+  });
+
+  it("keeps the durable-state default for an admin", async () => {
+    const { authenticator: auth } = await createResourceTest({ role: "admin" });
+    await enableFrameApps(auth);
+
+    const instructions = await framesSkill.fetchInstructions(auth, {
+      spaceIds: [],
+    });
+
+    expect(instructions).not.toContain(CANNOT_CREATE_FRAME_APPS_MARKER);
+    expect(instructions).toContain(DURABLE_DEFAULT_MARKER);
   });
 
   it("defaults Frames to the conversation in a Pod", async () => {

@@ -49,6 +49,11 @@ export function frameMakeLiveApiError(
         status_code: 400,
         api_error: { type: "frame_files_unverifiable", message },
       };
+    case "frame_app_creation_not_allowed":
+      return {
+        status_code: 403,
+        api_error: { type: "frame_app_creation_not_allowed", message },
+      };
     case "unauthorized":
       return {
         status_code: 403,

@@ -10,7 +10,10 @@ import {
   checkFramePublicFunctionSharing,
   loadFramePublicationDescriptor,
 } from "@app/lib/api/frames/publication_storage";
-import { checkFrameFunctionSharing } from "@app/lib/api/frames/publish_from_source";
+import {
+  checkFrameAppCreatePermission,
+  checkFrameFunctionSharing,
+} from "@app/lib/api/frames/publish_from_source";
 import type { Authenticator } from "@app/lib/auth";
 import { isLockAcquisitionTimeoutError } from "@app/lib/lock";
 import type { FileResource } from "@app/lib/resources/file_resource";
@@ -43,8 +46,9 @@ type MakeLiveResult = Result<
  * Make-live MUST only promote the publication the caller names, and only while it is still the
  * Frame's pending draft; it MUST require `canWriteFrameV2Source` on the Frame as read under the
  * Frame's source and publish locks, and MUST fail, leaving both pointers unchanged, on the checks
- * whose inputs can change after the draft was published: the function sharing conflict (share
- * scope) and the share allowlist (file access). Development feature flags are not re-checked.
+ * whose inputs can change after the draft was published: the caller's right to create Frame Apps
+ * (see `frame-app-create-capability`), the function sharing conflict (share scope) and the share
+ * allowlist (file access). Development feature flags are not re-checked.
  * When the named publication is already the live one and no draft is pending, it MUST succeed
  * without re-activating it; when it is live but a newer draft is pending, or when it is neither live
  * nor the pending draft, it MUST fail with `draft_conflict`. A caller naming no publication MUST
@@ -124,6 +128,13 @@ export async function makeFrameDraftLive(
       });
       if (descriptor.isErr()) {
         return descriptor;
+      }
+      const createCheck = await checkFrameAppCreatePermission(
+        auth,
+        descriptor.value.manifest
+      );
+      if (createCheck.isErr()) {
+        return createCheck;
       }
       const sharing = await checkFrameFunctionSharing(auth, {
         frame: fresh,

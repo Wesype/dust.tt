@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { enterFrameDraftMode } from "@app/lib/api/frames/draft_mode";
 import { getFrameSourceLockName } from "@app/lib/api/frames/operation_lock";
 import {
   publishFrameFromSource,
@@ -18,14 +19,27 @@ import { buildSandboxFunctionOnReadySandbox } from "@app/lib/api/sandbox_functio
 import { reconcileDatabaseOnReadySandbox } from "@app/lib/api/sandbox_functions/dsbx_db";
 import { Authenticator } from "@app/lib/auth";
 import { FileResource } from "@app/lib/resources/file_resource";
+import { GroupPermissionResource } from "@app/lib/resources/group_permission_resource";
 import { ProjectMetadataResource } from "@app/lib/resources/project_metadata_resource";
 import { SandboxResource } from "@app/lib/resources/sandbox_resource";
 import { ConversationFactory } from "@app/tests/utils/ConversationFactory";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import { FileFactory } from "@app/tests/utils/FileFactory";
-import { enablePublicFrameFunctions } from "@app/tests/utils/FrameFunctionFactory";
+import {
+  FrameAppFactory,
+  TEST_FRAME_APP_MANIFEST,
+  TEST_FRAME_APP_SOURCES,
+  TEST_FRAME_MANIFEST,
+  TEST_FRAME_UI_SOURCE,
+} from "@app/tests/utils/FrameAppFactory";
+import {
+  enableFrameApps,
+  enablePublicFrameFunctions,
+} from "@app/tests/utils/FrameFunctionFactory";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
+import { GroupFactory } from "@app/tests/utils/GroupFactory";
 import { fileStorageMock } from "@app/tests/utils/mocks/file_storage";
+import { grantWorkspacePermission } from "@app/tests/utils/permissions";
 import { SpaceFactory } from "@app/tests/utils/SpaceFactory";
 import {
   FRAME_MANIFEST_FILE,
@@ -33,7 +47,9 @@ import {
 } from "@app/types/api/frame_manifest";
 import { FramePublicationDescriptorSchema } from "@app/types/api/frame_publication";
 import { getFramePublicationDescriptorPath } from "@app/types/api/frame_storage";
+import { GLOBAL_AGENTS_SID } from "@app/types/assistant/assistant";
 import { frameContentType, frameV2ContentType } from "@app/types/files";
+import type { MembershipRoleType } from "@app/types/memberships";
 import {
   getConversationFilesBasePath,
   getPodFilesBasePath,
@@ -75,93 +91,6 @@ vi.mock("@app/lib/api/frames/seed_functions_archive", () => ({
   seedFramePublicationFunctionsArchive: vi.fn().mockResolvedValue(undefined),
 }));
 
-const manifest = JSON.stringify({
-  version: 1,
-  name: "Status",
-  description: "Show the current status.",
-});
-const uiSource = "export default function Status() { return <p>Ready</p>; }";
-const functionManifest = JSON.stringify({
-  version: 1,
-  description: "Run a function.",
-  functions: [
-    { name: "run", description: "Run it.", entryPoint: "functions/run.ts" },
-  ],
-});
-const functionSources = {
-  "functions/run.ts":
-    "export default { fetch: async () => Response.json({}) };",
-};
-
-async function setup({
-  uiContentType = "text/typescript",
-  manifestContent = manifest,
-  extraSources = {},
-}: {
-  uiContentType?: string;
-  manifestContent?: string;
-  extraSources?: Record<string, string>;
-} = {}) {
-  const { authenticator: auth, workspace } = await createResourceTest({
-    role: "admin",
-  });
-  const conversation = await ConversationFactory.create(auth, {
-    agentConfigurationId: "test-agent",
-    messagesCreatedAt: [],
-  });
-  const sourceDirectoryPath = `conversation-${conversation.sId}/Status`;
-  const manifestPath = `${sourceDirectoryPath}/${FRAME_MANIFEST_FILE}`;
-  const gcsSourceDirectoryPath = `${getConversationFilesBasePath({
-    workspaceId: workspace.sId,
-    conversationId: conversation.sId,
-  })}Status`;
-  const frame = await FileFactory.create(auth, null, {
-    contentType: frameV2ContentType,
-    fileName: FRAME_MANIFEST_FILE,
-    fileSize: Buffer.byteLength(manifestContent),
-    status: "created",
-    useCase: "conversation",
-    useCaseMetadata: { conversationId: conversation.sId },
-    mountFilePath: `${gcsSourceDirectoryPath}/${FRAME_MANIFEST_FILE}`,
-  });
-
-  const sourceByPath = new Map([
-    [`${gcsSourceDirectoryPath}/${FRAME_MANIFEST_FILE}`, manifestContent],
-    [`${gcsSourceDirectoryPath}/index.tsx`, uiSource],
-    ...Object.entries(extraSources).map(
-      ([relativePath, content]): [string, string] => [
-        `${gcsSourceDirectoryPath}/${relativePath}`,
-        content,
-      ]
-    ),
-  ]);
-  fileStorageMock.setFilesByPrefix((prefix) =>
-    prefix === `${gcsSourceDirectoryPath}/`
-      ? [...sourceByPath.entries()].map(([name, content]) => ({
-          name,
-          metadata: {
-            contentType: name.endsWith(".tsx")
-              ? uiContentType
-              : frameV2ContentType,
-            size: String(Buffer.byteLength(content)),
-          },
-        }))
-      : null
-  );
-  fileStorageMock.setFileContent(
-    (filePath) => sourceByPath.get(filePath) ?? null
-  );
-
-  return {
-    auth,
-    conversation,
-    frame,
-    gcsSourceDirectoryPath,
-    manifestPath,
-    workspace,
-  };
-}
-
 beforeEach(() => {
   fileStorageMock.reset();
   vi.clearAllMocks();
@@ -183,8 +112,8 @@ describe("publishFrameFromSource", () => {
       conversationId: conversation.sId,
     })}Status`;
     const sourceByPath = new Map([
-      [`${gcsSourceDirectoryPath}/${FRAME_MANIFEST_FILE}`, manifest],
-      [`${gcsSourceDirectoryPath}/index.tsx`, uiSource],
+      [`${gcsSourceDirectoryPath}/${FRAME_MANIFEST_FILE}`, TEST_FRAME_MANIFEST],
+      [`${gcsSourceDirectoryPath}/index.tsx`, TEST_FRAME_UI_SOURCE],
     ]);
     fileStorageMock.setFilesByPrefix((prefix) =>
       prefix === `${gcsSourceDirectoryPath}/`
@@ -238,7 +167,7 @@ describe("publishFrameFromSource", () => {
     await FileFactory.create(auth, null, {
       contentType: frameContentType,
       fileName: "Legacy.tsx",
-      fileSize: Buffer.byteLength(uiSource),
+      fileSize: Buffer.byteLength(TEST_FRAME_UI_SOURCE),
       status: "created",
       useCase: "conversation",
       useCaseMetadata: { conversationId: otherConversation.sId },
@@ -287,7 +216,7 @@ describe("publishFrameFromSource", () => {
     await FileFactory.create(auth, null, {
       contentType: frameContentType,
       fileName: "Legacy.tsx",
-      fileSize: Buffer.byteLength(uiSource),
+      fileSize: Buffer.byteLength(TEST_FRAME_UI_SOURCE),
       status: "created",
       useCase: "project_context",
       useCaseMetadata: { spaceId: space.sId },
@@ -315,20 +244,22 @@ type LegacyFrameReplacementScope = "conversation" | "pod";
 
 async function setupLegacyFrameReplacement({
   scope,
-  replacementUiSource = uiSource,
-  replacementManifest = manifest,
+  replacementUiSource = TEST_FRAME_UI_SOURCE,
+  replacementManifest = TEST_FRAME_MANIFEST,
   extraSources = {},
+  role = "admin",
 }: {
   scope: LegacyFrameReplacementScope;
   replacementUiSource?: string;
   replacementManifest?: string;
   extraSources?: Record<string, string>;
+  role?: MembershipRoleType;
 }) {
   const {
     authenticator: auth,
     user,
     workspace,
-  } = await createResourceTest({ role: "admin" });
+  } = await createResourceTest({ role });
   const pod =
     scope === "pod" ? await SpaceFactory.project(workspace, user.id) : null;
   const podAuth = pod
@@ -357,7 +288,7 @@ async function setupLegacyFrameReplacement({
   const legacyFrame = await FileFactory.create(podAuth, null, {
     contentType: frameContentType,
     fileName: "Sales.tsx",
-    fileSize: Buffer.byteLength(uiSource),
+    fileSize: Buffer.byteLength(TEST_FRAME_UI_SOURCE),
     status: "created",
     useCase: pod ? "project_context" : "conversation",
     useCaseMetadata: pod
@@ -367,7 +298,7 @@ async function setupLegacyFrameReplacement({
   });
   await legacyFrame.ensureShareableFrame(podAuth);
   const legacyGcsPath = `${gcsRoot}dashboards/Sales.tsx`;
-  fileStorageMock.setObject(legacyGcsPath, uiSource);
+  fileStorageMock.setObject(legacyGcsPath, TEST_FRAME_UI_SOURCE);
 
   const sourceByPath = new Map([
     [`${gcsSourceDirectoryPath}/${FRAME_MANIFEST_FILE}`, replacementManifest],
@@ -480,7 +411,45 @@ describe("publishFrameFromSource replacing a legacy Frame", () => {
     assert(frame, "Frame not found");
     expect(frame.isInteractiveContent).toBe(true);
     expect(frame.toScopedPath(auth)).toBe(legacyPath);
-    expect(fileStorageMock.getObject(legacyGcsPath)).toBe(uiSource);
+    expect(fileStorageMock.getObject(legacyGcsPath)).toBe(TEST_FRAME_UI_SOURCE);
+  });
+
+  it("leaves the legacy Frame untouched when a member may not create Frame Apps", async () => {
+    const {
+      auth,
+      conversation,
+      legacyFrame,
+      legacyGcsPath,
+      legacyPath,
+      manifestPath,
+    } = await setupLegacyFrameReplacement({
+      scope: "conversation",
+      replacementManifest: TEST_FRAME_APP_MANIFEST,
+      extraSources: TEST_FRAME_APP_SOURCES,
+      role: "user",
+    });
+    await enableFrameApps(auth);
+
+    const result = await publishFrameFromSource(auth, {
+      conversation,
+      publishedByAgentConfigurationId: "test-agent",
+      sourcePath: manifestPath,
+      replacesPath: legacyPath,
+    });
+
+    assert(result.isErr());
+    expect(result.error).toMatchObject({
+      code: "frame_app_creation_not_allowed",
+    });
+    expect(result.error.message).toContain(
+      "not allowed to create or update Frame Apps"
+    );
+    expect(buildSandboxFunctionOnReadySandbox).not.toHaveBeenCalled();
+    const frame = await FileResource.fetchById(auth, legacyFrame.sId);
+    assert(frame, "Frame not found");
+    expect(frame.isInteractiveContent).toBe(true);
+    expect(frame.toScopedPath(auth)).toBe(legacyPath);
+    expect(fileStorageMock.getObject(legacyGcsPath)).toBe(TEST_FRAME_UI_SOURCE);
   });
 
   it("moves the Pod pin and tab to the replacement", async () => {
@@ -554,7 +523,7 @@ describe("publishFrameFromSource replacing a legacy Frame", () => {
       scope: "conversation",
       replacementManifest,
       extraSources: {
-        ...functionSources,
+        ...TEST_FRAME_APP_SOURCES,
         "databases/items.db.ts": "export const items = {};",
       },
     });
@@ -691,7 +660,7 @@ describe("publishFrameFromSource replacing a legacy Frame", () => {
       await setupLegacyFrameReplacement({
         scope: "conversation",
         replacementManifest,
-        extraSources: functionSources,
+        extraSources: TEST_FRAME_APP_SOURCES,
       });
     await enablePublicFrameFunctions(auth);
     await legacyFrame.setShareScope(auth, "public");
@@ -758,7 +727,7 @@ describe("publishFrameV2FromSource", () => {
       gcsSourceDirectoryPath,
       manifestPath,
       workspace,
-    } = await setup();
+    } = await FrameAppFactory.conversationFrame();
 
     const result = await publishFrameV2FromSource(auth, {
       conversation,
@@ -780,7 +749,7 @@ describe("publishFrameV2FromSource", () => {
       JSON.parse(storedPublication)
     );
     expect(publication.manifest).toEqual(
-      FrameManifestSchema.parse(JSON.parse(manifest))
+      FrameManifestSchema.parse(JSON.parse(TEST_FRAME_MANIFEST))
     );
     expect(
       fileStorageMock.saveFileCalls.some(({ filePath }) =>
@@ -801,8 +770,8 @@ describe("publishFrameV2FromSource", () => {
   }>([
     {
       declares: "functions",
-      manifestContent: functionManifest,
-      extraSources: functionSources,
+      manifestContent: TEST_FRAME_APP_MANIFEST,
+      extraSources: TEST_FRAME_APP_SOURCES,
     },
     {
       declares: "databases",
@@ -816,10 +785,11 @@ describe("publishFrameV2FromSource", () => {
   ])(
     "rejects a manifest declaring $declares without Frame functions",
     async ({ manifestContent, extraSources }) => {
-      const { auth, conversation, frame, manifestPath } = await setup({
-        manifestContent,
-        extraSources,
-      });
+      const { auth, conversation, frame, manifestPath } =
+        await FrameAppFactory.conversationFrame({
+          manifestContent,
+          extraSources,
+        });
 
       const result = await publishFrameV2FromSource(auth, {
         conversation,
@@ -838,27 +808,28 @@ describe("publishFrameV2FromSource", () => {
   );
 
   it("rejects a manifest declaring schedules without the schedules flag", async () => {
-    const { auth, conversation, frame, manifestPath } = await setup({
-      manifestContent: JSON.stringify({
-        version: 1,
-        description: "Run a function on a schedule.",
-        functions: [
-          {
-            name: "run",
-            description: "Run it.",
-            entryPoint: "functions/run.ts",
-            schedules: [
-              {
-                cron: "0 * * * *",
-                timezone: "UTC",
-                input: {},
-              },
-            ],
-          },
-        ],
-      }),
-      extraSources: functionSources,
-    });
+    const { auth, conversation, frame, manifestPath } =
+      await FrameAppFactory.conversationFrame({
+        manifestContent: JSON.stringify({
+          version: 1,
+          description: "Run a function on a schedule.",
+          functions: [
+            {
+              name: "run",
+              description: "Run it.",
+              entryPoint: "functions/run.ts",
+              schedules: [
+                {
+                  cron: "0 * * * *",
+                  timezone: "UTC",
+                  input: {},
+                },
+              ],
+            },
+          ],
+        }),
+        extraSources: TEST_FRAME_APP_SOURCES,
+      });
     await FeatureFlagFactory.basic(auth, "frames_v2_functions");
 
     const result = await publishFrameV2FromSource(auth, {
@@ -876,10 +847,239 @@ describe("publishFrameV2FromSource", () => {
     expect(reloaded?.useCaseMetadata?.activePublicationId).toBeUndefined();
   });
 
-  it("infers TSX source content type from its extension", async () => {
-    const { auth, conversation, frame, manifestPath } = await setup({
-      uiContentType: "application/x-tiled-tsx",
+  it("lets a member without the grant publish a client-only Frame", async () => {
+    const { auth, conversation, frame, manifestPath } =
+      await FrameAppFactory.buildable("user", TEST_FRAME_MANIFEST);
+    expect(auth.hasWorkspacePermission("create", "frame_app")).toBe(false);
+
+    const result = await publishFrameV2FromSource(auth, {
+      conversation,
+      frame,
+      manifestPath,
     });
+
+    expect(result.isOk()).toBe(true);
+  });
+
+  it("refuses a member who may not create Frame Apps and keeps the previous publication live", async () => {
+    const { auth, conversation, frame, manifestPath, sourceByPath } =
+      await FrameAppFactory.buildable("user", TEST_FRAME_MANIFEST);
+    const first = await publishFrameV2FromSource(auth, {
+      conversation,
+      frame,
+      manifestPath,
+    });
+    assert(first.isOk());
+    const manifestKey = [...sourceByPath.keys()].find((path) =>
+      path.endsWith(`/${FRAME_MANIFEST_FILE}`)
+    );
+    assert(manifestKey);
+    sourceByPath.set(manifestKey, TEST_FRAME_APP_MANIFEST);
+    const reloaded = await FileResource.fetchById(auth, frame.sId);
+    assert(reloaded);
+
+    const result = await publishFrameV2FromSource(auth, {
+      conversation,
+      frame: reloaded,
+      manifestPath,
+    });
+
+    assert(result.isErr());
+    expect(result.error).toMatchObject({
+      code: "frame_app_creation_not_allowed",
+    });
+    expect(result.error.message).toContain(
+      "not allowed to create or update Frame Apps"
+    );
+    expect(buildSandboxFunctionOnReadySandbox).not.toHaveBeenCalled();
+    const afterRefusal = await FileResource.fetchById(auth, frame.sId);
+    expect(afterRefusal?.useCaseMetadata?.activePublicationId).toBe(
+      first.value.publicationId
+    );
+  });
+
+  it("lets an admin create a Frame App without any grant", async () => {
+    const { auth, conversation, frame, manifestPath } =
+      await FrameAppFactory.buildable("admin");
+
+    const result = await publishFrameV2FromSource(auth, {
+      conversation,
+      frame,
+      manifestPath,
+    });
+
+    expect(result.isOk()).toBe(true);
+  });
+
+  it("lets a member of a granted group create a Frame App", async () => {
+    const { conversation, frame, manifestPath, user, workspace } =
+      await FrameAppFactory.buildable("user");
+    await grantWorkspacePermission(workspace, user, {
+      grantType: "create",
+      resourceType: "frame_app",
+    });
+    const memberAuth = await Authenticator.fromUserIdAndWorkspaceId(
+      user.sId,
+      workspace.sId
+    );
+
+    const result = await publishFrameV2FromSource(memberAuth, {
+      conversation,
+      frame,
+      manifestPath,
+    });
+
+    expect(result.isOk()).toBe(true);
+  });
+
+  it.each<{ mode: string; isInDraftMode: boolean }>([
+    { mode: "live", isInDraftMode: false },
+    { mode: "draft", isInDraftMode: true },
+  ])(
+    "refuses a new $mode version of a Frame App to a member who lost the grant and keeps it live",
+    async ({ isInDraftMode }) => {
+      const { conversation, frame, manifestPath, user, workspace } =
+        await FrameAppFactory.buildable("user");
+      const internalAuth = await Authenticator.internalAdminForWorkspace(
+        workspace.sId
+      );
+      await GroupPermissionResource.setForEverybody(internalAuth, {
+        grantType: "create",
+        resourceType: "frame_app",
+      });
+      const grantedAuth = await Authenticator.fromUserIdAndWorkspaceId(
+        user.sId,
+        workspace.sId
+      );
+      const first = await publishFrameV2FromSource(grantedAuth, {
+        conversation,
+        frame,
+        manifestPath,
+      });
+      assert(first.isOk());
+      await GroupPermissionResource.disable(internalAuth, {
+        grantType: "create",
+        resourceType: "frame_app",
+      });
+      const revokedAuth = await Authenticator.fromUserIdAndWorkspaceId(
+        user.sId,
+        workspace.sId
+      );
+      expect(revokedAuth.hasWorkspacePermission("create", "frame_app")).toBe(
+        false
+      );
+      if (isInDraftMode) {
+        assert((await enterFrameDraftMode(revokedAuth, { frame })).isOk());
+      }
+      const reloaded = await FileResource.fetchById(revokedAuth, frame.sId);
+      assert(reloaded);
+      expect(reloaded.isInFrameDraftMode).toBe(isInDraftMode);
+
+      const second = await publishFrameV2FromSource(revokedAuth, {
+        conversation,
+        frame: reloaded,
+        manifestPath,
+      });
+
+      assert(second.isErr());
+      expect(second.error).toMatchObject({
+        code: "frame_app_creation_not_allowed",
+      });
+      expect(second.error.message).toContain(
+        "not allowed to create or update Frame Apps"
+      );
+      const afterRefusal = await FileResource.fetchById(revokedAuth, frame.sId);
+      expect(afterRefusal?.useCaseMetadata?.activePublicationId).toBe(
+        first.value.publicationId
+      );
+      expect(afterRefusal?.latestFramePublicationId).toBe(
+        first.value.publicationId
+      );
+    }
+  );
+
+  it("refuses a manifest declaring only databases to a member without the grant", async () => {
+    const { auth, conversation, frame, manifestPath } =
+      await FrameAppFactory.conversationFrame({
+        role: "user",
+        manifestContent: JSON.stringify({
+          version: 1,
+          description: "Store items.",
+          databases: [{ name: "items", schema: "databases/items.db.ts" }],
+        }),
+        extraSources: { "databases/items.db.ts": "export {};" },
+      });
+    await enableFrameApps(auth);
+
+    const result = await publishFrameV2FromSource(auth, {
+      conversation,
+      frame,
+      manifestPath,
+    });
+
+    assert(result.isErr());
+    expect(result.error).toMatchObject({
+      code: "frame_app_creation_not_allowed",
+    });
+    expect(result.error.message).toContain(
+      "not allowed to create or update Frame Apps"
+    );
+    const reloaded = await FileResource.fetchById(auth, frame.sId);
+    expect(reloaded?.useCaseMetadata?.activePublicationId).toBeUndefined();
+  });
+
+  it("resolves the grant from the member's full groups when an agent publishes from the sandbox", async () => {
+    const { conversation, frame, manifestPath, user, workspace } =
+      await FrameAppFactory.buildable("user");
+    const internalAuth = await Authenticator.internalAdminForWorkspace(
+      workspace.sId
+    );
+    const space = await SpaceFactory.regular(workspace);
+    const [spaceGroup] = await space.fetchRegularAutoGroups(internalAuth);
+    await GroupFactory.withMembers(internalAuth, spaceGroup, [user]);
+    await ConversationFactory.setRequestedSpaceIdsForTest(
+      conversation.id,
+      workspace.id,
+      [space.id]
+    );
+    await grantWorkspacePermission(workspace, user, {
+      grantType: "create",
+      resourceType: "frame_app",
+    });
+    const sandboxAuthRes = await Authenticator.fromSandboxToken(
+      {
+        wId: workspace.sId,
+        cId: conversation.sId,
+        uId: user.sId,
+        aId: GLOBAL_AGENTS_SID.DUST,
+        aV: 0,
+        mId: "test-message-id",
+        sbId: "test-sandbox-id",
+        execId: "test-exec-id",
+        actionId: "test-action-id",
+      },
+      workspace.sId
+    );
+    assert(sandboxAuthRes.isOk());
+    const sandboxAuth = sandboxAuthRes.value;
+    expect(sandboxAuth.hasWorkspacePermission("create", "frame_app")).toBe(
+      false
+    );
+
+    const result = await publishFrameV2FromSource(sandboxAuth, {
+      conversation,
+      frame,
+      manifestPath,
+    });
+
+    expect(result.isOk()).toBe(true);
+  });
+
+  it("infers TSX source content type from its extension", async () => {
+    const { auth, conversation, frame, manifestPath } =
+      await FrameAppFactory.conversationFrame({
+        uiContentType: "application/x-tiled-tsx",
+      });
 
     const result = await publishFrameV2FromSource(auth, {
       conversation,
@@ -891,7 +1091,8 @@ describe("publishFrameV2FromSource", () => {
   });
 
   it("rejects a path that does not match the Frame identity", async () => {
-    const { auth, conversation, frame } = await setup();
+    const { auth, conversation, frame } =
+      await FrameAppFactory.conversationFrame();
 
     const result = await publishFrameV2FromSource(auth, {
       conversation,
@@ -907,7 +1108,7 @@ describe("publishFrameV2FromSource", () => {
 
   it("revalidates the Frame source path after acquiring the source lock", async () => {
     const { auth, conversation, frame, manifestPath, workspace } =
-      await setup();
+      await FrameAppFactory.conversationFrame();
     const staleFrame = await FileResource.fetchById(auth, frame.sId);
     assert(staleFrame);
     const movedManifestPath = `${getConversationFilesBasePath({
@@ -934,7 +1135,8 @@ describe("publishFrameV2FromSource", () => {
   });
 
   it("does not write when another source operation holds the lock", async () => {
-    const { auth, conversation, frame, manifestPath } = await setup();
+    const { auth, conversation, frame, manifestPath } =
+      await FrameAppFactory.conversationFrame();
     const lockKey = `lock:${getFrameSourceLockName(frame.sId)}`;
     const redisClient = await getRedisStreamClient({ origin: "lock" });
     await redisClient.set(lockKey, "held-by-test", {
@@ -995,7 +1197,7 @@ describe("publishFrameV2FromSource", () => {
     const frame = await FileFactory.create(auth, null, {
       contentType: frameV2ContentType,
       fileName: FRAME_MANIFEST_FILE,
-      fileSize: Buffer.byteLength(manifest),
+      fileSize: Buffer.byteLength(TEST_FRAME_MANIFEST),
       status: "created",
       useCase: "project_context",
       useCaseMetadata: { spaceId: space.sId },
@@ -1019,7 +1221,7 @@ describe("publishFrameV2FromSource", () => {
 
   it("bounds source listing before reading the folder", async () => {
     const { auth, conversation, frame, gcsSourceDirectoryPath, manifestPath } =
-      await setup();
+      await FrameAppFactory.conversationFrame();
     fileStorageMock.setFilesByPrefix((prefix) =>
       prefix === `${gcsSourceDirectoryPath}/`
         ? Array.from({ length: 2_000 }, (_, index) => ({

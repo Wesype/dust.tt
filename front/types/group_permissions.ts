@@ -76,6 +76,7 @@ export const GROUP_PERMISSION_RESOURCE_TYPES = [
   "agent",
   "skill",
   "frame",
+  "frame_app",
   "billing",
   "security",
   "models_tier",
@@ -161,6 +162,7 @@ export function emptyWorkspacePermissions(): WorkspacePermissions {
     agent: [],
     skill: [],
     frame: [],
+    frame_app: [],
     billing: [],
     security: [],
     models_tier: [],
@@ -212,6 +214,7 @@ export const GOVERNANCE_CAPABILITIES = {
     { grantType: "make_discoverable", resourceType: "skill" },
   ],
   frame: [
+    { grantType: "create", resourceType: "frame_app" },
     { grantType: "invite", resourceType: "frame" },
     { grantType: "publish", resourceType: "frame" },
   ],

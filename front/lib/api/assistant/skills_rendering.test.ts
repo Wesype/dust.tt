@@ -24,6 +24,7 @@ const FRAMES_INSTRUCTIONS = buildFramesV2Instructions({
   hasPublicFunctions: false,
   hasDrafts: false,
   hasSchedules: false,
+  canCreateFrameApps: true,
   isPod: false,
 });
 

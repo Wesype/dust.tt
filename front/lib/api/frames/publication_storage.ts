@@ -103,6 +103,7 @@ export class FramePublicationError extends Error {
       | "invalid_source"
       | "invalid_tailwind"
       | "allowlist_failed"
+      | "frame_app_creation_not_allowed"
       | "publication_not_found"
       | "sharing_conflict"
       | "ui_build_failed"

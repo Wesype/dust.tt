@@ -1166,6 +1166,10 @@ msgid "This Frame must be created or updated by a user signed in to Dust."
 msgstr "Dieses Frame muss von einer bei Dust angemeldeten Person erstellt oder aktualisiert werden."
 
 #: front/lib/api_error_messages.ts
+msgid "You can't create or update Frame Apps in this workspace."
+msgstr "Sie können in diesem Workspace keine Frame-Apps erstellen oder aktualisieren."
+
+#: front/lib/api_error_messages.ts
 msgid "A file or folder with this name already exists."
 msgstr "Eine Datei oder ein Ordner mit diesem Namen existiert bereits."
 

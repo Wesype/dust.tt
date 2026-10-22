@@ -42,6 +42,11 @@ export const GOVERNANCE_SETTING_METADATA: Partial<
     description: msg`Who can make skills discoverable to Dust and agents with Discover Skills`,
     searchKeywords: msg`@dust discover skills`,
   },
+  "create:frame_app": {
+    label: msg`Create Frame Apps`,
+    description: msg`Who can create Frame Apps`,
+    searchKeywords: msg`frames apps functions backend`,
+  },
   "invite:frame": {
     label: msg`Invite people by email`,
     description: msg`Who can share frames by email with people outside your organization`,

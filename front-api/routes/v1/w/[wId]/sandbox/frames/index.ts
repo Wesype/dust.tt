@@ -7,7 +7,10 @@ import { ConversationResource } from "@app/lib/resources/conversation_resource";
 import logger from "@app/logger/logger";
 import type { FramePublicationStatus } from "@app/types/api/frame_publication";
 import { assertNever } from "@app/types/shared/utils/assert_never";
-import { frameSourceErrorStatus } from "@front-api/lib/api/frame_source_errors";
+import {
+  frameSourceErrorStatus,
+  isFrameAppCreationNotAllowedError,
+} from "@front-api/lib/api/frame_source_errors";
 import { sandboxApp } from "@front-api/middlewares/ctx";
 import { sandboxAuth } from "@front-api/middlewares/sandbox_auth";
 import type { HandlerResult } from "@front-api/middlewares/utils";
@@ -96,8 +99,11 @@ app.post(
       return apiError(ctx, {
         status_code: status,
         api_error: {
-          type:
-            status === 500 ? "internal_server_error" : "invalid_request_error",
+          type: isFrameAppCreationNotAllowedError(publication.error)
+            ? "frame_app_creation_not_allowed"
+            : status === 500
+              ? "internal_server_error"
+              : "invalid_request_error",
           message: publication.error.message,
         },
       });

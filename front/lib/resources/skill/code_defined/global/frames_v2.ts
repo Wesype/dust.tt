@@ -542,6 +542,13 @@ Edit existing Pod Frames in place.
 
 `;
 
+const CANNOT_CREATE_FRAME_APPS = `This user cannot create or update Frame Apps (Frames with functions or databases) in this
+workspace, so publishing one is refused. An admin chooses who can in Governance (Create Frame
+Apps). When the user asks for an application with durable state, or for a change to an existing
+Frame App, tell them right away, before writing any source. For a new Frame, offer a client-only
+version.
+`;
+
 /**
  * @cc [owner:davidebbo,label:product] pod-frame-placement
  * In a Pod conversation, the instructions MUST have new Frames created in the conversation file
@@ -554,12 +561,14 @@ export const buildFramesV2Instructions = ({
   hasPublicFunctions,
   hasDrafts,
   hasSchedules,
+  canCreateFrameApps,
   isPod,
 }: {
   hasFunctions: boolean;
   hasPublicFunctions: boolean;
   hasDrafts: boolean;
   hasSchedules: boolean;
+  canCreateFrameApps: boolean;
   isPod: boolean;
 }) => {
   const publishOutcome = hasDrafts
@@ -590,7 +599,7 @@ ${
 }- A legacy (v1) Frame is anchored by a single \`.tsx\` entry file. Publishing resolves that entry
   file and its local imports, then updates the existing Frame through the legacy bundle pipeline.
 ${
-  hasFunctions
+  hasFunctions && canCreateFrameApps
     ? `- Edit a legacy Frame in place, unless the change needs server functions or a Frame database:
   then migrate it to Frames v2 first, see "Migrating a legacy Frame" below.
 `
@@ -600,18 +609,20 @@ ${
 ## Before authoring
 
 ${
-  hasFunctions
-    ? `Decide whether the Frame is a throwaway visualization or an application with durable state before
-writing source. Chat apps, task lists, trackers, forms, CRUD apps, and anything users can change
-default to durable: declare the database plus the read and mutation functions in the
-manifest. Do not store durable application state in memory; use a Frame database.
-`
-    : `Frames in this workspace are client-only: they cannot declare server functions, databases, or
+  !hasFunctions
+    ? `Frames in this workspace are client-only: they cannot declare server functions, databases, or
 persistent files, so nothing a viewer changes survives a reload. Embed the data the Frame needs in
 its source or in files inside its folder. When the user asks for an application with durable
 state, such as a chat app, task list, tracker, form, or CRUD app, tell them saved state is not
 available for Frames in this workspace and offer a client-only version.
 `
+    : canCreateFrameApps
+      ? `Decide whether the Frame is a throwaway visualization or an application with durable state before
+writing source. Chat apps, task lists, trackers, forms, CRUD apps, and anything users can change
+default to durable: declare the database plus the read and mutation functions in the
+manifest. Do not store durable application state in memory; use a Frame database.
+`
+      : CANNOT_CREATE_FRAME_APPS
 }
 ## Create a Frame
 

@@ -33,10 +33,14 @@ const outputSchema: JSONSchema = { type: "object" };
 export const TEST_FRAME_BUNDLE_CODE =
   "export default { fetch: async () => Response.json({}) };";
 
+export async function enableFrameApps(auth: Authenticator): Promise<void> {
+  await FeatureFlagFactory.basic(auth, "frames_v2_functions");
+}
+
 export async function enablePublicFrameFunctions(
   auth: Authenticator
 ): Promise<void> {
-  await FeatureFlagFactory.basic(auth, "frames_v2_functions");
+  await enableFrameApps(auth);
   await FeatureFlagFactory.basic(auth, "frames_v2_public_functions");
 }
 
