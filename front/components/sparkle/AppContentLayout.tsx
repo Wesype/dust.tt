@@ -79,7 +79,7 @@ function AppContentInnerWrapper({
         {hasSidebarToggleSlot && (
           <motion.div
             key="lock-sidebar"
-            className="absolute left-2 top-2"
+            className="absolute left-2 top-2 z-10"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0, transition: { duration: 0 } }}
@@ -183,7 +183,8 @@ export function AppContentLayout({ children }: AppContentLayoutProps) {
                   isMobile
                     ? MOBILE_DOCUMENT_SCROLL_CLASSES.contentArea
                     : cn(
-                        "min-h-0 overflow-y-auto [scrollbar-gutter:stable]",
+                        // `isolate` keeps page z-indexes below the SidebarToggleButton.
+                        "isolate min-h-0 overflow-y-auto [scrollbar-gutter:stable]",
                         !hasTitleBar && "h-panel"
                       )
                 )}
