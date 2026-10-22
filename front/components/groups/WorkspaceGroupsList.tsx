@@ -278,6 +278,7 @@ export function WorkspaceGroupsList({ owner }: WorkspaceGroupsListProps) {
               filterColumn="name"
               pagination={pagination}
               setPagination={setPagination}
+              columnsBreakpoints={{ managers: "lg", kind: "xl" }}
             />
           </>
         ) : (
