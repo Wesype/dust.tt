@@ -299,54 +299,6 @@ export async function editClientExecutableFile(
   }
 }
 
-export async function renameClientExecutableFile(
-  auth: Authenticator,
-  {
-    fileId,
-    newFileName,
-    renamedByAgentConfigurationId,
-  }: {
-    fileId: string;
-    newFileName: string;
-    renamedByAgentConfigurationId?: string;
-  }
-): Promise<Result<FileResource, { tracked: boolean; message: string }>> {
-  const fileResource = await FileResource.fetchById(auth, fileId);
-  if (!fileResource) {
-    return new Err({ message: `File not found: ${fileId}`, tracked: false });
-  }
-
-  if (!isInteractiveContentType(fileResource.contentType)) {
-    return new Err({
-      message: `File '${fileId}' is not an interactive content file (content type: ${fileResource.contentType})`,
-      tracked: false,
-    });
-  }
-
-  const fileNameValidationResult = validateFileTitle({
-    fileName: newFileName,
-    mimeType: fileResource.contentType,
-  });
-  if (fileNameValidationResult.isErr()) {
-    return fileNameValidationResult;
-  }
-
-  await fileResource.rename(newFileName);
-
-  if (
-    renamedByAgentConfigurationId &&
-    fileResource.useCaseMetadata?.lastEditedByAgentConfigurationId !==
-      renamedByAgentConfigurationId
-  ) {
-    await fileResource.setUseCaseMetadata(auth, {
-      ...fileResource.useCaseMetadata,
-      lastEditedByAgentConfigurationId: renamedByAgentConfigurationId,
-    });
-  }
-
-  return new Ok(fileResource);
-}
-
 export async function getClientExecutableFileContent(
   auth: Authenticator,
   fileId: string
@@ -405,62 +357,4 @@ export async function getClientExecutableFileContent(
       tracked: true,
     });
   }
-}
-
-// Revert the changes made to the Interactive Content file in the last agent message.
-// Uses FileResource revert function
-export async function revertClientExecutableFileChanges(
-  auth: Authenticator,
-  {
-    fileId,
-    revertedByAgentConfigurationId,
-  }: {
-    fileId: string;
-    revertedByAgentConfigurationId: string;
-  }
-): Promise<
-  Result<{ fileResource: FileResource }, { tracked: boolean; message: string }>
-> {
-  const fileResource = await FileResource.fetchById(auth, fileId);
-  if (!fileResource) {
-    return new Err({ tracked: true, message: "File not found" });
-  }
-
-  const revertResult = await fileResource.revert(auth, {
-    revertedByAgentConfigurationId,
-  });
-
-  if (revertResult.isErr()) {
-    return new Err({
-      tracked: false,
-      message: revertResult.error,
-    });
-  }
-
-  return new Ok({ fileResource });
-}
-
-export async function getClientExecutableFileShareUrl(
-  auth: Authenticator,
-  fileId: string
-): Promise<Result<string, Error>> {
-  const fileResource = await FileResource.fetchById(auth, fileId);
-  if (!fileResource) {
-    return new Err(new Error(`File not found: ${fileId}`));
-  }
-
-  if (!fileResource.isInteractiveContent) {
-    return new Err(
-      new Error(
-        `File '${fileId}' is not an Interactive Content file and cannot be shared.`
-      )
-    );
-  }
-
-  const shareInfo = await fileResource.getShareInfo();
-  if (!shareInfo) {
-    return new Err(new Error(`File '${fileId}' isn't shared.`));
-  }
-
-  return new Ok(shareInfo.shareUrl);
 }

@@ -128,7 +128,6 @@ import type {
   UserType,
   WorkspaceSharingPolicy,
 } from "@app/types/user";
-import type { File } from "@google-cloud/storage";
 import assert from "assert";
 import type {
   Attributes,
@@ -1603,101 +1602,6 @@ export class FileResource extends BaseResource<FileModel> {
       : getPrivateUploadBucket();
   }
 
-  /**
-   * Get sorted file versions from GCS (newest first).
-   * Used for reverting Interactive Content files to previous versions.
-   */
-  private async getSortedFileVersions(
-    auth: Authenticator,
-    maxResults?: number
-  ): Promise<Result<File[], Error>> {
-    const filePath = this.getCloudStoragePath(auth, "original");
-    const fileStorage = getPrivateUploadBucket();
-    return fileStorage.getSortedFileVersions({ filePath, maxResults });
-  }
-
-  /**
-   * Revert the file to its previous version.
-   * Uses GCS copy function to restore the previous version as the current version.
-   * Deletes old versions to prevent accumulation.
-   */
-  async revert(
-    auth: Authenticator,
-    {
-      revertedByAgentConfigurationId,
-    }: {
-      revertedByAgentConfigurationId: string;
-    }
-  ): Promise<Result<undefined, string>> {
-    // Get all versions of the file (sorted newest to oldest)
-    const versionsResult = await this.getSortedFileVersions(auth);
-    const versions = versionsResult.isOk() ? versionsResult.value : [];
-
-    // Check if there's a previous version available before attempting revert
-    if (versions.length < 2) {
-      return new Err("No previous version available to revert to");
-    }
-
-    const currentVersion = versions[0];
-    const previousVersion = versions[1];
-
-    // Update metadata before copy.
-    await this.setUseCaseMetadata(auth, {
-      ...this.useCaseMetadata,
-      lastEditedByAgentConfigurationId: revertedByAgentConfigurationId,
-    });
-
-    // Use GCS copy function to make a copy of the previous version the current version
-    const filePath = this.getCloudStoragePath(auth, "original");
-    const bucket = this.getBucketForVersion("original");
-    const destinationFile = bucket.file(filePath);
-
-    try {
-      await previousVersion.copy(destinationFile);
-    } catch (error) {
-      return new Err(
-        `Revert unsuccessful. Failed to copy previous version: ${normalizeError(error)}`
-      );
-    }
-
-    // Keep the mount in sync with the restored canonical version. Frame edits write to the
-    // mount, so leaving it stale would make the revert invisible to source reads and resurrect
-    // the reverted content on the next publish. Best-effort like the version cleanup below:
-    // the restore copy above already created a new canonical generation, so failing the revert
-    // here would leave a state where retrying it restores the reverted-away content.
-    try {
-      await this.copyMountFiles(auth);
-    } catch (error) {
-      logger.error(
-        {
-          fileId: this.sId,
-          workspaceId: this.workspaceId,
-          error: normalizeError(error),
-        },
-        "Failed to refresh the mount copy after revert, source reads and publish may see stale content"
-      );
-    }
-
-    // Delete old versions to prevent accumulation and infinite loops
-    try {
-      // Decrement version after deletion to ensure version counter only changes on success
-      await currentVersion.delete();
-      await previousVersion.delete();
-      await this.decrementVersion();
-    } catch (error) {
-      logger.error(
-        {
-          fileId: this.sId,
-          workspaceId: this.workspaceId,
-          error: normalizeError(error),
-        },
-        "Failed to delete old file versions after successful revert, future reverts may loop"
-      );
-    }
-
-    return new Ok(undefined);
-  }
-
   // Stream logic.
 
   getWriteStream({
@@ -2176,10 +2080,6 @@ export class FileResource extends BaseResource<FileModel> {
 
   private incrementVersion() {
     return this.update({ version: this.version + 1 });
-  }
-
-  private decrementVersion() {
-    return this.update({ version: Math.max(0, this.version - 1) });
   }
 
   rename(newFileName: string) {

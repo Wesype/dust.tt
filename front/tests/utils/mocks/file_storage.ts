@@ -35,13 +35,6 @@ class MockGcsError extends Error {
   }
 }
 
-// Minimal duck-typed stand-in for the GCS `File` objects `getSortedFileVersions` resolves to.
-// Callers (e.g. FileResource.revert()) only ever call `.copy(dest)` and `.delete()` on them.
-export interface MockFileVersion {
-  copy: (dest: unknown) => Promise<void>;
-  delete: () => Promise<void>;
-}
-
 /**
  * Mock for @app/lib/file_storage. Globally registered in vite.setup.ts.
  *
@@ -71,8 +64,6 @@ class FileStorageMock {
   private _metadataForPath: (filePath: string) => MockFileMetadata | null =
     () => null;
   private _contentForPath: (filePath: string) => string | null = () => null;
-  private _sortedFileVersions: (filePath: string) => MockFileVersion[] | null =
-    () => null;
   private _copyFileShouldFail: (src: string, dest: string) => boolean = () =>
     false;
   private _filesByPrefix: (
@@ -140,17 +131,6 @@ class FileStorageMock {
    */
   setFileContent(fn: (filePath: string) => string | null): void {
     this._contentForPath = fn;
-  }
-
-  /**
-   * Controls what `bucket.getSortedFileVersions({ filePath })` resolves to (newest first),
-   * keyed by the file path. Return null (the default) to resolve an empty list, matching "no
-   * previous version available". Reset between tests via `reset()`.
-   */
-  setSortedFileVersions(
-    fn: (filePath: string) => MockFileVersion[] | null
-  ): void {
-    this._sortedFileVersions = fn;
   }
 
   /**
@@ -249,7 +229,6 @@ class FileStorageMock {
     this._saveShouldFail = () => false;
     this._metadataForPath = () => null;
     this._contentForPath = () => null;
-    this._sortedFileVersions = () => null;
     this._copyFileShouldFail = () => false;
     this._filesByPrefix = () => null;
     this._subdirectoryNames = () => null;
@@ -585,9 +564,7 @@ class FileStorageMock {
         );
         return Promise.resolve(names);
       }),
-      getSortedFileVersions: vi.fn(({ filePath }: { filePath: string }) =>
-        Promise.resolve(new Ok(this._sortedFileVersions(filePath) ?? []))
-      ),
+      getSortedFileVersions: vi.fn(() => Promise.resolve(new Ok([]))),
     };
   }
 }

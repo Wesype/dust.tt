@@ -28,7 +28,7 @@ import {
 import { HUBSPOT_SERVER } from "@app/lib/api/actions/servers/hubspot/metadata";
 import { IMAGE_GENERATION_SERVER } from "@app/lib/api/actions/servers/image_generation/metadata";
 import { INCLUDE_DATA_SERVER } from "@app/lib/api/actions/servers/include_data/metadata";
-import { INTERACTIVE_CONTENT_SERVER } from "@app/lib/api/actions/servers/interactive_content/metadata";
+import { INTERACTIVE_CONTENT_TOOLS_METADATA } from "@app/lib/api/actions/servers/interactive_content/metadata";
 import { JIRA_SERVER } from "@app/lib/api/actions/servers/jira/metadata";
 import { LUMA_SERVER } from "@app/lib/api/actions/servers/luma/metadata";
 import { MICROSOFT_DRIVE_SERVER } from "@app/lib/api/actions/servers/microsoft_drive/metadata";
@@ -152,7 +152,7 @@ const SERVER_SOURCES: Array<{
   { name: "speech_generator", tools: SPEECH_GENERATOR_SERVER.tools },
   { name: "statuspage", tools: STATUSPAGE_SERVER.tools },
   { name: "ukg_ready", tools: UKG_READY_SERVER.tools },
-  { name: "interactive_content", tools: INTERACTIVE_CONTENT_SERVER.tools },
+  { name: "interactive_content", tools: INTERACTIVE_CONTENT_TOOLS_METADATA },
   { name: "snowflake", tools: SNOWFLAKE_SERVER.tools },
   {
     name: "run_agent",

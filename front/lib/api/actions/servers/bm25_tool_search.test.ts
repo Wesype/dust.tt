@@ -854,30 +854,6 @@ const QUERIES: LabeledQuery[] = [
     expected: "interactive_content.create_interactive_content_file",
   },
   {
-    query: "edit the code of my frame",
-    expected: "interactive_content.edit_interactive_content_file",
-  },
-  {
-    query: "change the chart colors in my dashboard",
-    expected: "interactive_content.edit_interactive_content_file",
-  },
-  {
-    query: "read back the content of my frame",
-    expected: "interactive_content.retrieve_interactive_content_file",
-  },
-  {
-    query: "revert my frame to the previous version",
-    expected: "interactive_content.revert_interactive_content_file",
-  },
-  {
-    query: "rename my frame file",
-    expected: "interactive_content.rename_interactive_content_file",
-  },
-  {
-    query: "get the share link for my dashboard",
-    expected: "interactive_content.get_interactive_content_file_share_url",
-  },
-  {
     query: "export my frame as a pdf",
     expected: "interactive_content.export_interactive_content_file",
   },

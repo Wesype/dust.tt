@@ -15,13 +15,12 @@ export const FRAME_SOURCE_MAX_BYTES = 1 * 1024 * 1024; // 1MB
 
 export const CREATE_INTERACTIVE_CONTENT_FILE_TOOL_NAME =
   "create_interactive_content_file";
-export const EDIT_INTERACTIVE_CONTENT_FILE_TOOL_NAME =
-  "edit_interactive_content_file";
-export const RETRIEVE_INTERACTIVE_CONTENT_FILE_TOOL_NAME =
+const EDIT_INTERACTIVE_CONTENT_FILE_TOOL_NAME = "edit_interactive_content_file";
+const RETRIEVE_INTERACTIVE_CONTENT_FILE_TOOL_NAME =
   "retrieve_interactive_content_file";
-export const REVERT_INTERACTIVE_CONTENT_FILE_TOOL_NAME =
+const REVERT_INTERACTIVE_CONTENT_FILE_TOOL_NAME =
   "revert_interactive_content_file";
-export const RENAME_INTERACTIVE_CONTENT_FILE_TOOL_NAME =
+const RENAME_INTERACTIVE_CONTENT_FILE_TOOL_NAME =
   "rename_interactive_content_file";
 const GET_INTERACTIVE_CONTENT_FILE_SHARE_URL_TOOL_NAME =
   "get_interactive_content_file_share_url";
@@ -30,25 +29,17 @@ export const EXPORT_INTERACTIVE_CONTENT_FILE_TOOL_NAME =
 export const PUBLISH_INTERACTIVE_CONTENT_FILE_TOOL_NAME =
   "publish_interactive_content_file";
 
-// Shared rationale for why an existing Frame must be edited in place rather than recreated.
-// Interpolated verbatim wherever this constraint is taught (this server's create tool, the
-// files server's create/edit tools, the Frames skill instructions) so the "why" stays a single
-// source of truth instead of independently drifting prose in each place.
-export const FRAME_RECREATE_WASTE_RATIONALE =
-  "a replacement Frame loses the original's identity and share URL and wastes tokens " +
-  "regenerating content that did not change";
-
 export const INTERACTIVE_CONTENT_TOOLS_METADATA = [
   {
     name: CREATE_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
     description:
-      "Create a new Frame: interactive content such as a dashboard, data visualization, or slideshow " +
-      "presentation that users can run and interact with, beyond static viewing. Choose 'template' " +
-      "mode to base it on an existing knowledge node, or 'inline' mode to provide the content " +
-      "directly. Validation (Tailwind, TypeScript) is non-blocking: the file is saved even with " +
-      "warnings, which you should fix immediately. Only for a Frame that does not already " +
-      "exist: to alter a Frame the conversation already has, go through its source file (see " +
-      "the Frames skill instructions) rather than creating a replacement.",
+      "Create a new Frame from an existing template, copied server-side without reading or " +
+      "regenerating its source. Use it only to instantiate a template: write any other new " +
+      "Frame with the Computer and publish it with `dsbx frame publish`. The Frame is created as " +
+      "a legacy Frame at `conversation-<conversationId>/<file_name>`: change it by editing that " +
+      "source file in place, then publish it with " +
+      "`dsbx frame publish /files/conversation-<conversationId>/<file_name>`. Never use this tool " +
+      "to replace a Frame that already exists.",
     schema: {
       file_name: z
         .string()
@@ -67,22 +58,12 @@ export const INTERACTIVE_CONTENT_TOOLS_METADATA = [
             `'${frameContentType}' for visualizations and dashboards. Use ` +
             `'${frameSlideshowContentType}' for presentations and slideshows.`
         ),
-      mode: z
-        .enum(["template", "inline"])
-        .describe(
-          "Creation mode: 'template' to reference an existing content node from knowledge " +
-            "(content fetched server-side), or 'inline' to provide content directly."
-        ),
       source: z
         .string()
-        .max(FRAME_SOURCE_MAX_BYTES)
         .describe(
-          "When mode='template': a reference to an existing document to use as a template. " +
-            "Accepts either a knowledge base node ID or a scoped file system path " +
+          "A reference to the template: a knowledge base node ID or a scoped file system path " +
             "(e.g. `pod-<id>/templates/my_template.tsx` or `conversation-<id>/my_template.tsx`). " +
-            "Content is fetched server-side without consuming tokens. " +
-            "When mode='inline': the actual content for the Interactive Content file. " +
-            "Should be complete and ready for execution or interaction."
+            "Content is fetched server-side without consuming tokens."
         ),
       description: z
         .string()
@@ -102,6 +83,47 @@ export const INTERACTIVE_CONTENT_TOOLS_METADATA = [
     toolCostCategory: "advanced",
     freeUsage: false,
   },
+  {
+    name: EXPORT_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
+    description:
+      "Export a Frame as a PNG screenshot or PDF document. " +
+      "PNG returns a visual snapshot of the rendered frame. " +
+      "PDF renders the frame with optional orientation (portrait/landscape for regular frames, " +
+      "landscape by default for slideshows).",
+    schema: {
+      file_id: z
+        .string()
+        .describe(
+          "The ID of the Interactive Content file to export (e.g., 'fil_abc123')"
+        ),
+      format: z
+        .enum(["png", "pdf"])
+        .describe(
+          "Export format: 'png' for a screenshot, 'pdf' for a paginated document."
+        ),
+      orientation: z
+        .enum(["portrait", "landscape"])
+        .optional()
+        .describe(
+          "PDF orientation. Only used when format is 'pdf'. " +
+            "Defaults to 'landscape' for slideshows and 'portrait' for regular frames."
+        ),
+    },
+    enableAlerting: false,
+    stake: "never_ask",
+    displayLabels: {
+      running: "Exporting Frame",
+      done: "Export Frame",
+    },
+    toolCostCategory: "basic",
+    freeUsage: false,
+  },
+] as const;
+
+// Not served. Past calls to these tools keep their price and display label, and Frames published
+// with `dsbx frame publish` are recorded and billed as the publish tool (see
+// `recordFramePublishAction`).
+const UNSERVED_INTERACTIVE_CONTENT_TOOLS_METADATA = [
   {
     name: EDIT_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
     description:
@@ -247,41 +269,6 @@ export const INTERACTIVE_CONTENT_TOOLS_METADATA = [
     freeUsage: true,
   },
   {
-    name: EXPORT_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
-    description:
-      "Export a Frame as a PNG screenshot or PDF document. " +
-      "PNG returns a visual snapshot of the rendered frame. " +
-      "PDF renders the frame with optional orientation (portrait/landscape for regular frames, " +
-      "landscape by default for slideshows).",
-    schema: {
-      file_id: z
-        .string()
-        .describe(
-          "The ID of the Interactive Content file to export (e.g., 'fil_abc123')"
-        ),
-      format: z
-        .enum(["png", "pdf"])
-        .describe(
-          "Export format: 'png' for a screenshot, 'pdf' for a paginated document."
-        ),
-      orientation: z
-        .enum(["portrait", "landscape"])
-        .optional()
-        .describe(
-          "PDF orientation. Only used when format is 'pdf'. " +
-            "Defaults to 'landscape' for slideshows and 'portrait' for regular frames."
-        ),
-    },
-    enableAlerting: false,
-    stake: "never_ask",
-    displayLabels: {
-      running: "Exporting Frame",
-      done: "Export Frame",
-    },
-    toolCostCategory: "basic",
-    freeUsage: false,
-  },
-  {
     name: PUBLISH_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
     description:
       "Publish a Frame from its source files, applying source edits to the live rendered Frame. " +
@@ -334,5 +321,8 @@ export const INTERACTIVE_CONTENT_SERVER = {
     icon: "ActionFrameIcon",
     documentationUrl: null,
   },
-  tools: INTERACTIVE_CONTENT_TOOLS_METADATA,
+  tools: [
+    ...INTERACTIVE_CONTENT_TOOLS_METADATA,
+    ...UNSERVED_INTERACTIVE_CONTENT_TOOLS_METADATA,
+  ],
 } as const satisfies ServerMetadata;

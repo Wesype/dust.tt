@@ -1,61 +1,76 @@
-import type { ToolContext } from "@app/lib/actions/types";
 import {
   CREATE_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
-  EDIT_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
-  PUBLISH_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
-  RETRIEVE_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
+  EXPORT_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
 } from "@app/lib/api/actions/servers/interactive_content/metadata";
 import { createInteractiveContentTools } from "@app/lib/api/actions/servers/interactive_content/tools";
-import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
-import { describe, expect, it } from "vitest";
+import {
+  makeExtra,
+  setupPlainConversation,
+} from "@app/tests/utils/conversation_test_factories";
+import { frameContentType } from "@app/types/files";
+import { Err, Ok } from "@app/types/shared/result";
+import { describe, expect, it, vi } from "vitest";
 
-function toolContextWithUseFileSystem(
-  useFileSystem: boolean | undefined
-): ToolContext {
-  return {
-    runContext: {
-      contextType: "agent_loop",
-      conversation: { metadata: { useFileSystem } },
-    },
-  } as unknown as ToolContext;
-}
+const { fetchTemplateContent, createClientExecutableFile } = vi.hoisted(() => ({
+  fetchTemplateContent: vi.fn(),
+  createClientExecutableFile: vi.fn(),
+}));
+
+vi.mock(
+  "@app/lib/api/actions/servers/interactive_content/template_utils",
+  () => ({ fetchTemplateContent })
+);
+vi.mock("@app/lib/api/files/client_executable", () => ({
+  createClientExecutableFile,
+}));
 
 describe("createInteractiveContentTools", () => {
-  it("drops the file-id edit tool but keeps retrieve when the conversation has the file system", async () => {
-    const { authenticator: auth } = await createResourceTest({});
+  it("serves only template creation and export", async () => {
+    const { auth, conversation } = await setupPlainConversation();
+    const extra = makeExtra(auth, conversation);
 
-    const tools = await createInteractiveContentTools(
-      auth,
-      toolContextWithUseFileSystem(true)
-    );
-    const names = tools.map((tool) => tool.name);
+    const tools = await createInteractiveContentTools(auth, {
+      runContext: extra.runContext,
+    });
 
-    expect(names).not.toContain(EDIT_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
-    expect(names).toContain(RETRIEVE_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
-    expect(names).toContain(PUBLISH_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
-    expect(names).toContain(CREATE_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      CREATE_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
+      EXPORT_INTERACTIVE_CONTENT_FILE_TOOL_NAME,
+    ]);
+    const createTool = tools[0];
+    expect(Object.keys(createTool.schema)).not.toContain("mode");
   });
 
-  it("keeps the file-id edit and retrieve tools for legacy conversations", async () => {
-    const { authenticator: auth } = await createResourceTest({});
-
-    const tools = await createInteractiveContentTools(
-      auth,
-      toolContextWithUseFileSystem(undefined)
+  it("creates the Frame from the referenced template's content", async () => {
+    fetchTemplateContent.mockResolvedValue(new Ok("template source"));
+    createClientExecutableFile.mockResolvedValue(
+      new Err({ message: "stop", tracked: false })
     );
-    const names = tools.map((tool) => tool.name);
+    const { auth, conversation } = await setupPlainConversation();
+    const extra = makeExtra(auth, conversation);
+    const [createTool] = await createInteractiveContentTools(auth, {
+      runContext: extra.runContext,
+    });
 
-    expect(names).toContain(EDIT_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
-    expect(names).toContain(RETRIEVE_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
-  });
+    await createTool.handler(
+      {
+        file_name: "Proposal.tsx",
+        mime_type: frameContentType,
+        source: "proposal_template_node",
+      },
+      extra
+    );
 
-  it("keeps the file-id edit and retrieve tools when no conversation is available", async () => {
-    const { authenticator: auth } = await createResourceTest({});
-
-    const tools = await createInteractiveContentTools(auth, undefined);
-    const names = tools.map((tool) => tool.name);
-
-    expect(names).toContain(EDIT_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
-    expect(names).toContain(RETRIEVE_INTERACTIVE_CONTENT_FILE_TOOL_NAME);
+    expect(fetchTemplateContent).toHaveBeenCalledWith(auth, extra.runContext, {
+      templateRef: "proposal_template_node",
+    });
+    expect(createClientExecutableFile).toHaveBeenCalledWith(
+      auth,
+      expect.objectContaining({
+        content: "template source",
+        conversationId: conversation.sId,
+        fileName: "Proposal.tsx",
+      })
+    );
   });
 });
