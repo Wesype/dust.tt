@@ -8,6 +8,7 @@ use elasticsearch::{
 use serde_json::{Value, json};
 
 pub mod lexer;
+pub mod query;
 
 pub const OBJECTS_INDEX_ALIAS: &str = "dfs.objects";
 pub const OBJECTS_INDEX_NAME: &str = "dfs.objects_1";

@@ -500,9 +500,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
+ "chrono",
  "clap",
  "dfs-protocol",
  "elasticsearch",
+ "elasticsearch-dsl",
  "foundationdb",
  "futures",
  "lru",
@@ -598,6 +600,18 @@ dependencies = [
  "tokio",
  "url",
  "void",
+]
+
+[[package]]
+name = "elasticsearch-dsl"
+version = "0.4.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62d75d168b022e5272215b7796898fbb5977d33c6c814ab3a918c0249d74eafb"
+dependencies = [
+ "chrono",
+ "num-traits",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
