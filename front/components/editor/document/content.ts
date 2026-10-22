@@ -22,6 +22,7 @@ import {
 } from "@app/components/editor/document/DocumentListItem";
 import {
   hasExtraCells,
+  TIPTAP_DEFAULT_PRIORITY,
   withColumnAlignments,
 } from "@app/components/editor/document/DocumentTable";
 import { documentExtensions } from "@app/components/editor/document/extensions";
@@ -48,7 +49,14 @@ import isEqual from "lodash/isEqual";
 
 export const documentSchema = getSchema(documentExtensions);
 const documentMarkdown = new MarkdownManager({
-  extensions: documentExtensions,
+  // Markdown reads a mark written inside a code span as text: code ranks back inside the others.
+  // TODO(louisjc): drop once TipTap writes code marks innermost whatever their priority:
+  // https://github.com/ueberdosis/tiptap/issues/8568
+  extensions: documentExtensions.map((extension) =>
+    extension.name === "code"
+      ? extension.extend({ priority: TIPTAP_DEFAULT_PRIORITY })
+      : extension
+  ),
   marked: createDocumentMarked(),
 });
 

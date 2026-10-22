@@ -17,6 +17,7 @@ import {
   DocumentTable,
   DocumentTableCell,
   DocumentTableRow,
+  TIPTAP_DEFAULT_PRIORITY,
 } from "@app/components/editor/document/DocumentTable";
 import { createDocumentMarked } from "@app/components/editor/document/marked_instance";
 import { codeFence } from "@app/lib/markdown/code_fence";
@@ -66,10 +67,17 @@ const starterKitOptions: Partial<StarterKitOptions> = {
 
 /**
  * @cc [owner:avervaet,label:product] document-code-marks
- * Inline code MUST accept the bold, italic, strike and link marks Markdown can wrap it in, and
- * MUST exclude the comment mark, since an anchor written inside a code span reads back as code.
+ * Inline code MUST accept the bold, italic, strike, underline and link marks Markdown can wrap it
+ * in, and MUST exclude the comment mark, since an anchor written inside a code span reads back as
+ * code. It MUST render outside bold, italic, strike and underline, and be written inside them in
+ * Markdown.
  */
-const DocumentCode = Code.extend({ excludes: COMMENT_MARK_NAME });
+const DocumentCode = Code.extend({
+  excludes: COMMENT_MARK_NAME,
+  // Above the default, to render outside the bold, italic, strike and underline marks, so their
+  // lines take its color. Markdown writes it inside them (see `content.ts`).
+  priority: TIPTAP_DEFAULT_PRIORITY + 1,
+});
 
 /**
  * @cc [owner:rfrenoy,label:product] document-empty-heading

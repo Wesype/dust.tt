@@ -19,6 +19,9 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
+// TipTap's priority for an extension that sets none.
+export const TIPTAP_DEFAULT_PRIORITY = 100;
+
 const DOCUMENT_TABLE_NODE_NAME = "table";
 export const TABLE_CELL_NODE_NAME = "tableCell";
 export const TABLE_ROW_NODE_NAME = "tableRow";
@@ -200,7 +203,7 @@ const renderTableMarkdown = (
 export const DocumentTableCell = TableCell.extend({
   content: "paragraph",
 
-  priority: 101,
+  priority: TIPTAP_DEFAULT_PRIORITY + 1,
 
   addKeyboardShortcuts() {
     const inCell = () => this.editor.isActive(TABLE_CELL_NODE_NAME);
