@@ -15,6 +15,7 @@ import {
 } from "@app/lib/api/frames/functions_archive";
 import { withFramePublishLock } from "@app/lib/api/frames/operation_lock";
 import { withFramePublishTimingResult } from "@app/lib/api/frames/publish_timing";
+import { deriveFrameScheduleId } from "@app/lib/api/frames/schedule_ids";
 import { seedFramePublicationFunctionsArchive } from "@app/lib/api/frames/seed_functions_archive";
 import { FRAME_SOURCE_ARCHIVE_CONTENT_TYPE } from "@app/lib/api/frames/source_archive";
 import { buildFrameSourceTarArchive } from "@app/lib/api/frames/source_staging";
@@ -231,6 +232,11 @@ function sourceContentByPath(
  * declares it. A mismatch MUST fail with `invalid_schedule` naming the function and the schedule,
  * before any publication object or row is written.
  */
+/**
+ * @cc [owner:smb2268,label:product] schedule-ids-unique-per-publication
+ * Two schedules of one publication MUST NOT derive the same id (see deriveFrameScheduleId); a
+ * collision MUST fail with `invalid_schedule` before any publication object or row is written.
+ */
 export function buildFramePublicationContracts({
   functionArtifacts,
   manifest,
@@ -270,6 +276,8 @@ export function buildFramePublicationContracts({
       )
     );
   }
+  // Derived ids key Temporal schedules and rows; two declarations sharing one would be one schedule.
+  const scheduleIds = new Set<string>();
   for (const fn of manifest.functions) {
     if (!sourceFilesByPath.has(fn.entryPoint)) {
       return new Err(
@@ -397,6 +405,22 @@ export function buildFramePublicationContracts({
           )
         );
       }
+      const scheduleId = deriveFrameScheduleId({
+        functionName: fn.name,
+        cron: schedule.cron,
+        timezone: schedule.timezone,
+        input: schedule.input,
+      });
+      if (scheduleIds.has(scheduleId)) {
+        return new Err(
+          new FramePublicationError(
+            "invalid_schedule",
+            `Frame function "${fn.name}" schedule (cron "${schedule.cron}", ${schedule.timezone}): ` +
+              "derives the same id as another schedule of this publication; change its cron, timezone or input."
+          )
+        );
+      }
+      scheduleIds.add(scheduleId);
     }
 
     functions.push({

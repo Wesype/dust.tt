@@ -150,6 +150,8 @@ const InvocationDataBaseSchema = z.object({
           parentActionId: z.string().optional(),
         })
         .optional(),
+      scheduleId: z.string().optional(),
+      scheduledFireTime: z.string().optional(),
     })
     .optional(),
   result: z.unknown().optional(),

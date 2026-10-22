@@ -82,6 +82,7 @@ export const SANDBOX_FUNCTION_INVOCATION_ORIGINS = [
   "interactive_session",
   "delegated",
   "external_session",
+  "scheduled",
 ] as const;
 
 export type SandboxFunctionInvocationOrigin =
@@ -232,6 +233,11 @@ export type SandboxFunctionConversationCaller = {
 export type SandboxFunctionInvocationContext = {
   timezone?: string;
   conversationCaller?: SandboxFunctionConversationCaller;
+  // Set by `invokeScheduledFrameFunction` only (routes strip them from client context): the
+  // manifest schedule that fired and the instant it was due (ISO 8601), so a function derives
+  // time-relative values from the fire time, not from now.
+  scheduleId?: string;
+  scheduledFireTime?: string;
 };
 
 export type PostSandboxFunctionInvocationRequestBody = {

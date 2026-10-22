@@ -9,6 +9,7 @@ import {
   publishFramePublication,
   storeFramePublication,
 } from "@app/lib/api/frames/publication_storage";
+import { deriveFrameScheduleId } from "@app/lib/api/frames/schedule_ids";
 import { seedFramePublicationFunctionsArchive } from "@app/lib/api/frames/seed_functions_archive";
 import { parseFrameSourceArchive } from "@app/lib/api/frames/source_archive";
 import { getRedisStreamClient } from "@app/lib/api/redis";
@@ -51,6 +52,16 @@ import { getConversationFilesBasePath } from "@app/types/mount_path";
 import { Err, Ok } from "@app/types/shared/result";
 import assert from "assert";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// A real 64-bit id collision cannot be constructed, so the collision test forces one.
+vi.mock("@app/lib/api/frames/schedule_ids", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@app/lib/api/frames/schedule_ids")>();
+  return {
+    ...actual,
+    deriveFrameScheduleId: vi.fn(actual.deriveFrameScheduleId),
+  };
+});
 
 vi.mock("@app/lib/api/frames/seed_functions_archive", () => ({
   seedFramePublicationFunctionsArchive: vi.fn().mockResolvedValue(undefined),
@@ -672,6 +683,37 @@ describe("storeFramePublication", () => {
     });
 
     expect(result.isErr() && result.error.code).toBe("invalid_frame");
+    expect(fileStorageMock.saveFileCalls).toHaveLength(0);
+  });
+
+  it("rejects two schedules that derive the same id before writing", async () => {
+    const { auth, frame } = await setupFrame();
+    vi.mocked(deriveFrameScheduleId)
+      .mockReturnValueOnce("add-task-same")
+      .mockReturnValueOnce("add-task-same");
+
+    const stored = await storeFramePublication(auth, {
+      frame,
+      functionArtifacts,
+      manifest: {
+        ...manifestWithSchedule,
+        functions: [
+          {
+            ...manifestWithSchedule.functions[0],
+            schedules: [
+              addTaskSchedule,
+              { ...addTaskSchedule, cron: "0 18 * * *" },
+            ],
+          },
+        ],
+      },
+      sourceFiles: sourceFilesWithFunction,
+      uiBundleCode: "export default function A() {}",
+    });
+
+    assert(stored.isErr());
+    expect(stored.error).toMatchObject({ code: "invalid_schedule" });
+    expect(stored.error.message).toContain("derives the same id");
     expect(fileStorageMock.saveFileCalls).toHaveLength(0);
   });
 

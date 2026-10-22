@@ -159,10 +159,28 @@ export const FrameFunctionManifestSchema = z.object({
 type FrameFunctionSourceManifest = z.infer<typeof FrameFunctionManifestSchema>;
 
 /**
+ * @cc [owner:smb2268,label:product] canonical-declaration-ignores-input-key-order
+ * Two schedules MUST canonicalize to the same string exactly when their cron and timezone are
+ * equal and their inputs are equal up to object key order. Both duplicate detection and server-side
+ * id derivation MUST use this canonical form, so "same schedule" means one thing everywhere.
+ */
+export function canonicalFrameScheduleDeclaration({
+  cron,
+  timezone,
+  input,
+}: {
+  cron: string;
+  timezone: string;
+  input: unknown;
+}): string {
+  return JSON.stringify([cron, timezone, stableStringify(input)]);
+}
+
+/**
  * @cc [owner:smb2268,label:product] schedule-declarations-unique-per-function
- * A function declaring the same cron, timezone and input twice MUST fail to parse; input equality
- * ignores key order. Any other combination of schedules, on one function or across functions, is
- * allowed.
+ * A function declaring two schedules with the same canonical declaration (see
+ * canonicalFrameScheduleDeclaration) MUST fail to parse. Any other combination of schedules, on
+ * one function or across functions, is allowed.
  */
 /**
  * @cc [owner:smb2268,label:product] schedules-require-durable-functions
@@ -195,11 +213,11 @@ function refineFrameScheduleDeclarations(
           path: [...path, "cron"],
         });
       }
-      const declaration = JSON.stringify([
-        schedule.cron,
-        schedule.timezone,
-        stableStringify(schedule.input),
-      ]);
+      const declaration = canonicalFrameScheduleDeclaration({
+        cron: schedule.cron,
+        timezone: schedule.timezone,
+        input: schedule.input,
+      });
       if (seenDeclarations.has(declaration)) {
         context.addIssue({
           code: "custom",

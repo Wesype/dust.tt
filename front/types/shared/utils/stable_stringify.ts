@@ -23,17 +23,15 @@ function normalizeForStableStringify(value: unknown): unknown {
   }
 
   if (isPlainObject(value)) {
-    const sortedKeys = Object.keys(value).sort();
-    const normalizedObject: Record<string, unknown> = {};
-
-    for (const key of sortedKeys) {
+    const entries: [string, unknown][] = [];
+    for (const key of Object.keys(value).sort()) {
       const normalizedProperty = normalizeForStableStringify(value[key]);
       if (normalizedProperty !== undefined) {
-        normalizedObject[key] = normalizedProperty;
+        entries.push([key, normalizedProperty]);
       }
     }
-
-    return normalizedObject;
+    // fromEntries defines own properties, so a JSON key named "__proto__" survives.
+    return Object.fromEntries(entries);
   }
 
   return undefined;

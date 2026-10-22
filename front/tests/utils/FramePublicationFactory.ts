@@ -1,27 +1,38 @@
+import type { FramePublicationFunctionArtifact } from "@app/lib/api/frames/publication_storage";
 import {
+  createFramePublicationFunctionRows,
   publishFramePublication,
   storeFramePublication,
 } from "@app/lib/api/frames/publication_storage";
-import type { Authenticator } from "@app/lib/auth";
+import { Authenticator } from "@app/lib/auth";
 import type { FileResource } from "@app/lib/resources/file_resource";
 import { SandboxFunctionResource } from "@app/lib/resources/sandbox_function_resource";
 import { FramePublicationModel } from "@app/lib/resources/storage/models/frame_publication";
 import { withTransaction } from "@app/lib/utils/sql_utils";
+import { ConversationFactory } from "@app/tests/utils/ConversationFactory";
+import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import { FileFactory } from "@app/tests/utils/FileFactory";
 import { createTestConversationFrameFile } from "@app/tests/utils/FrameFunctionFactory";
+import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
+import { MembershipFactory } from "@app/tests/utils/MembershipFactory";
 import { fileStorageMock } from "@app/tests/utils/mocks/file_storage";
+import { UserFactory } from "@app/tests/utils/UserFactory";
+import type { FrameScheduleManifest } from "@app/types/api/frame_manifest";
 import {
   FRAME_MANIFEST_FILE,
   FrameManifestSchema,
   parseFrameManifest,
 } from "@app/types/api/frame_manifest";
 import type { FramePublishMode } from "@app/types/api/frame_publication";
+import type { SandboxFunctionUserIdentityPolicy } from "@app/types/api/sandbox_functions";
+import { GLOBAL_AGENTS_SID } from "@app/types/assistant/assistant";
 import {
   contentTypeFromFileName,
   DEFAULT_FILE_CONTENT_TYPE,
   frameV2ContentType,
 } from "@app/types/files";
 import { getConversationFilesBasePath } from "@app/types/mount_path";
+import type { WhitelistableFeature } from "@app/types/shared/feature_flags";
 import { ONE_DAY_MS } from "@app/types/shared/utils/date_utils";
 import assert from "assert";
 import type { JSONSchema7 as JSONSchema } from "json-schema";
@@ -279,4 +290,123 @@ export async function createTestLiveFrameWithSource(
   });
 
   return { frame, liveId, sourceDirectory, setSource, getSource };
+}
+
+export const TEST_SCHEDULED_FUNCTION_NAME = "refresh";
+
+/**
+ * A workspace with an admin, a separate publisher (plain member) and a conversation Frame whose
+ * active publication declares one durable `refresh` function with `schedule`, stored and
+ * activated through the real publish path as the publisher. `flags` are enabled for the
+ * workspace before publishing.
+ */
+export async function createTestScheduledFramePublication({
+  schedule,
+  flags = ["frames_v2_functions", "frames_v2_schedules"],
+  userIdentity = "workspace_user_required",
+}: {
+  schedule: FrameScheduleManifest;
+  flags?: WhitelistableFeature[];
+  userIdentity?: SandboxFunctionUserIdentityPolicy;
+}) {
+  const { workspace, authenticator: adminAuth } = await createResourceTest({
+    role: "admin",
+  });
+  for (const flag of flags) {
+    await FeatureFlagFactory.basic(adminAuth, flag);
+  }
+  const publisher = await UserFactory.basic();
+  await MembershipFactory.associate(workspace, publisher, { role: "user" });
+  const publisherAuth = await Authenticator.fromUserIdAndWorkspaceId(
+    publisher.sId,
+    workspace.sId
+  );
+
+  const conversation = await ConversationFactory.create(publisherAuth, {
+    agentConfigurationId: GLOBAL_AGENTS_SID.DUST,
+    messagesCreatedAt: [new Date()],
+  });
+  const frame = await FileFactory.create(publisherAuth, null, {
+    contentType: frameV2ContentType,
+    fileName: FRAME_MANIFEST_FILE,
+    fileSize: 0,
+    status: "created",
+    useCase: "conversation",
+    useCaseMetadata: { conversationId: conversation.sId },
+    mountFilePath: `${getConversationFilesBasePath({
+      workspaceId: workspace.sId,
+      conversationId: conversation.sId,
+    })}Frame/${FRAME_MANIFEST_FILE}`,
+  });
+
+  const functionArtifacts = [
+    {
+      name: TEST_SCHEDULED_FUNCTION_NAME,
+      bundleCode: TEST_PUBLICATION_FUNCTION_CODE,
+      userIdentity,
+      inputSchema: {
+        type: "object",
+        properties: { source: { type: "string" } },
+        required: ["source"],
+      },
+      outputSchema,
+    },
+  ] satisfies FramePublicationFunctionArtifact[];
+  const manifest = FrameManifestSchema.parse({
+    version: 1,
+    description: "Refresh cached data.",
+    functions: [
+      {
+        name: TEST_SCHEDULED_FUNCTION_NAME,
+        description: "Refresh it.",
+        entryPoint: "functions/refresh.ts",
+        schedules: [schedule],
+      },
+    ],
+  });
+  const stored = await storeFramePublication(publisherAuth, {
+    frame,
+    functionArtifacts,
+    manifest,
+    sourceFiles: [
+      {
+        relativePath: "index.tsx",
+        content: Buffer.from("export default function App() {}"),
+        contentType: "text/typescript",
+      },
+      {
+        relativePath: "functions/refresh.ts",
+        content: Buffer.from(TEST_PUBLICATION_FUNCTION_CODE),
+        contentType: "text/typescript",
+      },
+    ],
+    uiBundleCode: "export default function App() {}",
+  });
+  if (stored.isErr()) {
+    throw stored.error;
+  }
+  const { publicationId, descriptor } = stored.value;
+  const rows = await createFramePublicationFunctionRows(publisherAuth, {
+    frame,
+    publicationId,
+    descriptor,
+    functionArtifacts,
+  });
+  if (rows.isErr()) {
+    throw rows.error;
+  }
+  await frame.setActiveFramePublication({
+    publicationId,
+    description: manifest.description,
+  });
+  await frame.ensureShareableFrame(publisherAuth);
+
+  return {
+    workspace,
+    adminAuth,
+    publisher,
+    publisherAuth,
+    frame,
+    publicationId,
+  };
 }
