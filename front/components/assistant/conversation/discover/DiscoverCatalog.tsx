@@ -621,6 +621,7 @@ export function CatalogRow({
             </div>
           </div>
           <div className="relative flex shrink-0 items-center gap-1">
+            {favoriteToggle}
             {onPin && (
               <Button
                 variant="ghost"
@@ -629,10 +630,8 @@ export function CatalogRow({
                 tooltip={t`Pin to Featured`}
                 aria-label={t`Pin ${name} to Featured`}
                 onClick={onPin}
-                className={REVEAL_ON_ROW_HOVER_CLASSES}
               />
             )}
-            {favoriteToggle}
           </div>
         </div>
         <p className="copy-sm mt-1 line-clamp-2 text-muted-foreground">
