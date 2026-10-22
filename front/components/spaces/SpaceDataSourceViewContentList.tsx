@@ -89,7 +89,7 @@ type RowData = DataSourceViewContentNode & {
 
 const columnsBreakpoints = {
   lastUpdatedAt: "sm" as const,
-  spaces: "md" as const,
+  spaces: "lg" as const,
 };
 
 const getTableColumns = ({
