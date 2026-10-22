@@ -164,6 +164,7 @@ msgid "Save page to Pod"
 msgstr "Enregistrer la page dans le Pod"
 
 #: front/components/assistant/conversation/input_bar/InputBarContainer.tsx
+#: front/components/assistant/conversation/input_bar/ThinComposer.tsx
 msgid "Send message"
 msgstr "Envoyer le message"
 
@@ -246,6 +247,18 @@ msgstr "Vous avez utilisé 80 % de votre limite d’utilisation. Vous passerez 
 #: front/components/assistant/conversation/input_bar/InputBarUsageBanner.tsx
 msgid "You've used 80% of your usage limit"
 msgstr "Vous avez utilisé 80 % de votre limite d’utilisation"
+
+#: front/components/assistant/conversation/input_bar/ThinComposer.tsx
+msgid "Selected agent: {agentName}"
+msgstr "Agent sélectionné : {agentName}"
+
+#: front/components/assistant/conversation/input_bar/ThinComposer.tsx
+msgid "Start a conversation…"
+msgstr "Démarrer une conversation…"
+
+#: front/components/assistant/conversation/input_bar/ThinComposer.tsx
+msgid "Start a conversation about this document"
+msgstr "Démarrer une conversation sur ce document"
 
 #: front/components/assistant/conversation/input_bar/pasted_utils.ts
 msgid "Pasted ({count})"

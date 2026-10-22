@@ -53,6 +53,7 @@ import {
   Spinner,
 } from "@dust-tt/sparkle";
 import { Trans, useLingui } from "@lingui/react/macro";
+import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
 
 export function findListedFile(
@@ -115,6 +116,7 @@ interface FilePreviewPanelViewProps {
   path: string | null;
   listedFile: FileSystemFileEntry | undefined;
   isListingLoading: boolean;
+  renderDocumentOverlay?: (documentPath: string) => ReactNode;
 }
 
 /**
@@ -128,6 +130,7 @@ export function FilePreviewPanelView({
   path,
   listedFile,
   isListingLoading,
+  renderDocumentOverlay,
 }: FilePreviewPanelViewProps) {
   const { t } = useLingui();
   const { openPanel } = useConversationSidePanelContext();
@@ -399,7 +402,7 @@ export function FilePreviewPanelView({
       </ConversationSidePanelHeader>
       <div
         className={cn(
-          "min-h-0 flex-1 bg-muted-background p-4",
+          "relative min-h-0 flex-1 bg-muted-background p-4",
           filePreviewLayoutClassName(preview.category)
         )}
       >
@@ -420,6 +423,7 @@ export function FilePreviewPanelView({
           owner={owner}
           preview={preview}
         />
+        {markdown.richEditor && path && renderDocumentOverlay?.(path)}
       </div>
     </div>
   );

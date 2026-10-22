@@ -42,7 +42,7 @@ interface UseHandleMentionsOptions {
 }
 
 // The user's personal default if set and still accessible, else @dust.
-function findDefaultAgent(
+export function findDefaultAgent(
   allAgents: LightAgentConfigurationType[],
   defaultAgentId: string | null | undefined
 ): LightAgentConfigurationType | undefined {

@@ -13,6 +13,7 @@ import type {
   GetProjectContextResponseBody,
   PostProjectContextContentNodeResponseBody as PostPodContextContentNodeResponseBody,
 } from "@app/lib/api/projects/context";
+import { useFeatureFlags } from "@app/lib/auth/AuthContext";
 import { clientFetch } from "@app/lib/egress/client";
 import { compareStrings } from "@app/lib/i18n/format";
 import { flattenPodTasksWithStableAssigneeOrder } from "@app/lib/project_task/display_order";
@@ -72,6 +73,7 @@ import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
 import { normalizeError } from "@app/types/shared/utils/error_utils";
 import type { LightWorkspaceType } from "@app/types/user";
+import { resolveDefaultAgentId } from "@app/types/user";
 import { plural } from "@lingui/core/macro";
 import { useLingui } from "@lingui/react/macro";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -1020,6 +1022,30 @@ export function usePodDefaultSkills({
   return {
     defaultSkills,
     isDefaultSkillsLoading: isPodMetadataLoading,
+  };
+}
+
+export function usePodConversationDefaults({
+  owner,
+  podId,
+}: {
+  owner: LightWorkspaceType;
+  podId: string;
+}) {
+  const { hasFeature } = useFeatureFlags();
+  const { podMetadata, defaultSkills, isPodMetadataLoading } = usePodMetadata({
+    workspaceId: owner.sId,
+    podId,
+  });
+
+  return {
+    defaultAgentId: resolveDefaultAgentId({
+      owner,
+      podDefaultAgentId: podMetadata?.defaultAgentId,
+      hasWorkspaceDefaultAgentFeature: hasFeature("workspace_default_agent"),
+    }),
+    defaultSkills,
+    isPodConversationDefaultsLoading: isPodMetadataLoading,
   };
 }
 

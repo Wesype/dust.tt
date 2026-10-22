@@ -47,7 +47,13 @@ export function PodFileTabContent({
   }
 
   if (!isFrame) {
-    return <PodFileTabPreview owner={owner} filePath={tab.path} />;
+    return (
+      <PodFileTabPreview
+        owner={owner}
+        podId={podInfo.sId}
+        filePath={tab.path}
+      />
+    );
   }
 
   return (

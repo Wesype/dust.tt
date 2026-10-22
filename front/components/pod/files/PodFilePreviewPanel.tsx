@@ -6,6 +6,7 @@ import {
   FilePreviewPanelView,
   findListedFile,
 } from "@app/components/assistant/conversation/files_panel/FilePreviewPanel";
+import { ThinComposer } from "@app/components/assistant/conversation/input_bar/ThinComposer";
 import { usePodFiles } from "@app/lib/swr/pods";
 import { resolveCanonicalScopedPath } from "@app/types/mount_path";
 import type { LightWorkspaceType } from "@app/types/user";
@@ -42,6 +43,9 @@ export function PodFilePreviewPanel({
       path={path}
       listedFile={findListedFile(files, path)}
       isListingLoading={isPodFilesLoading}
+      renderDocumentOverlay={(documentPath) => (
+        <ThinComposer owner={owner} podId={podId} documentPath={documentPath} />
+      )}
     />
   );
 }

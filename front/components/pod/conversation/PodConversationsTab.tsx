@@ -11,12 +11,11 @@ import { usePodUnreadConversationIds } from "@app/hooks/conversations";
 import type { PodConversationListFilter } from "@app/hooks/conversations/usePodConversations";
 import { useMarkAllConversationsAsRead } from "@app/hooks/useMarkAllConversationsAsRead";
 import { useSearchPodConversations } from "@app/hooks/useSearchPodConversations";
-import { useFeatureFlags } from "@app/lib/auth/AuthContext";
 import { getRandomGreetingForName } from "@app/lib/client/greetings";
 import { formatRelativeTime } from "@app/lib/client/relative_time";
 import { useAppRouter } from "@app/lib/platform";
 import { getSpaceIcon } from "@app/lib/spaces";
-import { usePodDefaultSkills, usePodMetadata } from "@app/lib/swr/pods";
+import { usePodConversationDefaults } from "@app/lib/swr/pods";
 import { useIsWidthConstrained } from "@app/lib/swr/useIsMobile";
 import { getConversationRoute } from "@app/lib/utils/router";
 import type { RelativeDateBucket } from "@app/lib/utils/timestamps";
@@ -29,7 +28,6 @@ import type { ModelSelectionType } from "@app/types/assistant/models/types";
 import type { ContentFragmentsType } from "@app/types/content_fragment";
 import type { Result } from "@app/types/shared/result";
 import type { UserType, WorkspaceType } from "@app/types/user";
-import { resolveDefaultAgentId } from "@app/types/user";
 import {
   Button,
   ButtonsSwitch,
@@ -108,7 +106,6 @@ export function PodConversationsTab({
 }: PodConversationsTabProps) {
   const { t } = useLingui();
   const { isEditor } = podInfo;
-  const { hasFeature } = useFeatureFlags();
   const router = useAppRouter();
   const hasHistory = useMemo(() => conversations.length > 0, [conversations]);
 
@@ -120,25 +117,8 @@ export function PodConversationsTab({
     workspaceId: owner.sId,
     podId: podInfo.sId,
   });
-  // This pod's default agent, applied to new conversations started here. Resolved
-  // downstream in `useHandleMentions`, falling back to @dust.
-  const { podMetadata, isPodMetadataLoading } = usePodMetadata({
-    workspaceId: owner.sId,
-    podId: podInfo.sId,
-  });
-
-  // Unless a pod default is explicitly set, fall back to the workspace-wide default
-  // agent. The final fallback to @dust happens in `useHandleMentions`.
-  const defaultAgentId = resolveDefaultAgentId({
-    owner,
-    podDefaultAgentId: podMetadata?.defaultAgentId,
-    hasWorkspaceDefaultAgentFeature: hasFeature("workspace_default_agent"),
-  });
-
-  const { defaultSkills, isDefaultSkillsLoading } = usePodDefaultSkills({
-    owner,
-    podId: podInfo.sId,
-  });
+  const { defaultAgentId, defaultSkills, isPodConversationDefaultsLoading } =
+    usePodConversationDefaults({ owner, podId: podInfo.sId });
 
   const [isSearchPopoverOpen, setIsSearchPopoverOpen] = useState(false);
 
@@ -249,9 +229,9 @@ export function PodConversationsTab({
                 disableAutoFocus={false}
                 isFloating={false}
                 defaultAgentId={defaultAgentId}
-                isDefaultAgentLoading={isPodMetadataLoading}
+                isDefaultAgentLoading={isPodConversationDefaultsLoading}
                 defaultSkills={defaultSkills}
-                isDefaultSkillsLoading={isDefaultSkillsLoading}
+                isDefaultSkillsLoading={isPodConversationDefaultsLoading}
               />
             ) : (
               <PodJoinCTA
