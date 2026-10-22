@@ -59,7 +59,7 @@ export function GoogleDriveFileAuthorizationRequired({
   const { resolveAuthentication, isResolving } = useResolveAuthentication({
     owner,
   });
-  const isExtension = clientType === "extension";
+  const isWebApp = clientType === "web";
 
   const canCurrentUserRespond = useMemo(
     () =>
@@ -72,7 +72,7 @@ export function GoogleDriveFileAuthorizationRequired({
 
   // Pre-fetch picker credentials on mount for faster picker opening
   useEffect(() => {
-    if (isExtension || !canCurrentUserRespond || pickerCredentials) {
+    if (!isWebApp || !canCurrentUserRespond || pickerCredentials) {
       return;
     }
 
@@ -100,7 +100,7 @@ export function GoogleDriveFileAuthorizationRequired({
 
     void fetchCredentials();
   }, [
-    isExtension,
+    isWebApp,
     canCurrentUserRespond,
     owner.sId,
     mcpServerId,
@@ -206,13 +206,13 @@ export function GoogleDriveFileAuthorizationRequired({
           <div className="font-sm whitespace-normal break-words text-foreground">
             {isAuthorized ? (
               <Trans>Your file is now accessible. Continuing...</Trans>
-            ) : isExtension ? (
-              <Trans>
-                File authorization is not available in the extension. Please
-                open this conversation in the web app to authorize the file.
-              </Trans>
-            ) : (
+            ) : isWebApp ? (
               <Trans>To access your file, please authorize it once.</Trans>
+            ) : (
+              <Trans>
+                File authorization is available only in the web app. Open this
+                conversation there to authorize the file.
+              </Trans>
             )}
           </div>
           {!isAuthorized && (
@@ -225,15 +225,7 @@ export function GoogleDriveFileAuthorizationRequired({
                 disabled={isResolving || isOpeningPicker}
                 onClick={() => void handleSkip()}
               />
-              {isExtension ? (
-                <Button
-                  label={t`Open in web app`}
-                  variant="highlight"
-                  size="xs"
-                  icon={LinkExternal01}
-                  onClick={handleOpenInWebApp}
-                />
-              ) : (
+              {isWebApp ? (
                 <Button
                   label={isButtonLoading ? t`Loading...` : t`Open file picker`}
                   variant="highlight"
@@ -247,10 +239,18 @@ export function GoogleDriveFileAuthorizationRequired({
                   }
                   onClick={handleOpenPicker}
                 />
+              ) : (
+                <Button
+                  label={t`Open in web app`}
+                  variant="highlight"
+                  size="xs"
+                  icon={LinkExternal01}
+                  onClick={handleOpenInWebApp}
+                />
               )}
             </div>
           )}
-          {!isExtension && (error ?? credentialsError) && (
+          {isWebApp && (error ?? credentialsError) && (
             <div className="text-sm text-warning-500">
               {credentialsError ??
                 t`Failed to load file picker. Please try again.`}

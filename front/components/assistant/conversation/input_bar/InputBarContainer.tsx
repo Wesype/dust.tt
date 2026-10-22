@@ -416,9 +416,9 @@ const InputBarContainer = ({
   const inputBarButtonsRef = useRef<HTMLDivElement>(null);
   const plusButtonRef = useRef<HTMLDivElement>(null);
   const isWidthConstrained = useIsWidthConstrained();
-  // The extension composer keeps its own "+" menu and no slash menu.
+  // The panel composers (extension, Excel add-in) keep their own "+" menu and no slash menu.
   const slashMenuMode =
-    clientType === "extension" ? null : getInputBarSlashMenuMode(actions);
+    clientType === "web" ? getInputBarSlashMenuMode(actions) : null;
   const shouldEnableSlashSuggestion = slashMenuMode !== null;
 
   const [selectedNode, setSelectedNode] =
@@ -1312,7 +1312,7 @@ const InputBarContainer = ({
   // Not gated by disableAutoFocus: that flag prevents autofocus on mount (to avoid mobile keyboard
   // popping up), but focusing when the user explicitly opens the panel is intentional.
   useEffect(() => {
-    if (clientType !== "extension") {
+    if (clientType === "web") {
       return;
     }
     // Focus immediately on mount (handles navigation within an already-open panel).
@@ -1860,7 +1860,7 @@ const InputBarContainer = ({
                     isWidthConstrained ? "gap-1.5" : "gap-2.5"
                   )}
                 >
-                  {clientType === "extension" && (
+                  {clientType !== "web" && (
                     <>
                       <div ref={plusButtonRef}>
                         <DropdownMenu
@@ -1969,7 +1969,7 @@ const InputBarContainer = ({
                       isWidthConstrained ? "gap-1" : "gap-2"
                     )}
                   >
-                    {clientType !== "extension" &&
+                    {clientType === "web" &&
                       actions.includes("model-picker") && (
                         <InputBarModelPicker
                           agentModel={

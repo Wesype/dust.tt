@@ -16,6 +16,7 @@ import type useCustomEditor from "@app/components/editor/input_bar/useCustomEdit
 import type { Selection } from "@app/components/model_picker/modelPickerUtils";
 import type { FileUploaderService } from "@app/hooks/useFileUploaderService";
 import type { MCPServerType, MCPServerViewLightType } from "@app/lib/api/mcp";
+import type { ClientType } from "@app/lib/context/clientType";
 import { useAppRouter } from "@app/lib/platform";
 import { useIsMobile, useIsWidthConstrained } from "@app/lib/swr/useIsMobile";
 import { setQueryParam } from "@app/lib/utils/router";
@@ -49,7 +50,7 @@ interface InputBarButtonsProps {
   actions: InputBarAction[];
   allAgents: LightAgentConfigurationType[];
   buttonSize: "xs" | "sm";
-  clientType: string;
+  clientType: ClientType;
   conversation?: ConversationWithoutContentType;
   disableAgentSelector: boolean;
   editorService: ReturnType<typeof useCustomEditor>["editorService"];
@@ -340,7 +341,7 @@ export const InputBarButtons = React.memo(function InputBarButtons({
   onPlusMenuOpenChange,
   slashMenu,
 }: InputBarButtonsProps) {
-  const isExtension = clientType === "extension";
+  const isWebApp = clientType === "web";
   const shouldShowPlusMenu = getInputBarSlashMenuMode(actions) !== null;
 
   const agentButton = (actions.includes("agents-list") ||
@@ -358,7 +359,7 @@ export const InputBarButtons = React.memo(function InputBarButtons({
       owner={owner}
       selectedAgent={selectedAgent}
       showFooterButtons={
-        actions.includes("agents-list-with-actions") && !isExtension
+        actions.includes("agents-list-with-actions") && isWebApp
       }
       space={space}
     />
@@ -379,7 +380,16 @@ export const InputBarButtons = React.memo(function InputBarButtons({
         />
       )}
       {agentButton}
-      {isExtension ? (
+      {isWebApp ? (
+        shouldShowPlusMenu && (
+          <InputBarPlusMenu
+            buttonSize={buttonSize}
+            onOpenChange={onPlusMenuOpenChange}
+            owner={owner}
+            slashMenu={slashMenu}
+          />
+        )
+      ) : (
         <>
           {actions.includes("model-picker") && (
             <InputBarModelPicker
@@ -404,15 +414,6 @@ export const InputBarButtons = React.memo(function InputBarButtons({
             />
           )}
         </>
-      ) : (
-        shouldShowPlusMenu && (
-          <InputBarPlusMenu
-            buttonSize={buttonSize}
-            onOpenChange={onPlusMenuOpenChange}
-            owner={owner}
-            slashMenu={slashMenu}
-          />
-        )
       )}
     </>
   );

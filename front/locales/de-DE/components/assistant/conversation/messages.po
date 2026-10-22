@@ -782,16 +782,12 @@ msgid "Your file is now accessible. Continuing..."
 msgstr "Ihre Datei ist jetzt zugänglich. Es geht weiter…"
 
 #: front/components/assistant/conversation/GoogleDriveFileAuthorizationRequired.tsx
-msgid "File authorization is not available in the extension. Please open this conversation in the web app to authorize the file."
-msgstr "Die Dateiautorisierung ist in der Erweiterung nicht verfügbar. Öffnen Sie diese Unterhaltung in der Web-App, um die Datei zu autorisieren."
-
-#: front/components/assistant/conversation/GoogleDriveFileAuthorizationRequired.tsx
 msgid "To access your file, please authorize it once."
 msgstr "Autorisieren Sie Ihre Datei einmalig, um darauf zuzugreifen."
 
 #: front/components/assistant/conversation/GoogleDriveFileAuthorizationRequired.tsx
-msgid "Open in web app"
-msgstr "In der Web-App öffnen"
+msgid "File authorization is available only in the web app. Open this conversation there to authorize the file."
+msgstr "Die Dateiautorisierung ist nur in der Web-App verfügbar. Öffnen Sie diese Unterhaltung dort, um die Datei zu autorisieren."
 
 #: front/components/assistant/conversation/GoogleDriveFileAuthorizationRequired.tsx
 msgid "Loading..."
@@ -800,6 +796,10 @@ msgstr "Wird geladen…"
 #: front/components/assistant/conversation/GoogleDriveFileAuthorizationRequired.tsx
 msgid "Open file picker"
 msgstr "Dateiauswahl öffnen"
+
+#: front/components/assistant/conversation/GoogleDriveFileAuthorizationRequired.tsx
+msgid "Open in web app"
+msgstr "In der Web-App öffnen"
 
 #: front/components/assistant/conversation/GoogleDriveFileAuthorizationRequired.tsx
 msgid "Failed to load file picker. Please try again."

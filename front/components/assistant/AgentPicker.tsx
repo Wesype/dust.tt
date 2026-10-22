@@ -266,7 +266,7 @@ export function AgentPicker({
                           className="text-muted-foreground"
                         />
                       )}
-                      {onAgentDetailsClick && clientType !== "extension" ? (
+                      {onAgentDetailsClick && clientType === "web" ? (
                         <Button
                           tooltip={t`View agent details`}
                           icon={DotsHorizontal}

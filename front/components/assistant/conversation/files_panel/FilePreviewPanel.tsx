@@ -359,7 +359,7 @@ export function FilePreviewPanelView({
               />
             )}
             {!isMobile &&
-              clientType !== "extension" &&
+              clientType === "web" &&
               (markdown.richEditor || markdown.collabViewMode === "source") && (
                 <Button
                   variant="ghost"

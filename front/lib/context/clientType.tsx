@@ -1,6 +1,10 @@
+import type { ClientMessageOrigin } from "@app/types/assistant/conversation";
 import { createContext, useContext } from "react";
 
-export type ClientType = "web" | "extension";
+export type ClientType = Extract<
+  ClientMessageOrigin,
+  "web" | "extension" | "excel_addin"
+>;
 
 const ClientTypeContext = createContext<ClientType>("web");
 

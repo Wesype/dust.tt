@@ -26,7 +26,7 @@ export function UserHandle({ user }: UserHandleProps) {
     );
   }
 
-  if (clientType === "extension") {
+  if (clientType !== "web") {
     return <span>{user.name}</span>;
   }
 

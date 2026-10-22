@@ -45,6 +45,7 @@ export function PreviewActionButtons({
 }: PreviewActionButtonsProps) {
   const { t } = useLingui();
   const clientType = useClientType();
+  const isWebApp = clientType === "web";
 
   return (
     <div
@@ -57,46 +58,48 @@ export function PreviewActionButtons({
           : "fixed bottom-5 right-5"
       )}
     >
-      {clientType !== "extension" && (
-        <Tooltip
-          label={
-            isFullScreen ? t`Exit full screen mode` : t`Go to full screen mode`
-          }
-          side="left"
-          tooltipTriggerAsChild
-          trigger={
-            <Button
-              aria-label={
-                isFullScreen
-                  ? t`Exit full screen mode`
-                  : t`Go to full screen mode`
-              }
-              icon={isFullScreen ? Minimize01 : Maximize01}
-              variant="ghost"
-              size="xs"
-              onClick={isFullScreen ? exitFullScreen : enterFullScreen}
-            />
-          }
-        />
-      )}
-      {clientType !== "extension" && (
-        <Tooltip
-          label={t`Open in a new tab`}
-          side="left"
-          tooltipTriggerAsChild
-          trigger={
-            <Button
-              aria-label={t`Open in a new tab`}
-              icon={LinkExternal01}
-              variant="ghost"
-              size="xs"
-              disabled={!shareUrl}
-              onClick={() =>
-                window.open(shareUrl, "_blank", "noopener,noreferrer")
-              }
-            />
-          }
-        />
+      {isWebApp && (
+        <>
+          <Tooltip
+            label={
+              isFullScreen
+                ? t`Exit full screen mode`
+                : t`Go to full screen mode`
+            }
+            side="left"
+            tooltipTriggerAsChild
+            trigger={
+              <Button
+                aria-label={
+                  isFullScreen
+                    ? t`Exit full screen mode`
+                    : t`Go to full screen mode`
+                }
+                icon={isFullScreen ? Minimize01 : Maximize01}
+                variant="ghost"
+                size="xs"
+                onClick={isFullScreen ? exitFullScreen : enterFullScreen}
+              />
+            }
+          />
+          <Tooltip
+            label={t`Open in a new tab`}
+            side="left"
+            tooltipTriggerAsChild
+            trigger={
+              <Button
+                aria-label={t`Open in a new tab`}
+                icon={LinkExternal01}
+                variant="ghost"
+                size="xs"
+                disabled={!shareUrl}
+                onClick={() =>
+                  window.open(shareUrl, "_blank", "noopener,noreferrer")
+                }
+              />
+            }
+          />
+        </>
       )}
       {lastEditedByAgentConfigurationId && onRevert && (
         <Tooltip

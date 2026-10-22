@@ -192,7 +192,7 @@ export function ConversationMenu({
     !!user &&
     canCreateAgent &&
     !isMobile &&
-    clientType !== "extension";
+    clientType === "web";
   const sendNotification = useSendNotification();
 
   const { onOpenChange: onOpenChangeAgentModal } = useURLSheet("agentDetails");

@@ -40,10 +40,10 @@ interface ModelPickerHighlightProps {
 
 export function ModelPickerHighlight({ children }: ModelPickerHighlightProps) {
   const clientType = useClientType();
-  const isExtension = clientType === "extension";
+  const isWebApp = clientType === "web";
   const [isActive, setIsActive] = useState<boolean>(
     () =>
-      !isExtension &&
+      isWebApp &&
       (isReplayRequested() ||
         (Date.now() <= CAMPAIGN_END && readDismissals() < MAX_DISMISSALS))
   );

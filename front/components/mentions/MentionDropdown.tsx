@@ -84,7 +84,7 @@ export const MentionDropdown = React.forwardRef<
             icon={MessagePlusCircle}
             label={t`New conversation with ${agentName}`}
           />
-          {clientType !== "extension" && (
+          {clientType === "web" && (
             <DropdownMenuItem
               onClick={handleAgentSeeDetails}
               icon={Eye}

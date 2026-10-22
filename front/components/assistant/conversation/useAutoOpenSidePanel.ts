@@ -34,7 +34,7 @@ export function useAutoOpenSidePanel({
   } = useConversationSidePanelContext();
   const isMobile = useIsMobile();
   const clientType = useClientType();
-  const isPanelOverlay = isMobile || clientType === "extension";
+  const isPanelOverlay = isMobile || clientType !== "web";
 
   // Last Frame fileId opened this message, and whether that open came from a
   // progress notification. Progress and generatedFiles use different revision

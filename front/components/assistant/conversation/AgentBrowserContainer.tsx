@@ -33,7 +33,7 @@ export function AgentBrowserContainer({
 
   const clientType = useClientType();
   const isMobile = useIsMobile();
-  const isMobileOrExtension = isMobile || clientType === "extension";
+  const showSectionHeader = clientType === "web" && !isMobile;
 
   const handleAgentClick = useCallback(
     // On click, scroll to the input bar and set the selected agent.
@@ -63,7 +63,7 @@ export function AgentBrowserContainer({
       )}
       style={style}
     >
-      {!isMobileOrExtension && (
+      {showSectionHeader && (
         <div id="agents-list-header">
           <Page.SectionHeader title={t`Chat with...`} />
         </div>

@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 const MOBILE_BREAKPOINT = 768;
 
 export function useIsMobile({
-  excludeExtension = true,
+  excludeNonWebClients = true,
 }: {
-  excludeExtension?: boolean;
+  excludeNonWebClients?: boolean;
 } = {}) {
   const clientType = useClientType();
   // Read from window immediately so the initial value is correct to avoid keyboard pop up on mobile.
@@ -24,8 +24,8 @@ export function useIsMobile({
     return () => mql.removeEventListener("change", onChange);
   }, []);
 
-  // The extension is narrow but not mobile.
-  if (excludeExtension && clientType === "extension") {
+  // The extension and Excel add-in panels are narrow, but they are not mobile.
+  if (excludeNonWebClients && clientType !== "web") {
     return false;
   }
 
@@ -33,7 +33,7 @@ export function useIsMobile({
 }
 
 export function useIsWidthConstrained() {
-  return useIsMobile({ excludeExtension: false });
+  return useIsMobile({ excludeNonWebClients: false });
 }
 
 // Whether the pointer can hover — the capability hover-only affordances

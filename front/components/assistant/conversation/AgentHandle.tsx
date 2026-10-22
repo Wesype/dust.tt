@@ -25,7 +25,7 @@ export function AgentHandle({
     hash: router.asPath.split("#")[1] || undefined,
   };
 
-  if (!canMention || clientType === "extension") {
+  if (!canMention || clientType !== "web") {
     return <span>{agent.name}</span>;
   }
 

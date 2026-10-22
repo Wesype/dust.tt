@@ -20,7 +20,7 @@ export const ExcelApp = () => {
   return (
     <I18nProvider i18n={i18n}>
       <SparkleLocaleProvider>
-        <ClientTypeProvider value="extension">
+        <ClientTypeProvider value="excel_addin">
           <CellProvider>
             <ExcelAppInner />
           </CellProvider>
