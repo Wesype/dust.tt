@@ -1,5 +1,6 @@
 import { getDfsTenantClient } from "@app/lib/api/dfs/clients";
 import { withDfsSuperuserFileSystem } from "@app/lib/api/dfs/folder_context";
+import { listAllGrants } from "@app/lib/api/dfs/grants";
 import type { Authenticator } from "@app/lib/auth";
 import { formatDfsUri } from "@app/lib/dfs/uri";
 import { DfsTenantResource } from "@app/lib/resources/dfs_tenant_resource";
@@ -146,7 +147,7 @@ export async function getPokeDfsObject(
       fs.stat(formatDfsUri(objectId), { includeMetadata: true }),
       concurrentExecutor(
         chainIds,
-        (id) => tenantClient.value.listAllGrants({ objectId: id }),
+        (id) => listAllGrants(tenantClient.value, { objectId: id }),
         { concurrency: 8 }
       ),
     ]);

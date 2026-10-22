@@ -4,6 +4,7 @@ import {
   getOrCreatePodFolder,
   getPodFolderGrants,
 } from "@app/lib/api/dfs/folders";
+import { listAllGrants } from "@app/lib/api/dfs/grants";
 import type { Authenticator } from "@app/lib/auth";
 import { hasFeatureFlag } from "@app/lib/auth";
 import type { DfsClient } from "@app/lib/dfs/client";
@@ -35,7 +36,7 @@ export async function syncPodFolderGrants(
   space: SpaceResource
 ): Promise<Result<void, Error>> {
   const [current, desired] = await Promise.all([
-    tenantClient.listAllGrants({ objectId: folderId }),
+    listAllGrants(tenantClient, { objectId: folderId }),
     getPodFolderGrants(space),
   ]);
   if (current.isErr()) {

@@ -47,11 +47,10 @@ import type {
 } from "@app/types/dfs";
 import { DfsError, isDfsObjectId } from "@app/types/dfs";
 import type { Result } from "@app/types/shared/result";
-import { Err, Ok } from "@app/types/shared/result";
+import { Err } from "@app/types/shared/result";
 import type { z } from "zod";
 
 // Maximum `limit` of `ListGrants`, see `dfs/design-docs/API.md`.
-const LIST_GRANTS_PAGE_LIMIT = 512;
 
 // `dfs-read-data-limit`: a read never returns more than 1 MiB.
 const MAX_READ_BYTES = 1024 * 1024;
@@ -318,29 +317,6 @@ export class DfsClient {
       }),
       WireGrantPageSchema
     );
-  }
-
-  /** Every grant attached to `objectId`, fetching all the pages of `listGrants`. */
-  async listAllGrants({
-    objectId,
-  }: {
-    objectId: DfsObjectId;
-  }): Promise<Result<DfsGrant[], DfsError>> {
-    const grants: DfsGrant[] = [];
-    let after: string | undefined;
-    do {
-      const page = await this.listGrants({
-        objectId,
-        after,
-        limit: LIST_GRANTS_PAGE_LIMIT,
-      });
-      if (page.isErr()) {
-        return page;
-      }
-      grants.push(...page.value.grants);
-      after = page.value.nextAfter;
-    } while (after !== undefined);
-    return new Ok(grants);
   }
 
   async updateGrants({

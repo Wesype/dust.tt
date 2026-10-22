@@ -1,18 +1,44 @@
 import type { DfsClient } from "@app/lib/dfs/client";
-import type { DfsGrantUpdate, DfsObjectId } from "@app/types/dfs";
+import type { DfsGrant, DfsGrantUpdate, DfsObjectId } from "@app/types/dfs";
 import { DfsError } from "@app/types/dfs";
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
 
-// See `UpdateGrants` in `dfs/design-docs/API.md`.
+// See `ListGrants` and `UpdateGrants` in `dfs/design-docs/API.md`.
+const LIST_GRANTS_PAGE_LIMIT = 512;
 const MAX_GRANT_UPDATES = 512;
+
+/**
+ * Every grant attached to `objectId`, fetching all the pages of `listGrants`. `tenantClient` MUST
+ * be authenticated with the tenant key of the object's tenant.
+ */
+export async function listAllGrants(
+  tenantClient: Pick<DfsClient, "listGrants">,
+  { objectId }: { objectId: DfsObjectId }
+): Promise<Result<DfsGrant[], DfsError>> {
+  const grants: DfsGrant[] = [];
+  let after: string | undefined;
+  do {
+    const page = await tenantClient.listGrants({
+      objectId,
+      after,
+      limit: LIST_GRANTS_PAGE_LIMIT,
+    });
+    if (page.isErr()) {
+      return page;
+    }
+    grants.push(...page.value.grants);
+    after = page.value.nextAfter;
+  } while (after !== undefined);
+  return new Ok(grants);
+}
 
 /** The modes of the ALLOW grants attached to `objectId`, by subject. */
 async function listAllowModesBySubject(
-  tenantClient: Pick<DfsClient, "listAllGrants">,
+  tenantClient: Pick<DfsClient, "listGrants">,
   objectId: DfsObjectId
 ): Promise<Result<Map<string, number[]>, DfsError>> {
-  const grants = await tenantClient.listAllGrants({ objectId });
+  const grants = await listAllGrants(tenantClient, { objectId });
   if (grants.isErr()) {
     return grants;
   }
@@ -36,7 +62,7 @@ async function listAllowModesBySubject(
  * authenticated with the tenant key of the object's tenant.
  */
 export async function listAllowModes(
-  tenantClient: Pick<DfsClient, "listAllGrants">,
+  tenantClient: Pick<DfsClient, "listGrants">,
   { objectId }: { objectId: DfsObjectId }
 ): Promise<Result<Map<string, number>, DfsError>> {
   const modes = await listAllowModesBySubject(tenantClient, objectId);
@@ -69,7 +95,7 @@ export async function listAllowModes(
  * `invalid_input` without changing any grant.
  */
 export async function setSubjectGrants(
-  tenantClient: Pick<DfsClient, "listAllGrants" | "updateGrants">,
+  tenantClient: Pick<DfsClient, "listGrants" | "updateGrants">,
   {
     objectId,
     changes,
