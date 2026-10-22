@@ -134,18 +134,27 @@ export function getCreditColumns(t: Translate): ColumnDef<RowData, string>[] {
       id: "initialAmount" as const,
       accessorKey: "initialAmount",
       header: t(msg`Initial amount`),
+      meta: {
+        className: "w-36",
+      },
       cell: (info: Info) => Cell(info, info.row.original.initialAmount),
     },
     {
       id: "consumedAmount" as const,
       accessorKey: "consumedAmount",
       header: t(msg`Consumed`),
+      meta: {
+        className: "w-30",
+      },
       cell: (info: Info) => Cell(info, info.row.original.consumedAmount),
     },
     {
       id: "remainingAmount" as const,
       accessorKey: "remainingAmount",
       header: t(msg`Remaining`),
+      meta: {
+        className: "w-30",
+      },
       cell: (info: Info) => Cell(info, info.row.original.remainingAmount),
     },
     {
@@ -153,7 +162,7 @@ export function getCreditColumns(t: Translate): ColumnDef<RowData, string>[] {
       accessorKey: "expirationDate",
       header: t(msg`Expiration date`),
       meta: {
-        className: "text-right",
+        className: "w-40 text-right",
       },
       cell: (info: Info) => Cell(info, info.row.original.expirationDate),
     },
@@ -178,7 +187,7 @@ export function getCreditColumns(t: Translate): ColumnDef<RowData, string>[] {
         );
       },
       meta: {
-        className: "w-16",
+        className: "w-20",
       },
     },
   ];
@@ -217,5 +226,15 @@ export function CreditsList({ credits, isLoading }: CreditsListProps) {
     );
   }
 
-  return <DataTable data={displayedRows} columns={columns} />;
+  return (
+    <DataTable
+      data={displayedRows}
+      columns={columns}
+      columnsBreakpoints={{
+        initialAmount: "lg",
+        consumedAmount: "xl",
+        by: "lg",
+      }}
+    />
+  );
 }
