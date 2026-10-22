@@ -13,8 +13,17 @@ const MAX_SESSION_SUBJECTS = 512;
 // `superuser` in `dfs/design-docs/API.md`).
 export const DFS_SUPERUSER_SUBJECT = "superuser";
 
+const USER_SUBJECT_PREFIX = "u:";
+
 export function createUserSubject(user: UserResource): string {
-  return `u:${user.sId}`;
+  return `${USER_SUBJECT_PREFIX}${user.sId}`;
+}
+
+/** The sId of the user of a subject from `createUserSubject`, or null for any other subject. */
+export function parseUserSubject(subject: string): string | null {
+  return subject.startsWith(USER_SUBJECT_PREFIX)
+    ? subject.slice(USER_SUBJECT_PREFIX.length)
+    : null;
 }
 
 export function createGroupSubject(groupId: string): string {
