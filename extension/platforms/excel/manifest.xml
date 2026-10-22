@@ -8,7 +8,7 @@
   <Version>1.0.0.0</Version>
   <ProviderName>Dust</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="Dust"/>
+  <DisplayName DefaultValue="Dust - Dev"/>
   <Description DefaultValue="Dust in Excel."/>
   <IconUrl DefaultValue="https://dust.tt/static/favicon.png"/>
   <HighResolutionIconUrl DefaultValue="https://dust.tt/static/favicon@2x.png"/>
@@ -63,7 +63,7 @@
         <bt:Url id="Dust.Taskpane" DefaultValue="https://localhost:3014/excel/taskpane.html"/>
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="Dust.Label" DefaultValue="Dust"/>
+        <bt:String id="Dust.Label" DefaultValue="Dust - Dev"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="Dust.Tooltip" DefaultValue="Open Dust."/>

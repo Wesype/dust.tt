@@ -28,13 +28,35 @@ const DEV_SERVER_PORT = 3014;
 const PUBLIC_PATH = "/excel/";
 const DEV_ORIGIN = `https://localhost:${DEV_SERVER_PORT}`;
 const PROD_ORIGIN = "https://addins.dust.tt";
+// Office identifies an add-in by its Id: with a shared one, installing the local add-in replaces
+// the production one.
+const DEV_ADDIN_ID = "2e7ea4d8-8dea-4d0a-b674-c783bf76c981";
+// Never change once users have installed the production add-in.
+const PROD_ADDIN_ID = "8149a9b7-65a6-48d0-bad7-d6d88c5afd01";
+
+// manifest.xml is the dev manifest.
+const PROD_MANIFEST_REPLACEMENTS: [string, string][] = [
+  [DEV_ORIGIN, PROD_ORIGIN],
+  [`<Id>${DEV_ADDIN_ID}</Id>`, `<Id>${PROD_ADDIN_ID}</Id>`],
+  [
+    '<DisplayName DefaultValue="Dust - Dev"/>',
+    '<DisplayName DefaultValue="Dust"/>',
+  ],
+  [
+    '<bt:String id="Dust.Label" DefaultValue="Dust - Dev"/>',
+    '<bt:String id="Dust.Label" DefaultValue="Dust"/>',
+  ],
+];
 
 const toProdManifest = (content: Buffer) => {
-  const manifest = content.toString();
-  if (!manifest.includes(DEV_ORIGIN)) {
-    throw new Error(`manifest.xml no longer points at ${DEV_ORIGIN}.`);
+  let manifest = content.toString();
+  for (const [dev, prod] of PROD_MANIFEST_REPLACEMENTS) {
+    if (!manifest.includes(dev)) {
+      throw new Error(`manifest.xml no longer contains ${dev}.`);
+    }
+    manifest = manifest.replaceAll(dev, prod);
   }
-  return manifest.replaceAll(DEV_ORIGIN, PROD_ORIGIN);
+  return manifest;
 };
 
 // `npx office-addin-dev-certs install` writes these files. It also adds its CA to the keychain.

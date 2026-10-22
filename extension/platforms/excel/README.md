@@ -33,7 +33,7 @@ the local Dust. `.env.development` gives every other variable. Production builds
 
 ## Install the manifest
 
-When the add-in is installed, the **Dust (dev)** button is on the **Home** tab. Click the
+When the add-in is installed, the **Dust - Dev** button is on the **Home** tab. Click the
 button to open the task pane.
 
 ### Excel on the web
