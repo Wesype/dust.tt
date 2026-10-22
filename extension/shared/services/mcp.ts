@@ -15,6 +15,12 @@ export abstract class McpService {
   constructor(private readonly clientName: string) {}
 
   /**
+   * Whether the app is unusable without these tools (the Excel add-in's workbook tools), as
+   * opposed to tools that only add to it (the browser extension's tab tools).
+   */
+  abstract readonly isRequired: boolean;
+
+  /**
    * Create the platform MCP server with its tools registered.
    */
   protected abstract createServer(): McpServer;

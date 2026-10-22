@@ -14,6 +14,7 @@ const FIREFOX_MCP_CLIENT_NAME =
  * Tools use the capture service to retrieve page content.
  */
 export class FirefoxMcpService extends McpService {
+  readonly isRequired = false;
   private captureService: CaptureService | null = null;
 
   constructor() {

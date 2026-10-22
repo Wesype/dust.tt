@@ -10,6 +10,7 @@ const FRONT_MCP_CLIENT_NAME = DUST_CLIENT_SIDE_MCP_SERVER_NAMES.frontExtension;
  * Front-specific implementation of the MCP service
  */
 export class FrontMcpService extends McpService {
+  readonly isRequired = false;
   private frontContext: WebViewContext | null = null;
 
   constructor() {

@@ -12,6 +12,8 @@ const EXCEL_MCP_SERVER_INSTRUCTIONS =
  * Excel-specific implementation of the MCP service.
  */
 export class ExcelMcpService extends McpService {
+  readonly isRequired = true;
+
   constructor() {
     super(EXCEL_MCP_CLIENT_NAME);
   }
