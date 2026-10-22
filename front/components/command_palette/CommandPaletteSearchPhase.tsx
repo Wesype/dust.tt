@@ -4,6 +4,7 @@ import {
   ItemTitle,
   KeyboardHints,
 } from "@app/components/command_palette/CommandPaletteItems";
+import { useItemRowSelected } from "@app/components/command_palette/CommandPaletteItems";
 import { MIN_COMMAND_PALETTE_SEARCH_LENGTH } from "@app/components/command_palette/useCommandPaletteSearch";
 import type { AdminSectionId } from "@app/lib/admin/adminSectionIds";
 import {
@@ -25,8 +26,9 @@ import type { PodListItemType } from "@app/types/space";
 import type { LightUserTypeWithWorkspace } from "@app/types/user";
 import {
   Avatar,
-  cn,
+  Chip,
   FilterChip,
+  HoverScrollText,
   Icon,
   LoadingBlock,
   MessageCircle01,
@@ -51,11 +53,11 @@ export type CommandPaletteCategory =
 export type CommandPaletteFilter = "All" | CommandPaletteCategory;
 
 const ACCESSIBLE_CATEGORY_ORDER: CommandPaletteCategory[] = [
+  "Conversations",
+  "Pods",
   "Agents",
   "Skills",
   "Members",
-  "Pods",
-  "Conversations",
   "Settings",
 ];
 
@@ -200,6 +202,34 @@ interface CommandPaletteSearchPhaseProps {
   onOpenActions: (item: CommandPaletteItem) => void;
 }
 
+interface ItemTextProps {
+  primary: string;
+  secondary?: string | null;
+}
+
+/**
+ * The row's text: the name keeps its full width (it only truncates when it alone does not fit),
+ * and the muted description takes the rest, truncated at rest and scrolled to its end while the
+ * row is selected, like sidebar labels (`HoverScrollText`).
+ */
+function ItemText({ primary, secondary }: ItemTextProps) {
+  const isSelected = useItemRowSelected();
+  return (
+    <div className="flex min-w-0 grow items-center gap-1.5">
+      <span className="max-w-full shrink-0 truncate font-medium">
+        {primary}
+      </span>
+      {secondary && (
+        <HoverScrollText
+          isActive={isSelected}
+          className="grow text-muted-foreground"
+          text={secondary}
+        />
+      )}
+    </div>
+  );
+}
+
 function CommandPaletteItemContent({ item }: { item: CommandPaletteItem }) {
   const { t } = useLingui();
 
@@ -233,60 +263,36 @@ function CommandPaletteItemContent({ item }: { item: CommandPaletteItem }) {
           assertNever(item.action);
       }
     }
-    case "conversation": {
-      const title = getConversationDisplayTitle(item.conversation);
+    case "conversation":
       return (
         <>
           <Icon visual={MessageCircle01} size="xs" />
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span className="min-w-0 truncate font-medium">{title}</span>
-            {item.conversation.spaceName && (
-              <>
-                <span className="shrink-0 text-muted-foreground">-</span>
-                <span className="min-w-0 truncate text-muted-foreground">
-                  {item.conversation.spaceName}
-                </span>
-              </>
-            )}
-          </div>
+          <ItemText
+            primary={getConversationDisplayTitle(item.conversation)}
+            secondary={item.conversation.spaceName}
+          />
         </>
       );
-    }
     case "pod":
       return (
         <>
           <Icon visual={getSpaceIcon(item.pod)} size="xs" />
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span
-              className={cn(
-                "shrink-0 font-medium",
-                !item.pod.isMember && "italic"
-              )}
-            >
-              {item.pod.name}
-            </span>
-            {item.pod.description && (
-              <>
-                <span className="shrink-0 text-muted-foreground">-</span>
-                <span className="min-w-0 truncate text-muted-foreground">
-                  {item.pod.description}
-                </span>
-              </>
-            )}
-          </div>
+          <ItemText primary={item.pod.name} secondary={item.pod.description} />
+          {/* The text grows, which pushes the chip to the row's right edge,
+              just before the actions arrow. */}
+          {!item.pod.isMember && (
+            <Chip label={t`Not a member`} size="xs" color="primary" />
+          )}
         </>
       );
     case "agent":
       return (
         <>
           <Avatar visual={item.agent.pictureUrl} size="3xs" />
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span className="shrink-0 font-medium">{item.agent.name}</span>
-            <span className="shrink-0 text-muted-foreground">-</span>
-            <span className="min-w-0 truncate text-muted-foreground">
-              {getAgentDisplayDescription(t, item.agent)}
-            </span>
-          </div>
+          <ItemText
+            primary={item.agent.name}
+            secondary={getAgentDisplayDescription(t, item.agent)}
+          />
         </>
       );
     case "member":
@@ -298,17 +304,10 @@ function CommandPaletteItemContent({ item }: { item: CommandPaletteItem }) {
             size="3xs"
             isRounded
           />
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span className="shrink-0 font-medium">{item.member.fullName}</span>
-            {item.member.email && (
-              <>
-                <span className="shrink-0 text-muted-foreground">-</span>
-                <span className="min-w-0 truncate text-muted-foreground">
-                  {item.member.email}
-                </span>
-              </>
-            )}
-          </div>
+          <ItemText
+            primary={item.member.fullName}
+            secondary={item.member.email}
+          />
         </>
       );
     case "skill": {
@@ -316,13 +315,10 @@ function CommandPaletteItemContent({ item }: { item: CommandPaletteItem }) {
       return (
         <>
           <SkillAvatar size="3xs" />
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span className="shrink-0 font-medium">{item.skill.name}</span>
-            <span className="shrink-0 text-muted-foreground">-</span>
-            <span className="min-w-0 truncate text-muted-foreground">
-              {getSkillDisplayDescription(t, item.skill)}
-            </span>
-          </div>
+          <ItemText
+            primary={item.skill.name}
+            secondary={getSkillDisplayDescription(t, item.skill)}
+          />
         </>
       );
     }
@@ -330,13 +326,10 @@ function CommandPaletteItemContent({ item }: { item: CommandPaletteItem }) {
       return (
         <>
           <Icon visual={Settings01} size="xs" />
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span className="shrink-0 font-medium">{item.setting.label}</span>
-            <span className="shrink-0 text-muted-foreground">-</span>
-            <span className="min-w-0 truncate text-muted-foreground">
-              {item.setting.pageLabel}
-            </span>
-          </div>
+          <ItemText
+            primary={item.setting.label}
+            secondary={item.setting.pageLabel}
+          />
         </>
       );
     default:
@@ -344,25 +337,32 @@ function CommandPaletteItemContent({ item }: { item: CommandPaletteItem }) {
   }
 }
 
+/**
+ * @cc [owner:ClementAupiais,label:product;react] flat-items-follow-category-order
+ * The concatenation order here MUST be `ACCESSIBLE_CATEGORY_ORDER` (Conversations, Pods, Agents,
+ * Skills, Members, Settings), and the result sections MUST render in that same order with
+ * matching `*Offset` values: `selectedIndex` indexes this flat list and the rendered rows alike,
+ * so any mismatch moves keyboard selection onto the wrong row.
+ */
 function getFlatItems(
+  conversations: CommandPaletteConversation[],
+  pods: CommandPalettePod[],
   agents: CommandPaletteAgent[],
   skills: CommandPaletteSkill[],
   members: CommandPaletteMember[],
-  pods: CommandPalettePod[],
-  conversations: CommandPaletteConversation[],
   settings: CommandPaletteSetting[]
 ): CommandPaletteItem[] {
   return [
+    ...conversations.map((conversation): CommandPaletteItem => ({
+      kind: "conversation",
+      conversation,
+    })),
+    ...pods.map((pod): CommandPaletteItem => ({ kind: "pod", pod })),
     ...agents.map((agent): CommandPaletteItem => ({ kind: "agent", agent })),
     ...skills.map((skill): CommandPaletteItem => ({ kind: "skill", skill })),
     ...members.map((member): CommandPaletteItem => ({
       kind: "member",
       member,
-    })),
-    ...pods.map((pod): CommandPaletteItem => ({ kind: "pod", pod })),
-    ...conversations.map((conversation): CommandPaletteItem => ({
-      kind: "conversation",
-      conversation,
     })),
     ...settings.map((setting): CommandPaletteItem => ({
       kind: "setting",
@@ -387,6 +387,12 @@ function getAvailableCategories({
   settings: CommandPaletteSetting[];
 }): CommandPaletteCategory[] {
   const categories: CommandPaletteCategory[] = [];
+  if (conversations.length > 0) {
+    categories.push("Conversations");
+  }
+  if (pods.length > 0) {
+    categories.push("Pods");
+  }
   if (agents.length > 0) {
     categories.push("Agents");
   }
@@ -395,12 +401,6 @@ function getAvailableCategories({
   }
   if (members.length > 0) {
     categories.push("Members");
-  }
-  if (pods.length > 0) {
-    categories.push("Pods");
-  }
-  if (conversations.length > 0) {
-    categories.push("Conversations");
   }
   if (settings.length > 0) {
     categories.push("Settings");
@@ -533,19 +533,19 @@ export function CommandPaletteSearchPhase({
   const searchFlatItems = useMemo(
     () =>
       getFlatItems(
+        filteredConversations,
+        filteredPods,
         filteredAgents,
         filteredSkills,
         filteredMembers,
-        filteredPods,
-        filteredConversations,
         filteredSettings
       ),
     [
+      filteredConversations,
+      filteredPods,
       filteredAgents,
       filteredSkills,
       filteredMembers,
-      filteredPods,
-      filteredConversations,
       filteredSettings,
     ]
   );
@@ -636,11 +636,13 @@ export function CommandPaletteSearchPhase({
     }
   }
 
-  const skillsOffset = filteredAgents.length;
+  // Same order as `getFlatItems` (see `flat-items-follow-category-order`).
+  const conversationsOffset = 0;
+  const podsOffset = conversationsOffset + filteredConversations.length;
+  const agentsOffset = podsOffset + filteredPods.length;
+  const skillsOffset = agentsOffset + filteredAgents.length;
   const membersOffset = skillsOffset + filteredSkills.length;
-  const podsOffset = membersOffset + filteredMembers.length;
-  const conversationsOffset = podsOffset + filteredPods.length;
-  const settingsOffset = conversationsOffset + filteredConversations.length;
+  const settingsOffset = membersOffset + filteredMembers.length;
 
   const queryTooShortHint = t`Type to search.`;
 
@@ -701,7 +703,11 @@ export function CommandPaletteSearchPhase({
           })}
         </div>
       </div>
-      <div className="flex max-h-125 flex-col gap-2 overflow-y-auto p-1.5">
+      {/* Capped at 500px, and on short viewports at the dialog's 90vh minus
+          the search field, chips and footer (~11rem), so the palette's natural
+          height always fits the dialog and the list scrolls instead of the
+          footer being clipped (see `height-follows-content`). */}
+      <div className="flex max-h-[min(31.25rem,calc(90vh-11rem))] flex-col gap-2 overflow-y-auto p-1.5">
         {showDefaultActions && (
           <div>
             {defaultActions.map((item, i) => (
@@ -774,29 +780,96 @@ export function CommandPaletteSearchPhase({
           </ItemEmptyState>
         )}
 
+        {isSearchQueryReady && filteredConversations.length > 0 && (
+          <div>
+            <ItemTitle>
+              <Trans>Conversations</Trans>
+            </ItemTitle>
+            {filteredConversations.map((conversation, i) => {
+              const globalIndex = conversationsOffset + i;
+              return (
+                <ItemRow
+                  key={conversation.sId}
+                  ref={(el) => {
+                    itemRefs.current[globalIndex] = el;
+                  }}
+                  isSelected={selectedIndex === globalIndex}
+                  onClick={() =>
+                    onItemSelect({ kind: "conversation", conversation })
+                  }
+                  onMouseMove={() => onSelectedIndexChange(globalIndex)}
+                >
+                  <CommandPaletteItemContent
+                    item={{ kind: "conversation", conversation }}
+                  />
+                </ItemRow>
+              );
+            })}
+            {hasMoreConversations && (
+              <div className="px-3 py-2 text-xs text-muted-foreground">
+                <Trans>More conversations available. Type to filter.</Trans>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isSearchQueryReady && filteredPods.length > 0 && (
+          <div>
+            <ItemTitle>
+              <Trans>Pods</Trans>
+            </ItemTitle>
+            {filteredPods.map((pod, i) => {
+              const globalIndex = podsOffset + i;
+              const item = { kind: "pod" as const, pod };
+              return (
+                <ItemRow
+                  key={pod.sId}
+                  ref={(el) => {
+                    itemRefs.current[globalIndex] = el;
+                  }}
+                  isSelected={selectedIndex === globalIndex}
+                  onClick={() => onItemSelect(item)}
+                  onMouseMove={() => onSelectedIndexChange(globalIndex)}
+                  onOpenActions={() => onOpenActions(item)}
+                >
+                  <CommandPaletteItemContent item={item} />
+                </ItemRow>
+              );
+            })}
+            {hasMorePods && (
+              <div className="px-3 py-2 text-xs text-muted-foreground">
+                <Trans>More pods available. Type to filter.</Trans>
+              </div>
+            )}
+          </div>
+        )}
+
         {isSearchQueryReady && filteredAgents.length > 0 && (
           <div>
             <ItemTitle>
               <Trans>Agents</Trans>
             </ItemTitle>
-            {filteredAgents.map((agent, i) => (
-              <ItemRow
-                key={agent.sId}
-                ref={(el) => {
-                  itemRefs.current[i] = el;
-                }}
-                isSelected={selectedIndex === i}
-                onClick={() => onItemSelect({ kind: "agent", agent })}
-                onMouseMove={() => onSelectedIndexChange(i)}
-                onOpenActions={
-                  actionOptions.hideAgentActions
-                    ? undefined
-                    : () => onOpenActions({ kind: "agent", agent })
-                }
-              >
-                <CommandPaletteItemContent item={{ kind: "agent", agent }} />
-              </ItemRow>
-            ))}
+            {filteredAgents.map((agent, i) => {
+              const globalIndex = agentsOffset + i;
+              return (
+                <ItemRow
+                  key={agent.sId}
+                  ref={(el) => {
+                    itemRefs.current[globalIndex] = el;
+                  }}
+                  isSelected={selectedIndex === globalIndex}
+                  onClick={() => onItemSelect({ kind: "agent", agent })}
+                  onMouseMove={() => onSelectedIndexChange(globalIndex)}
+                  onOpenActions={
+                    actionOptions.hideAgentActions
+                      ? undefined
+                      : () => onOpenActions({ kind: "agent", agent })
+                  }
+                >
+                  <CommandPaletteItemContent item={{ kind: "agent", agent }} />
+                </ItemRow>
+              );
+            })}
             {hasMoreAgents && (
               <div className="px-3 py-2 text-xs text-muted-foreground">
                 <Trans>More agents available. Type to filter.</Trans>
@@ -874,70 +947,6 @@ export function CommandPaletteSearchPhase({
             {hasMoreMembers && (
               <div className="px-3 py-2 text-xs text-muted-foreground">
                 <Trans>More members available. Type to filter.</Trans>
-              </div>
-            )}
-          </div>
-        )}
-
-        {isSearchQueryReady && filteredPods.length > 0 && (
-          <div>
-            <ItemTitle>
-              <Trans>Pods</Trans>
-            </ItemTitle>
-            {filteredPods.map((pod, i) => {
-              const globalIndex = podsOffset + i;
-              const item = { kind: "pod" as const, pod };
-              return (
-                <ItemRow
-                  key={pod.sId}
-                  ref={(el) => {
-                    itemRefs.current[globalIndex] = el;
-                  }}
-                  isSelected={selectedIndex === globalIndex}
-                  onClick={() => onItemSelect(item)}
-                  onMouseMove={() => onSelectedIndexChange(globalIndex)}
-                  onOpenActions={() => onOpenActions(item)}
-                >
-                  <CommandPaletteItemContent item={item} />
-                </ItemRow>
-              );
-            })}
-            {hasMorePods && (
-              <div className="px-3 py-2 text-xs text-muted-foreground">
-                <Trans>More pods available. Type to filter.</Trans>
-              </div>
-            )}
-          </div>
-        )}
-
-        {isSearchQueryReady && filteredConversations.length > 0 && (
-          <div>
-            <ItemTitle>
-              <Trans>Conversations</Trans>
-            </ItemTitle>
-            {filteredConversations.map((conversation, i) => {
-              const globalIndex = conversationsOffset + i;
-              return (
-                <ItemRow
-                  key={conversation.sId}
-                  ref={(el) => {
-                    itemRefs.current[globalIndex] = el;
-                  }}
-                  isSelected={selectedIndex === globalIndex}
-                  onClick={() =>
-                    onItemSelect({ kind: "conversation", conversation })
-                  }
-                  onMouseMove={() => onSelectedIndexChange(globalIndex)}
-                >
-                  <CommandPaletteItemContent
-                    item={{ kind: "conversation", conversation }}
-                  />
-                </ItemRow>
-              );
-            })}
-            {hasMoreConversations && (
-              <div className="px-3 py-2 text-xs text-muted-foreground">
-                <Trans>More conversations available. Type to filter.</Trans>
               </div>
             )}
           </div>

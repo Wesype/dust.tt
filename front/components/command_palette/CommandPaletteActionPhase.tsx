@@ -259,6 +259,7 @@ export function CommandPaletteActionPhase({
 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
     containerRef.current?.focus();
@@ -266,8 +267,15 @@ export function CommandPaletteActionPhase({
 
   // Reset selection when the available actions change (e.g., switching between items).
   useEffect(() => {
+    itemRefs.current.length = actions.length;
     setSelectedIndex(0);
   }, [actions]);
+
+  // Focus stays on the container, so keyboard selection must scroll the list
+  // itself, as the search phase does.
+  useEffect(() => {
+    itemRefs.current[selectedIndex]?.scrollIntoView({ block: "nearest" });
+  }, [selectedIndex]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     switch (e.key) {
@@ -319,10 +327,15 @@ export function CommandPaletteActionPhase({
         <span className="font-medium text-foreground">{itemName}</span>
       </button>
 
-      <div className="p-1.5">
+      {/* Same viewport cap as the search list: 90vh minus the back header and
+          footer (~7rem), so the actions scroll on short viewports. */}
+      <div className="max-h-[calc(90vh-7rem)] overflow-y-auto p-1.5">
         {actions.map(({ action, label, description, icon }, i) => (
           <div
             key={action}
+            ref={(el) => {
+              itemRefs.current[i] = el;
+            }}
             className={cn(
               "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition-colors duration-100",
               "text-foreground",

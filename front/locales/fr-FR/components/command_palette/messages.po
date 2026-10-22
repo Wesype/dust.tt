@@ -156,6 +156,10 @@ msgid "Create new Pod"
 msgstr "Créer un nouveau Pod"
 
 #: front/components/command_palette/CommandPaletteSearchPhase.tsx
+msgid "Not a member"
+msgstr "Non membre"
+
+#: front/components/command_palette/CommandPaletteSearchPhase.tsx
 msgid "Type to search."
 msgstr "Saisissez du texte pour rechercher."
 
@@ -196,6 +200,14 @@ msgid "No results found."
 msgstr "Aucun résultat."
 
 #: front/components/command_palette/CommandPaletteSearchPhase.tsx
+msgid "More conversations available. Type to filter."
+msgstr "D’autres conversations sont disponibles. Saisissez du texte pour filtrer."
+
+#: front/components/command_palette/CommandPaletteSearchPhase.tsx
+msgid "More pods available. Type to filter."
+msgstr "D’autres Pods sont disponibles. Saisissez du texte pour filtrer."
+
+#: front/components/command_palette/CommandPaletteSearchPhase.tsx
 msgid "More agents available. Type to filter."
 msgstr "D’autres agents sont disponibles. Saisissez du texte pour filtrer."
 
@@ -206,14 +218,6 @@ msgstr "D’autres compétences sont disponibles. Saisissez du texte pour filtre
 #: front/components/command_palette/CommandPaletteSearchPhase.tsx
 msgid "More members available. Type to filter."
 msgstr "D’autres membres sont disponibles. Saisissez du texte pour filtrer."
-
-#: front/components/command_palette/CommandPaletteSearchPhase.tsx
-msgid "More pods available. Type to filter."
-msgstr "D’autres Pods sont disponibles. Saisissez du texte pour filtrer."
-
-#: front/components/command_palette/CommandPaletteSearchPhase.tsx
-msgid "More conversations available. Type to filter."
-msgstr "D’autres conversations sont disponibles. Saisissez du texte pour filtrer."
 
 #: front/components/command_palette/CommandPaletteSearchPhase.tsx
 msgid "More settings available. Type to filter."

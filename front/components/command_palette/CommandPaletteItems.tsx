@@ -1,6 +1,17 @@
 import { ArrowRight, Button, cn, KeyboardShortcut } from "@dust-tt/sparkle";
 import { useLingui } from "@lingui/react/macro";
-import React from "react";
+import React, { createContext, useContext } from "react";
+
+const ItemRowSelectedContext = createContext(false);
+
+/**
+ * Whether the enclosing `ItemRow` is selected (by keyboard or by the pointer moving onto it).
+ * Lets row content react to selection, e.g. scroll overflowing text, without each caller
+ * threading `isSelected` through.
+ */
+export function useItemRowSelected(): boolean {
+  return useContext(ItemRowSelectedContext);
+}
 
 interface ItemRowProps {
   isSelected: boolean;
@@ -21,7 +32,7 @@ export const ItemRow = React.forwardRef<HTMLDivElement, ItemRowProps>(
       <div
         ref={ref}
         className={cn(
-          "flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors duration-150",
+          "flex h-12 cursor-pointer items-center gap-2.5 rounded-lg px-3 text-sm transition-colors duration-150",
           "text-foreground",
           // Selection only — avoid CSS :hover so keyboard selection and a
           // stationary mouse pointer can't highlight two rows at once.
@@ -30,7 +41,11 @@ export const ItemRow = React.forwardRef<HTMLDivElement, ItemRowProps>(
         onClick={onClick}
         onMouseMove={onMouseMove}
       >
-        <div className="flex min-w-0 grow items-center gap-2.5">{children}</div>
+        <div className="flex min-w-0 grow items-center gap-2.5">
+          <ItemRowSelectedContext.Provider value={isSelected}>
+            {children}
+          </ItemRowSelectedContext.Provider>
+        </div>
         {onOpenActions && (
           <Button
             variant="outline"

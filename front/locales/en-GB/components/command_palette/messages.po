@@ -156,6 +156,10 @@ msgid "Create new Pod"
 msgstr ""
 
 #: front/components/command_palette/CommandPaletteSearchPhase.tsx
+msgid "Not a member"
+msgstr ""
+
+#: front/components/command_palette/CommandPaletteSearchPhase.tsx
 msgid "Type to search."
 msgstr ""
 
@@ -196,6 +200,14 @@ msgid "No results found."
 msgstr ""
 
 #: front/components/command_palette/CommandPaletteSearchPhase.tsx
+msgid "More conversations available. Type to filter."
+msgstr ""
+
+#: front/components/command_palette/CommandPaletteSearchPhase.tsx
+msgid "More pods available. Type to filter."
+msgstr ""
+
+#: front/components/command_palette/CommandPaletteSearchPhase.tsx
 msgid "More agents available. Type to filter."
 msgstr ""
 
@@ -205,14 +217,6 @@ msgstr ""
 
 #: front/components/command_palette/CommandPaletteSearchPhase.tsx
 msgid "More members available. Type to filter."
-msgstr ""
-
-#: front/components/command_palette/CommandPaletteSearchPhase.tsx
-msgid "More pods available. Type to filter."
-msgstr ""
-
-#: front/components/command_palette/CommandPaletteSearchPhase.tsx
-msgid "More conversations available. Type to filter."
 msgstr ""
 
 #: front/components/command_palette/CommandPaletteSearchPhase.tsx

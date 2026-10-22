@@ -26,15 +26,29 @@ const DialogClose = DialogPrimitive.Close;
 /** Portals the dialog content to another part of the DOM. */
 const DialogPortal = DialogPrimitive.Portal;
 
-/** Dimmed backdrop rendered behind the dialog content. */
+const DIALOG_VARIANTS = ["default", "command"] as const;
+type DialogVariantType = (typeof DIALOG_VARIANTS)[number];
+
+interface DialogOverlayProps extends React.ComponentPropsWithoutRef<
+  typeof DialogPrimitive.Overlay
+> {
+  /** "default" dims the page and fades in and out; "command" stays transparent (it only catches outside clicks). */
+  variant?: DialogVariantType;
+}
+
+/** Backdrop rendered behind the dialog content. */
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+  DialogOverlayProps
+>(({ className, variant = "default", ...props }, ref) => (
   <DialogPrimitive.Overlay
     className={cn(
-      "fixed inset-0 z-50 duration-200 ease-emphasized data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:duration-150 motion-reduce:animate-none",
-      "bg-muted-foreground/75 dark:bg-muted-background/75",
+      "fixed inset-0 z-50",
+      variant === "default" &&
+        cn(
+          "bg-muted-foreground/75 dark:bg-muted-background/75",
+          "duration-200 ease-emphasized data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:duration-150 motion-reduce:animate-none"
+        ),
       className
     )}
     {...props}
@@ -76,9 +90,6 @@ const growHeightClasses: Record<DialogHeightType, string> = {
   "2xl": "sm:min-h-[min(1024px,90vh)]",
 };
 
-const DIALOG_VARIANTS = ["default", "command"] as const;
-type DialogVariantType = (typeof DIALOG_VARIANTS)[number];
-
 const variantClasses: Record<DialogVariantType, string> = {
   default: cn(
     "top-[50%] translate-y-[-50%] duration-200 ease-emphasized data-[state=closed]:duration-150 motion-reduce:animate-none",
@@ -87,7 +98,12 @@ const variantClasses: Record<DialogVariantType, string> = {
     "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
   ),
   command: cn(
-    "top-[20%] duration-200 ease-emphasized data-[state=closed]:duration-150 motion-reduce:animate-none",
+    // No dimmed backdrop behind it, so the panel leans on a larger shadow to
+    // separate from the page.
+    "top-[20%] shadow-2xl",
+    // Shorter than the default dialog: the palette is opened constantly and
+    // its travel is small (8px slide, 95% zoom), so 150ms in / 120ms out.
+    "duration-150 ease-emphasized data-[state=closed]:duration-[120ms] motion-reduce:animate-none",
     "data-[state=open]:animate-in data-[state=closed]:animate-out",
     "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
     "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
@@ -128,7 +144,7 @@ interface DialogContentProps extends React.ComponentPropsWithoutRef<
   height?: DialogHeightType;
   /** Lets the dialog grow beyond its fixed `height` when the content needs it, up to the existing 90vh cap: the height becomes a minimum. No effect without `height`. */
   grow?: boolean;
-  /** "default" centers vertically; "command" pins near the top with a slide-in (command-palette style). */
+  /** "default" centers vertically over a dimmed page; "command" pins near the top with a slide-in and no dimmed backdrop (command-palette style). */
   variant?: DialogVariantType;
   /** Traps keyboard focus inside the dialog while open. */
   trapFocusScope?: boolean;
@@ -140,6 +156,11 @@ interface DialogContentProps extends React.ComponentPropsWithoutRef<
   mountPortalContainer?: HTMLElement;
 }
 
+/**
+ * @cc [owner:ClementAupiais,label:react;product] command-variant-no-dimmed-backdrop
+ * With `variant="command"`, the overlay MUST stay fully transparent, but it MUST still be
+ * rendered so that a click outside the panel closes the dialog like any other.
+ */
 /** The dialog panel itself: portal, overlay, and the sized, animated content box. */
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
@@ -174,7 +195,7 @@ const DialogContent = React.forwardRef<
 
     return (
       <DialogPortal container={mountPortalContainer}>
-        <DialogOverlay />
+        <DialogOverlay variant={variant ?? "default"} />
         <FocusScope trapped={trapFocusScope} asChild>
           <DialogPrimitive.Content
             ref={ref}

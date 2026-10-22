@@ -318,3 +318,35 @@ export const GrowingDialog: Story = {
     );
   },
 };
+
+/**
+ * `DialogContent variant="command"` pins the panel near the top of the viewport
+ * over an undimmed page and slides in from the top. The panel itself holds
+ * whatever the palette renders, here a borderless search field.
+ * @summary Command-palette dialog: top-pinned, slide-in, no dimmed backdrop.
+ */
+export const CommandVariant: Story = {
+  render: () => {
+    const [query, setQuery] = React.useState("");
+    return (
+      <Dialog>
+        <DialogTrigger asChild>
+          <Button label="Open command palette" />
+        </DialogTrigger>
+        <DialogContent size="lg" variant="command">
+          <div className="px-1.5 py-3">
+            <SearchInput
+              name="command-search"
+              placeholder="Search…"
+              value={query}
+              onChange={setQuery}
+              size="md"
+              variant="borderless"
+              iconPosition="left"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  },
+};

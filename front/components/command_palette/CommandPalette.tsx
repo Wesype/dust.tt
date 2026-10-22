@@ -7,6 +7,7 @@ import type {
   CommandPaletteAction,
 } from "@app/components/command_palette/CommandPaletteActionPhase";
 import { CommandPaletteActionPhase } from "@app/components/command_palette/CommandPaletteActionPhase";
+import { CommandPaletteAnimatedHeight } from "@app/components/command_palette/CommandPaletteAnimatedHeight";
 import { useCommandPalette } from "@app/components/command_palette/CommandPaletteContext";
 import type {
   CommandPaletteActionOptions,
@@ -381,46 +382,50 @@ export function CommandPalette({
       <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         <DialogContent
           size="xl"
+          // No Dialog size maps to max-w-2xl (672px); narrow the "xl" panel.
+          className="sm:max-w-2xl"
           variant="command"
           trapFocusScope
           onEscapeKeyDown={handleEscapeKeyDown}
         >
-          {phase === "search" ? (
-            <CommandPaletteSearchPhase
-              searchQuery={searchQuery}
-              onSearchQueryChange={setSearchQuery}
-              agents={agents}
-              conversations={conversations}
-              members={members}
-              pods={pods}
-              skills={skills}
-              settings={settings}
-              frequentItems={frequentItems}
-              activePodId={podId ?? null}
-              hasMoreAgents={hasMoreAgents}
-              hasMoreConversations={hasMoreConversations}
-              hasMoreMembers={hasMoreMembers}
-              hasMorePods={hasMorePods}
-              hasMoreSkills={hasMoreSkills}
-              hasMoreSettings={hasMoreSettings}
-              canSearchSettings={canSearchSettings}
-              actionOptions={actionOptions}
-              selectedCategory={selectedCategory}
-              onSelectedCategoryChange={setSelectedCategory}
-              isLoading={isLoading}
-              selectedIndex={selectedIndex}
-              onSelectedIndexChange={setSelectedIndex}
-              onItemSelect={handleItemSelect}
-              onOpenActions={handleOpenActions}
-            />
-          ) : selectedItem ? (
-            <CommandPaletteActionPhase
-              workspaceId={owner.sId}
-              item={selectedItem}
-              onAction={handleAction}
-              onBack={handleBack}
-            />
-          ) : null}
+          <CommandPaletteAnimatedHeight>
+            {phase === "search" ? (
+              <CommandPaletteSearchPhase
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+                agents={agents}
+                conversations={conversations}
+                members={members}
+                pods={pods}
+                skills={skills}
+                settings={settings}
+                frequentItems={frequentItems}
+                activePodId={podId ?? null}
+                hasMoreAgents={hasMoreAgents}
+                hasMoreConversations={hasMoreConversations}
+                hasMoreMembers={hasMoreMembers}
+                hasMorePods={hasMorePods}
+                hasMoreSkills={hasMoreSkills}
+                hasMoreSettings={hasMoreSettings}
+                canSearchSettings={canSearchSettings}
+                actionOptions={actionOptions}
+                selectedCategory={selectedCategory}
+                onSelectedCategoryChange={setSelectedCategory}
+                isLoading={isLoading}
+                selectedIndex={selectedIndex}
+                onSelectedIndexChange={setSelectedIndex}
+                onItemSelect={handleItemSelect}
+                onOpenActions={handleOpenActions}
+              />
+            ) : selectedItem ? (
+              <CommandPaletteActionPhase
+                workspaceId={owner.sId}
+                item={selectedItem}
+                onAction={handleAction}
+                onBack={handleBack}
+              />
+            ) : null}
+          </CommandPaletteAnimatedHeight>
         </DialogContent>
       </Dialog>
 
