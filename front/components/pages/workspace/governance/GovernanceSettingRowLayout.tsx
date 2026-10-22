@@ -18,7 +18,7 @@ export const GovernanceSettingRowLayout = ({
 }: GovernanceSettingRowLayoutProps) => {
   return (
     <div className="flex w-full flex-col gap-3 p-4">
-      <div className="flex w-full items-center justify-between gap-4">
+      <div className="flex w-full flex-wrap items-center justify-between gap-4">
         <Page.Vertical gap="xs" sizing="grow">
           <span className="heading-sm text-foreground">{label}</span>
           <div className="flex flex-row items-center gap-2">

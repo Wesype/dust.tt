@@ -26,7 +26,7 @@ export function ProviderToggleContextItem({
     <SettingsList.Row
       icon={<Icon visual={LogoComponent} size="lg" />}
       title={getModelMakerDisplayName(providerId)}
-      description={<div className="truncate text-xs">{description}</div>}
+      description={<span className="block text-xs">{description}</span>}
       action={
         <SliderToggle
           selected={providersSelection[providerId]}

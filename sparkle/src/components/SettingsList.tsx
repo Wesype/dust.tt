@@ -81,12 +81,12 @@ function SettingsListRow({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-4 px-4 py-[var(--settings-list-row-padding,1rem)]",
+        "flex flex-wrap items-center justify-between gap-4 px-4 py-[var(--settings-list-row-padding,1rem)]",
         className
       )}
     >
       {icon && <div className="shrink-0">{icon}</div>}
-      <div className="flex min-w-0 flex-col gap-0.5 grow-1">
+      <div className="flex grow basis-0 flex-col gap-0.5">
         <span className="heading-sm text-foreground">{title}</span>
         {description && (
           <span className="copy-sm text-muted-foreground">{description}</span>
