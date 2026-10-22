@@ -1,4 +1,4 @@
-FROM node:24.16.0 AS builder
+FROM node:24.22.1 AS builder
 
 RUN npm install -g npm@11.19.0
 

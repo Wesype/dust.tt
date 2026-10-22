@@ -10,7 +10,7 @@ import { Template, defaultBuildLogger } from "e2b";
 const TEMPLATE = "dfs-bench";
 // Versions pinned by prod's bedrock image.
 const UBUNTU = "ubuntu:noble-20260210.1";
-const NODE_VERSION = "24.16.0";
+const NODE_VERSION = "24.22.1";
 const PYTHON_VERSION = "3.14";
 
 const template = Template()

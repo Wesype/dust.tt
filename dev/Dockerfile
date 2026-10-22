@@ -64,7 +64,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN git config --system http.version HTTP/1.1
 
 # Node — official tarball, checksum-verified (same artifact the node:* images ship)
-ARG NODE_VERSION=24.16.0
+ARG NODE_VERSION=24.22.1
 RUN set -eu \
   && case "${TARGETARCH}" in \
        amd64) node_arch="x64" ;; \

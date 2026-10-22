@@ -1,5 +1,5 @@
 # Base dependencies stage (shared by workers and front-api)
-FROM node:24.16.0-slim AS base-deps
+FROM node:24.22.1-slim AS base-deps
 
 RUN apt-get update && \
   apt-get install -y libjemalloc2 libjemalloc-dev
@@ -94,7 +94,7 @@ RUN if [ -n "$DATADOG_API_KEY" ] && [ -n "$NEXT_PUBLIC_DATADOG_SERVICE" ]; then 
   fi
 
 # Workers image (Full Node.js environment) for front-workers deployment
-FROM node:24.16.0-slim AS workers
+FROM node:24.22.1-slim AS workers
 
 # tini runs as PID 1 in worker pods so that node does not: as PID 1, node ignores a SIGTERM that
 # arrives before any handler is installed, e.g. while a pod stopped seconds after starting is
@@ -216,7 +216,7 @@ RUN npm run build && \
   fi
 
 # Front-api runtime image — Hono server.
-FROM node:24.16.0-slim AS front-api
+FROM node:24.22.1-slim AS front-api
 
 RUN apt-get update && \
   apt-get install -y redis-tools postgresql-client libjemalloc2 curl procps && \

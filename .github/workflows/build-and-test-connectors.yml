@@ -23,7 +23,7 @@ jobs:
         uses: ./.github/actions/setup-node-deps
         with:
           build-sdks: "true"
-          node-version: "24.14.0"
+          node-version: "24.22.1"
       - name: Typecheck
         run: npm -w connectors run tsgo -- --version && npm -w connectors run tsgo
       - name: Test SDK
@@ -64,7 +64,7 @@ jobs:
         uses: ./.github/actions/setup-node-deps
         with:
           build-sdks: "true"
-          node-version: "24.14.0"
+          node-version: "24.22.1"
       - name: Run Tests
         working-directory: connectors
         env:
