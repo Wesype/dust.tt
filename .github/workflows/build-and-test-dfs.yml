@@ -45,12 +45,7 @@ jobs:
         with:
           components: clippy, rustfmt
 
-      - name: Install Protoc
-        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install FoundationDB
+      - name: Install FoundationDB, FUSE and protoc
         working-directory: ${{ runner.temp }}
         run: |
           sudo apt-get update
@@ -61,7 +56,7 @@ jobs:
             curl --fail --location --retry 3 --output "${package_file}.sha256" "${package_url}.sha256"
             sha256sum --check "${package_file}.sha256"
           done
-          sudo apt-get install -y --no-install-recommends libclang-dev fuse3 \
+          sudo apt-get install -y --no-install-recommends libclang-dev fuse3 protobuf-compiler \
             "./foundationdb-clients_${FDB_VERSION}-1_amd64.deb" \
             "./foundationdb-server_${FDB_VERSION}-1_amd64.deb"
           ready_deadline_seconds=$((SECONDS + 60))
