@@ -94,6 +94,28 @@ export type InferenceHookProviderIdType = "datadog_ai_guard" | "dust";
 
 export type InferenceHookCheckpointDecision = "pending" | "allowed" | "blocked";
 
+export type InferenceHookEvaluationStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "timed_out"
+  | "cancelled";
+
+export type InferenceHookEvaluationOutcome =
+  | "passed"
+  | "flagged"
+  | "blocked"
+  | "failed_open"
+  | "failed_closed";
+
+export type InferenceHookEvaluationErrorCode =
+  | "timeout"
+  | "rate_limited"
+  | "invalid_credentials"
+  | "provider_error"
+  | "invalid_response";
+
 export type InferenceHookEnforcement = "monitor" | "block";
 
 type DatadogAIGuardProviderConfig = {

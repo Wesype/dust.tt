@@ -1,6 +1,7 @@
 import { Authenticator } from "@app/lib/auth";
 import {
   InferenceHookCheckpointModel,
+  InferenceHookEvaluationModel,
   InferenceHookModel,
   InferenceHookVersionModel,
 } from "@app/lib/models/inference_hook";
@@ -9,6 +10,7 @@ import { AgentConfigurationFactory } from "@app/tests/utils/AgentConfigurationFa
 import { ConversationFactory } from "@app/tests/utils/ConversationFactory";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import { InferenceHookCheckpointFactory } from "@app/tests/utils/InferenceHookCheckpointFactory";
+import { InferenceHookEvaluationFactory } from "@app/tests/utils/InferenceHookEvaluationFactory";
 import { InferenceHookFactory } from "@app/tests/utils/InferenceHookFactory";
 import { UserFactory } from "@app/tests/utils/UserFactory";
 import { WorkspaceFactory } from "@app/tests/utils/WorkspaceFactory";
@@ -79,11 +81,13 @@ describe("InferenceHookResource", () => {
     let workspace: LightWorkspaceType;
     let conversationModelId: ModelId;
     let agentMessageModelIds: ModelId[];
+    let hook: InferenceHookResource;
 
     beforeEach(async () => {
       const setup = await createResourceTest({});
       auth = setup.authenticator;
       workspace = setup.workspace;
+      hook = await InferenceHookFactory.basic(workspace, setup.user);
 
       const agent = await AgentConfigurationFactory.createTestAgent(auth);
       const conversation = await ConversationFactory.create(auth, {
@@ -185,6 +189,57 @@ describe("InferenceHookResource", () => {
       expect(remaining.map((c) => c.agentMessageId)).toEqual([
         keptAgentMessageModelId,
       ]);
+    });
+
+    it("keeps one evaluation per try of a hook version at a checkpoint", async () => {
+      const checkpoint = await InferenceHookCheckpointFactory.basic(workspace, {
+        conversationModelId,
+        agentMessageModelId: agentMessageModelIds[0],
+      });
+      await InferenceHookEvaluationFactory.basic(workspace, {
+        checkpoint,
+        hook,
+      });
+      await InferenceHookEvaluationFactory.basic(workspace, {
+        checkpoint,
+        hook,
+        index: 1,
+      });
+
+      await expect(
+        InferenceHookEvaluationFactory.basic(workspace, { checkpoint, hook })
+      ).rejects.toThrow();
+    });
+
+    it("deletes the evaluations of the deleted checkpoints", async () => {
+      const [deletedAgentMessageModelId, keptAgentMessageModelId] =
+        agentMessageModelIds;
+      const deletedCheckpoint = await InferenceHookCheckpointFactory.basic(
+        workspace,
+        { conversationModelId, agentMessageModelId: deletedAgentMessageModelId }
+      );
+      const keptCheckpoint = await InferenceHookCheckpointFactory.basic(
+        workspace,
+        { conversationModelId, agentMessageModelId: keptAgentMessageModelId }
+      );
+      await InferenceHookEvaluationFactory.basic(workspace, {
+        checkpoint: deletedCheckpoint,
+        hook,
+      });
+      await InferenceHookEvaluationFactory.basic(workspace, {
+        checkpoint: keptCheckpoint,
+        hook,
+      });
+
+      await InferenceHookResource.deleteCheckpointsByAgentMessageModelIds(
+        auth,
+        { agentMessageModelIds: [deletedAgentMessageModelId] }
+      );
+
+      const remaining = await InferenceHookEvaluationModel.findAll({
+        where: { workspaceId: workspace.id },
+      });
+      expect(remaining.map((e) => e.checkpointId)).toEqual([keptCheckpoint.id]);
     });
   });
 });

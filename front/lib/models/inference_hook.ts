@@ -1,17 +1,24 @@
 import type {
   InferenceHookCheckpointDecision,
   InferenceHookEnforcement,
+  InferenceHookEvaluationErrorCode,
+  InferenceHookEvaluationOutcome,
+  InferenceHookEvaluationStatus,
   InferenceHookLifecycleEvent,
   InferenceHookOnError,
   InferenceHookProviderConfig,
   InferenceHookProviderIdType,
+  InferenceHookVerdict,
 } from "@app/lib/inference_hook";
 import {
   AgentMessageModel,
   ConversationModel,
 } from "@app/lib/models/agent/conversation";
 import { frontSequelize } from "@app/lib/resources/storage";
-import { DataTypes } from "@app/lib/resources/storage/data_types";
+import {
+  DANGEROUSLY_UNBOUNDED_TEXT,
+  DataTypes,
+} from "@app/lib/resources/storage/data_types";
 import { UserModel } from "@app/lib/resources/storage/models/user";
 import { WorkspaceAwareModel } from "@app/lib/resources/storage/wrappers/workspace_models";
 import type { ModelId } from "@app/types/shared/model_id";
@@ -295,4 +302,118 @@ UserModel.hasMany(InferenceHookCheckpointModel, {
 });
 InferenceHookCheckpointModel.belongsTo(UserModel, {
   foreignKey: { name: "userId", allowNull: true },
+});
+
+export class InferenceHookEvaluationModel extends WorkspaceAwareModel<InferenceHookEvaluationModel> {
+  declare createdAt: CreationOptional<Date>;
+  declare updatedAt: CreationOptional<Date>;
+
+  declare index: number;
+  declare status: InferenceHookEvaluationStatus;
+  declare requestedAt: Date;
+  declare startedAt: Date | null;
+  declare completedAt: Date | null;
+  declare verdict: InferenceHookVerdict["action"] | null;
+  declare reason: string | null;
+  declare outcome: InferenceHookEvaluationOutcome | null;
+  declare errorCode: InferenceHookEvaluationErrorCode | null;
+  declare errorMessage: string | null;
+  declare tags: CreationOptional<string[]>;
+  declare providerReference: string | null;
+
+  declare checkpointId: ForeignKey<InferenceHookCheckpointModel["id"]>;
+  declare hookVersionId: ForeignKey<InferenceHookVersionModel["id"]>;
+}
+
+InferenceHookEvaluationModel.init(
+  {
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    index: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    status: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    requestedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+    },
+    startedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    completedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    verdict: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    reason: {
+      type: DANGEROUSLY_UNBOUNDED_TEXT,
+      allowNull: true,
+    },
+    outcome: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    errorCode: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    errorMessage: {
+      type: DANGEROUSLY_UNBOUNDED_TEXT,
+      allowNull: true,
+    },
+    tags: {
+      type: DataTypes.ARRAY(DataTypes.STRING),
+      allowNull: false,
+      defaultValue: [],
+    },
+    providerReference: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+  },
+  {
+    modelName: "inference_hook_evaluation",
+    sequelize: frontSequelize,
+    indexes: [
+      {
+        fields: ["checkpointId", "hookVersionId", "index"],
+        unique: true,
+        concurrently: true,
+      },
+      { fields: ["workspaceId", "createdAt"], concurrently: true },
+      { fields: ["hookVersionId", "createdAt"], concurrently: true },
+    ],
+  }
+);
+
+InferenceHookCheckpointModel.hasMany(InferenceHookEvaluationModel, {
+  foreignKey: { name: "checkpointId", allowNull: false },
+  onDelete: "RESTRICT",
+});
+InferenceHookEvaluationModel.belongsTo(InferenceHookCheckpointModel, {
+  foreignKey: { name: "checkpointId", allowNull: false },
+});
+
+InferenceHookVersionModel.hasMany(InferenceHookEvaluationModel, {
+  foreignKey: { name: "hookVersionId", allowNull: false },
+  onDelete: "RESTRICT",
+});
+InferenceHookEvaluationModel.belongsTo(InferenceHookVersionModel, {
+  foreignKey: { name: "hookVersionId", allowNull: false },
 });

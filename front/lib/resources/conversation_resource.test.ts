@@ -13,7 +13,10 @@ import {
   UserMessageModel,
 } from "@app/lib/models/agent/conversation";
 import { ConversationSelectedSpaceModel } from "@app/lib/models/agent/conversation_selected_space";
-import { InferenceHookCheckpointModel } from "@app/lib/models/inference_hook";
+import {
+  InferenceHookCheckpointModel,
+  InferenceHookEvaluationModel,
+} from "@app/lib/models/inference_hook";
 import { getReinforcedSkillsMetadata } from "@app/lib/reinforcement/types";
 import { AgentMessageConsumptionItemResource } from "@app/lib/resources/agent_message_consumption_item_resource";
 import { ConversationForkResource } from "@app/lib/resources/conversation_fork_resource";
@@ -32,6 +35,8 @@ import { AgentConfigurationFactory } from "@app/tests/utils/AgentConfigurationFa
 import { ConversationFactory } from "@app/tests/utils/ConversationFactory";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
 import { InferenceHookCheckpointFactory } from "@app/tests/utils/InferenceHookCheckpointFactory";
+import { InferenceHookEvaluationFactory } from "@app/tests/utils/InferenceHookEvaluationFactory";
+import { InferenceHookFactory } from "@app/tests/utils/InferenceHookFactory";
 import { KeyFactory } from "@app/tests/utils/KeyFactory";
 import { MembershipFactory } from "@app/tests/utils/MembershipFactory";
 import { RemoteMCPServerFactory } from "@app/tests/utils/RemoteMCPServerFactory";
@@ -912,7 +917,7 @@ describe("destroyConversation", () => {
     ).resolves.toBe(0);
   });
 
-  it("should delete inference hook checkpoints before deleting agent messages", async () => {
+  it("should delete inference hook checkpoints and evaluations before deleting agent messages", async () => {
     const conversationType = await ConversationFactory.create(auth, {
       agentConfigurationId,
       messagesCreatedAt: [new Date()],
@@ -932,9 +937,16 @@ describe("destroyConversation", () => {
     if (!agentMessage) {
       throw new Error("Agent message should exist");
     }
-    await InferenceHookCheckpointFactory.basic(workspace, {
+    const checkpoint = await InferenceHookCheckpointFactory.basic(workspace, {
       conversationModelId: conversation.id,
       agentMessageModelId: agentMessage.agentMessageId,
+    });
+    await InferenceHookEvaluationFactory.basic(workspace, {
+      checkpoint,
+      hook: await InferenceHookFactory.basic(
+        workspace,
+        auth.getNonNullableUser()
+      ),
     });
 
     const result = await destroyConversation(auth, { conversation });
@@ -946,6 +958,11 @@ describe("destroyConversation", () => {
           workspaceId: workspace.id,
           conversationId: conversation.id,
         },
+      })
+    ).resolves.toBe(0);
+    await expect(
+      InferenceHookEvaluationModel.count({
+        where: { workspaceId: workspace.id, checkpointId: checkpoint.id },
       })
     ).resolves.toBe(0);
   });

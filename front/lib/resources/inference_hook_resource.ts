@@ -1,6 +1,7 @@
 import type { Authenticator } from "@app/lib/auth";
 import {
   InferenceHookCheckpointModel,
+  InferenceHookEvaluationModel,
   InferenceHookModel,
   InferenceHookVersionModel,
 } from "@app/lib/models/inference_hook";
@@ -52,11 +53,22 @@ export class InferenceHookResource extends BaseResource<InferenceHookModel> {
     auth: Authenticator,
     { agentMessageModelIds }: { agentMessageModelIds: ModelId[] }
   ): Promise<number> {
-    return InferenceHookCheckpointModel.destroy({
+    const workspaceId = auth.getNonNullableWorkspace().id;
+    const checkpoints = await InferenceHookCheckpointModel.findAll({
+      attributes: ["id"],
       where: {
-        workspaceId: auth.getNonNullableWorkspace().id,
+        workspaceId,
         agentMessageId: { [Op.in]: agentMessageModelIds },
       },
+    });
+    const checkpointModelIds = checkpoints.map((c) => c.id);
+
+    await InferenceHookEvaluationModel.destroy({
+      where: { workspaceId, checkpointId: { [Op.in]: checkpointModelIds } },
+    });
+
+    return InferenceHookCheckpointModel.destroy({
+      where: { workspaceId, id: { [Op.in]: checkpointModelIds } },
     });
   }
 
