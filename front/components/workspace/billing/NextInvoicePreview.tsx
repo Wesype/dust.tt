@@ -79,7 +79,6 @@ function buildColumns(headers: {
       accessorKey: "name",
       header: headers.name,
       enableSorting: false,
-      meta: { className: "w-1/2" },
       cell: ({ row }) => {
         const { name, seatType, isGroup, isExpanded, isChild } = row.original;
         const avatarColors = seatType ? seatTypeAvatarColors(seatType) : null;
@@ -138,7 +137,7 @@ function buildColumns(headers: {
       accessorKey: "quantity",
       header: headers.quantity,
       enableSorting: false,
-      meta: { headerAlign: "right", className: "w-[16%]" },
+      meta: { headerAlign: "right", className: "hidden w-24 @xs:table-cell" },
       cell: ({ row }) => (
         <span className="block text-right text-sm">
           {row.original.isGroup ? "" : row.original.quantity}
@@ -149,7 +148,7 @@ function buildColumns(headers: {
       accessorKey: "cost",
       header: headers.cost,
       enableSorting: false,
-      meta: { headerAlign: "right", className: "w-[17%]" },
+      meta: { headerAlign: "right", className: "w-28" },
       cell: ({ row }) => (
         <span className="block text-right text-sm text-muted-foreground">
           {row.original.isGroup ? "" : row.original.cost}
@@ -160,7 +159,7 @@ function buildColumns(headers: {
       accessorKey: "subtotal",
       header: headers.subtotal,
       enableSorting: false,
-      meta: { headerAlign: "right", className: "w-[17%]" },
+      meta: { headerAlign: "right", className: "w-36" },
       cell: ({ row }) => (
         <span
           className={cn(
