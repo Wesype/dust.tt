@@ -154,7 +154,7 @@ export const SpaceActionsList = ({
         ),
         accessorFn: (row: RowData) => row.name,
         meta: {
-          className: "w-80",
+          className: "@md-table:w-80",
         },
       },
       {
@@ -165,7 +165,7 @@ export const SpaceActionsList = ({
         ),
         accessorFn: (row: RowData) => row.description,
         meta: {
-          className: "w-full",
+          className: "hidden @xxs-table:table-cell",
         },
       },
       {

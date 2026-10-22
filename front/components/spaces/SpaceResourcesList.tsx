@@ -119,7 +119,7 @@ function getTableColumns(
     id: "managedBy",
     header: t(msg`Managed by`),
     meta: {
-      className: "w-32",
+      className: "hidden w-32 @xs-table:table-cell",
     },
     cell: (ctx) => {
       const { dataSourceView } = ctx.row.original;
@@ -139,7 +139,8 @@ function getTableColumns(
     id: "usedBy",
     header: t(msg`Used by`),
     meta: {
-      className: "w-36",
+      className:
+        space.kind === "system" ? "hidden w-36 @xxs-table:table-cell" : "w-36",
     },
     // Return a numeric count to allow numeric sorts if we want
     accessorFn: (row) => row.dataSourceView.usage?.count ?? 0,
@@ -158,7 +159,7 @@ function getTableColumns(
     id: "lastSync",
     header: t(msg`Last sync`),
     meta: {
-      className: "w-56",
+      className: "hidden w-56 @md-table:table-cell",
     },
     accessorFn: (row) =>
       row.dataSourceView.dataSource.connector?.lastSyncSuccessfulTime,
@@ -673,10 +674,6 @@ export const SpaceResourcesList = ({
           setSorting={setSorting}
           pagination={pagination}
           setPagination={setPagination}
-          columnsBreakpoints={{
-            lastSync: "xl",
-            managedBy: "xl",
-          }}
         />
       )}
 
