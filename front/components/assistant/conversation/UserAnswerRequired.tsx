@@ -11,10 +11,16 @@ import {
   assertNeverAndIgnore,
 } from "@app/types/shared/utils/assert_never";
 import type { LightWorkspaceType, UserType } from "@app/types/user";
-import { ArrowUp, Button, cn, OptionCard, Spinner } from "@dust-tt/sparkle";
+import {
+  ArrowUp,
+  Button,
+  cn,
+  LoadingBlock,
+  OptionCard,
+} from "@dust-tt/sparkle";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useReducedMotion } from "framer-motion";
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
 interface UserAnswerRequiredProps {
@@ -63,6 +69,81 @@ function getArrowKeyDirection(key: string): 1 | -1 | null {
     return -1;
   }
   return null;
+}
+
+// A line placeholder as wide as the text it stands for: the text sets the width but stays invisible.
+function TextLineSkeleton({
+  text,
+  className,
+}: {
+  text: string;
+  className: string;
+}) {
+  return (
+    <LoadingBlock
+      className={cn("w-fit max-w-full select-none text-transparent", className)}
+    >
+      {text}
+    </LoadingBlock>
+  );
+}
+
+// While the answer is submitted, the card stays in the layout but transparent, under a skeleton
+// laid out like the card (border, padding and gap of a small `Card`).
+function CardSkeletonOverlay({
+  isLoading,
+  skeleton,
+  children,
+}: {
+  isLoading: boolean;
+  skeleton: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="relative">
+      <div
+        aria-hidden={isLoading}
+        className={cn(
+          "transition-opacity ease-enter motion-reduce:transition-none",
+          isLoading ? "opacity-0 duration-exit" : "opacity-100 duration-enter"
+        )}
+      >
+        {children}
+      </div>
+      {isLoading && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 flex items-center gap-2 border border-transparent p-3 animate-in fade-in-0 duration-exit ease-enter motion-reduce:animate-none"
+        >
+          {skeleton}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OptionCardSkeleton({
+  label,
+  description,
+}: {
+  label: string;
+  description: string | null;
+}) {
+  return (
+    <>
+      <LoadingBlock className="size-5 shrink-0 rounded-full" />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex h-5 items-center">
+          <TextLineSkeleton text={label} className="h-3 text-sm font-medium" />
+        </div>
+        {description && (
+          <div className="flex h-4 items-center">
+            <TextLineSkeleton text={description} className="h-2.5 text-xs" />
+          </div>
+        )}
+      </div>
+    </>
+  );
 }
 
 /**
@@ -351,20 +432,20 @@ export function UserAnswerRequired({
       <div className="text-base font-medium leading-tight text-foreground">
         {question.question}
       </div>
-      <div className="relative min-h-16">
-        <div
-          aria-hidden={isSubmitting}
-          className={cn(
-            "flex flex-col gap-2 transition-opacity ease-enter motion-reduce:transition-none",
-            isSubmitting
-              ? "opacity-0 duration-exit"
-              : "opacity-100 duration-enter"
-          )}
-        >
-          {layout === "list" &&
-            question.options.map((option, index) => (
+      <div className="flex flex-col gap-2">
+        {layout === "list" &&
+          question.options.map((option, index) => (
+            <CardSkeletonOverlay
+              key={index}
+              isLoading={isSubmitting}
+              skeleton={
+                <OptionCardSkeleton
+                  label={option.label}
+                  description={option.description}
+                />
+              }
+            >
               <OptionCard
-                key={index}
                 label={option.label}
                 description={option.description}
                 counterValue={index + 1}
@@ -383,7 +464,21 @@ export function UserAnswerRequired({
                 onClick={() => handleOptionClick(index)}
                 disabled={isSubmitting}
               />
-            ))}
+            </CardSkeletonOverlay>
+          ))}
+        <CardSkeletonOverlay
+          isLoading={isSubmitting}
+          skeleton={
+            <div className="flex h-5 min-w-0 flex-1 items-center">
+              <TextLineSkeleton
+                text={
+                  answerDraft.customResponse || getCustomResponsePlaceholder()
+                }
+                className="h-3 text-sm"
+              />
+            </div>
+          }
+        >
           <OptionCard
             type="input"
             selected={isCustomResponseActive}
@@ -403,24 +498,13 @@ export function UserAnswerRequired({
             onChange={(value) => answerDraft.updateCustomResponse(value)}
             onKeyDown={handleCustomResponseKeyDown}
           />
-        </div>
-        <div
-          role={isSubmitting ? "status" : undefined}
-          aria-hidden={!isSubmitting}
-          className={cn(
-            "absolute inset-0 flex items-center justify-center transition-opacity ease-enter motion-reduce:transition-none",
-            isSubmitting
-              ? "opacity-100 duration-exit"
-              : "pointer-events-none opacity-0 duration-enter"
-          )}
-        >
-          <Spinner size="lg" />
-          <span className="sr-only">
-            {submission?.kind === "skip"
+        </CardSkeletonOverlay>
+        <span role="status" className="sr-only">
+          {isSubmitting &&
+            (submission?.kind === "skip"
               ? t`Skipping question`
-              : t`Submitting answer`}
-          </span>
-        </div>
+              : t`Submitting answer`)}
+        </span>
       </div>
       {errorMessage && (
         <div className="text-sm font-medium text-warning-800">

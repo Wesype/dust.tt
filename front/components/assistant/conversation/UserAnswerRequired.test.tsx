@@ -179,7 +179,9 @@ vi.mock("@dust-tt/sparkle", () => {
     </button>
   );
 
-  const Spinner = () => <div>Loading</div>;
+  const LoadingBlock = ({ className }: { className?: string }) => (
+    <div className={className} />
+  );
   const ArrowUp = () => null;
 
   return {
@@ -189,8 +191,8 @@ vi.mock("@dust-tt/sparkle", () => {
     Counter,
     cn,
     Input,
+    LoadingBlock,
     OptionCard,
-    Spinner,
   };
 });
 
@@ -451,7 +453,6 @@ describe("UserAnswerRequired", () => {
     });
 
     expect(status).toHaveTextContent("Skipping question");
-    expect(status).toHaveClass("duration-exit");
     expect(hiddenOption.parentElement).toHaveClass("duration-exit");
     expect(hiddenOption).toBeDisabled();
     expect(screen.getByRole("button", { name: "Skip" })).toBeDisabled();
