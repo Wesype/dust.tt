@@ -1,8 +1,10 @@
 import { Err, Ok, type Result } from "@app/types/shared/result";
+import { assertNever } from "@app/types/shared/utils/assert_never";
 import { isNumberOrBoolean, isString } from "@app/types/shared/utils/general";
-import { checkFormulasInArgument } from "@extension/platforms/excel/tools/formulas";
+import { checkFormulasInValue } from "@extension/platforms/excel/tools/formulas";
 import type {
-  ExcelArg,
+  Argument,
+  LiteralValue,
   Step,
 } from "@extension/platforms/excel/tools/parseExpression";
 
@@ -165,7 +167,7 @@ const READ_METHODS: ReadonlySet<string> = new Set<ExcelMember>([
 //
 // `insertWorksheetsFromBase64` is not in the list on purpose: it inserts the worksheets of
 // another workbook, given as a base64 string. Their cells carry their own formulas, which stay
-// inside that string, so `checkFormulasInArgument` never reads them. It is a way around the only
+// inside that string, so `checkFormulasInValue` never reads them. It is a way around the only
 // rule that stops a formula from reaching outside the workbook.
 //
 // `replaceAll` is not in the list for the same reason: it changes the text that the cells
@@ -229,6 +231,7 @@ const WRITE_METHODS: ReadonlySet<string> = new Set<ExcelMember>([
   "copyFrom",
   "delete",
   "displayBlankLineAfterEachItem",
+  "duplicate",
   "flashFill",
   "freezeAt",
   "freezeColumns",
@@ -242,17 +245,25 @@ const WRITE_METHODS: ReadonlySet<string> = new Set<ExcelMember>([
   "reapplyFilters",
   "refresh",
   "refreshAll",
+  "remove",
   "removeDuplicates",
   "repeatAllItemLabels",
   "resize",
   "select",
+  "selectItems",
   "setAutoSortOnCell",
+  "setBubbleSizes",
+  "setCategoryNames",
   "setCellProperties",
   "setColumnProperties",
+  "setCustomDisplayUnit",
+  "setData",
+  "setDefault",
   "setDirty",
   "setFormula",
   "setHeight",
   "setPosition",
+  "setPositionAt",
   "setPrintArea",
   "setPrintMargins",
   "setPrintTitleColumns",
@@ -261,26 +272,38 @@ const WRITE_METHODS: ReadonlySet<string> = new Set<ExcelMember>([
   "setRowProperties",
   "setSolidColor",
   "setToDefault",
+  "setValues",
   "setWidth",
+  "setXAxisValues",
   "showGroupDetails",
   "showOutlineLevels",
   "sortByLabels",
+  "sortByValues",
   "unfreeze",
   "ungroup",
   "unmerge",
 ]);
 
 /**
- * Checks the `load` step.
+ * @cc [owner:matteotrab,label:security] load-takes-only-a-literal
+ * The argument of `load` MUST be a literal. Office.js takes a property name, a list of property
+ * names or a list of load options, and never an Office.js object, so a path in `load` has no
+ * use. Office.js reads an argument that it does not know as empty load options, and then loads
+ * every property of the object.
+ */
+/**
+ * Checks the `load` step: it is the last step, and it takes one literal argument.
  *
- * The properties in `load` are not checked: a load only reads, and Office.js gives an error for a
- * property that it does not know.
+ * The names of the properties inside that literal are not checked: a load only reads, and
+ * Office.js gives an error for a property that it does not know.
  *
  * Examples:
  *   - `workbook.worksheets.load('name').getItem('Sheet1')` is not allowed: `load` is not the last
  *     step.
  *   - `workbook.getSelectedRange().load()` is not allowed: it loads all the properties, which can
  *     be very large.
+ *   - `workbook.worksheets.load(workbook.worksheets.getItem('Sheet1'))` is not allowed: the
+ *     argument is a path, and `load` takes no Office.js object.
  */
 function checkLoadStep(
   step: Step,
@@ -292,6 +315,14 @@ function checkLoadStep(
   if (step.kind !== "call" || step.args.length !== 1) {
     return new Err(
       "\"load\" needs one argument, for example load(['address', 'values'])."
+    );
+  }
+  const [arg] = step.args;
+  // A path would give `load` an Office.js object, which it does not take. Office.js then reads
+  // it as load options that it does not know, and loads every property.
+  if (arg?.kind !== "literal") {
+    return new Err(
+      "the argument of \"load\" must be a property name or a list of property names, for example load(['address', 'values'])."
     );
   }
   return new Ok(undefined);
@@ -308,6 +339,44 @@ function checkLoadStep(
  */
 function isInternalName(name: string): boolean {
   return name.startsWith("_") || name === "constructor";
+}
+
+/**
+ * Checks the paths that the arguments of a call carry. A path gives an Office.js object to the
+ * method, as in `charts.add('ColumnClustered', workbook...getRange('A1:B10'))`.
+ *
+ * A path only moves to an object. So every step of a path must pass the check of a read step.
+ */
+function checkPathSteps(steps: Step[]): Result<undefined, string> {
+  for (const step of steps) {
+    const check = isReadStep({ step, isLastStep: false });
+    if (check.isErr()) {
+      return check;
+    }
+  }
+  return new Ok(undefined);
+}
+
+/**
+ * Checks the paths that the arguments of a read carry. A literal holds no step.
+ */
+function checkPathArguments(args: Argument[]): Result<undefined, string> {
+  for (const arg of args) {
+    switch (arg.kind) {
+      case "literal":
+        break;
+      case "path": {
+        const check = checkPathSteps(arg.steps);
+        if (check.isErr()) {
+          return check;
+        }
+        break;
+      }
+      default:
+        assertNever(arg);
+    }
+  }
+  return new Ok(undefined);
 }
 
 /**
@@ -341,7 +410,7 @@ function isReadStep({
           `"${step.name}" is not allowed: only read methods are allowed.`
         );
       }
-      return new Ok(undefined);
+      return checkPathArguments(step.args);
   }
 }
 
@@ -383,19 +452,19 @@ const MENTIONS_KEY = "mentions";
  * write that sends the content of the workbook outside the workbook, to an address that the
  * expression gives.
  */
-function checkMentionsInArgument(arg: ExcelArg): Result<undefined, string> {
+function checkMentionsInValue(value: LiteralValue): Result<undefined, string> {
   // A string, a number and a boolean hold no key. What stays is an array or an object, and both
-  // hold other arguments.
-  if (isString(arg) || isNumberOrBoolean(arg)) {
+  // hold other values.
+  if (isString(value) || isNumberOrBoolean(value)) {
     return new Ok(undefined);
   }
-  if (!Array.isArray(arg) && MENTIONS_KEY in arg) {
+  if (!Array.isArray(value) && MENTIONS_KEY in value) {
     return new Err(
       `"${MENTIONS_KEY}" is not allowed: a mention sends an email with the text of the comment. Write the comment without a mention.`
     );
   }
-  for (const value of Object.values(arg)) {
-    const check = checkMentionsInArgument(value);
+  for (const item of Object.values(value)) {
+    const check = checkMentionsInValue(item);
     if (check.isErr()) {
       return check;
     }
@@ -423,13 +492,29 @@ function isWriteStep(step: Step): Result<undefined, string> {
   // formula in the workbook: the properties of `set`, the reference of `names.add`, the rule of
   // a conditional format. The steps before it only read.
   for (const arg of step.args) {
-    const formulas = checkFormulasInArgument(arg);
-    if (formulas.isErr()) {
-      return formulas;
-    }
-    const mentions = checkMentionsInArgument(arg);
-    if (mentions.isErr()) {
-      return mentions;
+    switch (arg.kind) {
+      // A literal can hold a formula or a mention, and this step is the one that writes it.
+      case "literal": {
+        const formulas = checkFormulasInValue(arg.value);
+        if (formulas.isErr()) {
+          return formulas;
+        }
+        const mentions = checkMentionsInValue(arg.value);
+        if (mentions.isErr()) {
+          return mentions;
+        }
+        break;
+      }
+      // A path gives an Office.js object to the method, and it must only read.
+      case "path": {
+        const check = checkPathSteps(arg.steps);
+        if (check.isErr()) {
+          return check;
+        }
+        break;
+      }
+      default:
+        assertNever(arg);
     }
   }
   return new Ok(undefined);
@@ -444,9 +529,13 @@ function isWriteStep(step: Step): Result<undefined, string> {
  */
 /**
  * @cc [owner:matteotrab,label:security] write-arguments-are-checked
- * Every argument of the step that writes MUST pass `checkFormulasInArgument`, which reads the
- * strings of the argument at any depth. The steps before the last one only move to another
- * object, so the arguments of the last step are the only values that reach the workbook.
+ * Every argument of the step that writes MUST be checked, in the way that its kind asks for:
+ *   - A literal MUST pass `checkFormulasInValue`, which reads the strings of the argument at any
+ *     depth. The steps before the last one only move to another object, so the literals of the
+ *     last step are the only values that reach the workbook.
+ *   - A path MUST only read: every step of it passes the check of a read step. A path writes
+ *     nothing itself, it gives the method an Office.js object, as in
+ *     `charts.add('ColumnClustered', workbook...getRange('A1:B10'))`.
  */
 /**
  * @cc [owner:matteotrab,label:security] no-mention-in-write
