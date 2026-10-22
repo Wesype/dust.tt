@@ -90,6 +90,22 @@ export interface InferenceHookProvider {
 
 export type InferenceHookOnError = "allow" | "deny";
 
+export type InferenceHookProviderIdType = "datadog_ai_guard" | "dust";
+
+export type InferenceHookEnforcement = "monitor" | "block";
+
+type DatadogAIGuardProviderConfig = {
+  site: string;
+  service: string;
+  env: string;
+};
+
+type DustProviderConfig = Record<string, never>;
+
+export type InferenceHookProviderConfig =
+  | DatadogAIGuardProviderConfig
+  | DustProviderConfig;
+
 export type InferenceHook = {
   provider: InferenceHookProvider;
   timeoutMs: number;
