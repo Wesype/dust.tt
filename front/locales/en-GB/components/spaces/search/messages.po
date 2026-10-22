@@ -28,7 +28,3 @@ msgstr ""
 #: front/components/spaces/search/columns.tsx
 msgid "Last updated"
 msgstr ""
-
-#: front/components/spaces/search/columns.tsx
-msgid "Actions"
-msgstr ""

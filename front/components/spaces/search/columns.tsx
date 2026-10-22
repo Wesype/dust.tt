@@ -31,7 +31,7 @@ export function makeColumnsForSearchResults(): ColumnDef<RowData, any>[] {
         </DataTable.CellContent>
       ),
       meta: {
-        sizeRatio: 50,
+        sizeRatio: 40,
       },
     },
     {
@@ -69,13 +69,13 @@ export function makeColumnsForSearchResults(): ColumnDef<RowData, any>[] {
         />
       ),
       meta: {
-        sizeRatio: 20,
+        sizeRatio: 30,
       },
     },
     {
       id: "actions",
       accessorKey: "actions",
-      header: () => <Trans>Actions</Trans>,
+      header: "",
       enableSorting: false,
       meta: {
         sizeRatio: 10,
