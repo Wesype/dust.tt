@@ -1,4 +1,5 @@
 import config from "@app/lib/api/config";
+import logger from "@app/logger/logger";
 import { EnvironmentConfig } from "@app/types/shared/utils/config";
 import type { Dispatcher, RequestInfo, RequestInit, Response } from "undici";
 import { Agent, ProxyAgent, fetch as undiciFetch } from "undici";
@@ -60,6 +61,11 @@ export const refuseBrotliInterceptor: Dispatcher.DispatcherComposeInterceptor =
           handler.onRequestUpgrade?.(controller, statusCode, headers, socket),
         onResponseStart: (controller, statusCode, headers, statusMessage) => {
           if (hasBrotliContentEncoding(headers["content-encoding"])) {
+            // Host only: paths and query strings can carry tokens.
+            logger.warn(
+              { host: opts.origin ? new URL(opts.origin).host : undefined },
+              "Refused a Brotli-encoded egress response"
+            );
             controller.abort(
               new Error("Refused a response with Content-Encoding: br.")
             );

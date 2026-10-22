@@ -2,8 +2,9 @@ import type { IncomingHttpHeaders, Server } from "node:http";
 import { createServer } from "node:http";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 import { refuseBrotliInterceptor } from "@app/lib/egress/server";
+import logger from "@app/logger/logger";
 import { Agent, fetch as undiciFetch } from "undici";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const BODY = "hello from the egress test";
 
@@ -44,6 +45,16 @@ describe("refuseBrotliInterceptor", () => {
       cause: { message: expect.stringContaining("Content-Encoding: br") },
     });
     expect(lastRequestHeaders["accept-encoding"]).toBe("gzip, deflate");
+  });
+
+  it("logs the host of a refused response", async () => {
+    const warn = vi.spyOn(logger, "warn");
+    await undiciFetch(`${baseUrl}/br`, { dispatcher }).catch(() => undefined);
+    expect(warn).toHaveBeenCalledWith(
+      { host: new URL(baseUrl).host },
+      "Refused a Brotli-encoded egress response"
+    );
+    warn.mockRestore();
   });
 
   it("decodes a gzip response", async () => {
