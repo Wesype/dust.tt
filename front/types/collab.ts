@@ -238,3 +238,17 @@ export const epochMessageSchema = z.object({
 });
 
 export type EpochMessage = z.infer<typeof epochMessageSchema>;
+
+/**
+ * What an editor authenticates with once it kept its document from an earlier connection: its
+ * ticket and that document's epoch. An editor with no document kept sends its ticket alone.
+ */
+export const collabTokenSchema = z.object({
+  ticket: z.string().min(1),
+  epoch: z.string().min(1),
+});
+
+export type CollabToken = z.infer<typeof collabTokenSchema>;
+
+/** Why the server closes a connection whose kept document has another epoch than its own. */
+export const EPOCH_CHANGED_CLOSE_REASON = "epoch_changed";

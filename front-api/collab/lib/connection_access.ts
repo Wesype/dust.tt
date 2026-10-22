@@ -45,7 +45,7 @@ export async function authenticateConnection(
 
 // Hocuspocus's `Forbidden` and `ResetConnection`, from `@hocuspocus/common`.
 const FORBIDDEN = { code: 4403, reason: "Forbidden" };
-const RESET_CONNECTION = { code: 4205, reason: "Reset Connection" };
+export const RESET_CONNECTION = { code: 4205, reason: "Reset Connection" };
 
 export const ACCESS_RECHECK_INTERVAL_MS = 5 * 60 * 1000;
 

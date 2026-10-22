@@ -22,7 +22,9 @@ import type {
   CommentRequestErrorCode,
 } from "@app/types/collab";
 import {
+  collabTokenSchema,
   commentClientMessageSchema,
+  EPOCH_CHANGED_CLOSE_REASON,
   isDefaultSaveState,
   parseSessionName,
 } from "@app/types/collab";
@@ -30,7 +32,10 @@ import type { Result } from "@app/types/shared/result";
 import { Err } from "@app/types/shared/result";
 import { normalizeError } from "@app/types/shared/utils/error_utils";
 import { safeParseJSON } from "@app/types/shared/utils/json_utils";
-import { authenticateConnection } from "@front-api/collab/lib/connection_access";
+import {
+  authenticateConnection,
+  RESET_CONNECTION,
+} from "@front-api/collab/lib/connection_access";
 import type { CollabSession } from "@front-api/collab/lib/session";
 import {
   epochMessage,
@@ -56,6 +61,27 @@ export const COMMENT_COMMAND_TIMEOUT_MS = 30 * 1000;
 // to `STORE_MAX_DEBOUNCE_MS` plus `STORE_DEBOUNCE_MS` of edits; a shutdown saves them first.
 const STORE_DEBOUNCE_MS = 5 * 1000;
 const STORE_MAX_DEBOUNCE_MS = 30 * 1000;
+
+// Only the reason reaches the browser.
+const EPOCH_CHANGED = {
+  code: RESET_CONNECTION.code,
+  reason: EPOCH_CHANGED_CLOSE_REASON,
+};
+
+/**
+ * A connection's access, and the epoch of the document its browser kept from an earlier
+ * connection, absent when it kept none.
+ */
+export type CollabContext = CollabAccess & { keptEpoch?: string };
+
+/** A token is a ticket alone, or a `CollabToken` from a browser that kept its document. */
+function parseToken(token: string): { ticket: string; keptEpoch?: string } {
+  const json = safeParseJSON(token);
+  const parsed = json.isOk() ? collabTokenSchema.safeParse(json.value) : null;
+  return parsed?.success
+    ? { ticket: parsed.data.ticket, keptEpoch: parsed.data.epoch }
+    : { ticket: token };
+}
 
 const refusedMessage = (requestId: string, error: CommentRequestErrorCode) =>
   serverMessage({ type: "refused", requestId, error });
@@ -136,18 +162,27 @@ function logUnexpected(
  * opening while it differs from `DEFAULT_SAVE_STATE` MUST be sent it once connected. The state
  * includes the last copy kept after a save conflict (`collab-session-save-conflict`).
  */
-export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
-  const hocuspocus = new Hocuspocus<CollabAccess>({
+/**
+ * @cc [owner:PopDaph,label:product] collab-kept-epoch
+ * A connection MUST authenticate with its ticket alone, or with a `CollabToken` carrying the epoch
+ * of the document its browser kept. A connection whose epoch differs from its document's MUST be
+ * closed with `EPOCH_CHANGED_CLOSE_REASON` before any of its sync messages is applied, so a kept
+ * document never merges into another Yjs history. A connection with no epoch, or with its
+ * document's, MUST sync as before.
+ */
+export function createCollabHocuspocus(): Hocuspocus<CollabContext> {
+  const hocuspocus = new Hocuspocus<CollabContext>({
     debounce: STORE_DEBOUNCE_MS,
     maxDebounce: STORE_MAX_DEBOUNCE_MS,
 
-    // The token is a ticket minted by front-api for this user, workspace and file.
+    // The ticket is minted by front-api for this user, workspace and file.
     async onAuthenticate({ documentName, token, connectionConfig }) {
       const parsed = parseSessionName(documentName);
       if (!parsed) {
         refuse(documentName, "Invalid document name.");
       }
-      const file = await authenticateConnection(parsed, token).catch(
+      const { ticket, keptEpoch } = parseToken(token);
+      const file = await authenticateConnection(parsed, ticket).catch(
         logUnexpected(
           { documentName, workspaceId: parsed.workspaceId },
           "Collab authentication failed"
@@ -157,7 +192,30 @@ export function createCollabHocuspocus(): Hocuspocus<CollabAccess> {
         refuse(documentName, file.error);
       }
       connectionConfig.readOnly = !file.value.canWrite;
-      return file.value;
+      return { ...file.value, keptEpoch };
+    },
+
+    // A kept document of another Yjs history would merge as a second copy of its text.
+    async beforeSync({ context, document, documentName }) {
+      const session = getSession(document);
+      if (
+        !session ||
+        context.keptEpoch === undefined ||
+        context.keptEpoch === session.epoch
+      ) {
+        return;
+      }
+      logger.info(
+        {
+          documentName,
+          workspaceId: context.workspaceId,
+          keptEpoch: context.keptEpoch,
+          epoch: session.epoch,
+        },
+        "Collab sync refused: the kept document has another epoch"
+      );
+      // Hocuspocus closes the connection with the `code` and `reason` of what the hook throws.
+      throw Object.assign(new Error(EPOCH_CHANGED.reason), EPOCH_CHANGED);
     },
 
     async onLoadDocument({ context, document, documentName }) {

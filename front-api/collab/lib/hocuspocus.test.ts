@@ -16,8 +16,16 @@ import type { DfmComment } from "@app/lib/markdown/dfm";
 import { CollabAgentFactory } from "@app/tests/utils/CollabAgentFactory";
 import { commentAnchorOf } from "@app/tests/utils/comment_anchors";
 import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
-import type { AgentEditMessage, InsertedIdRange } from "@app/types/collab";
-import { BODY_FRAGMENT_NAME, toSessionName } from "@app/types/collab";
+import type {
+  AgentEditMessage,
+  CollabToken,
+  InsertedIdRange,
+} from "@app/types/collab";
+import {
+  BODY_FRAGMENT_NAME,
+  EPOCH_CHANGED_CLOSE_REASON,
+  toSessionName,
+} from "@app/types/collab";
 import { COLLAB_SOURCE_WRITE_WAIT_MS } from "@app/types/collab_internal";
 import { Err, Ok } from "@app/types/shared/result";
 import {
@@ -865,6 +873,93 @@ async function serve(hocuspocus: ReturnType<typeof createCollabHocuspocus>) {
     close: () => server.close(),
   };
 }
+
+describe("a browser that kept its document", () => {
+  const providers: HocuspocusProvider[] = [];
+  let close: () => void = () => undefined;
+
+  afterEach(() => {
+    providers.forEach((provider) => provider.destroy());
+    providers.length = 0;
+    close();
+    vi.restoreAllMocks();
+    vi.mocked(checkCollabReadAccess).mockReset();
+  });
+
+  // The socket handlers run outside the test's database transaction: authentication is stubbed.
+  async function start() {
+    const writer = await collabAccess(true);
+    vi.spyOn(Authenticator, "fromUserIdAndWorkspaceId").mockResolvedValue(
+      writer.auth
+    );
+    vi.mocked(checkCollabReadAccess).mockResolvedValue(new Ok(writer));
+    vi.mocked(loadCollabSession).mockImplementation(loadSource);
+    const hocuspocus = createCollabHocuspocus();
+    const server = await serve(hocuspocus);
+    close = server.close;
+    const name = `${writer.workspaceId}:${writer.canonicalPath}`;
+    const bodyOnServer = () =>
+      loadedDocument(hocuspocus, name)
+        .getXmlFragment(BODY_FRAGMENT_NAME)
+        .toString();
+    return { writer, name, url: server.url, bodyOnServer };
+  }
+
+  /** Connects with `doc`, sending `epoch` with the ticket when given, and the reasons it is closed. */
+  async function connect(
+    { writer, name, url }: Awaited<ReturnType<typeof start>>,
+    doc: Y.Doc,
+    epoch?: string
+  ) {
+    const ticket = await ticketFor(writer.auth, writer.canonicalPath);
+    const closeReasons: string[] = [];
+    const provider = new HocuspocusProvider({
+      url,
+      name,
+      token:
+        epoch === undefined
+          ? ticket
+          : JSON.stringify({ ticket, epoch } satisfies CollabToken),
+      document: doc,
+      onClose: ({ event }) => closeReasons.push(event.reason),
+    });
+    providers.push(provider);
+    return { provider, closeReasons };
+  }
+
+  it("merges its offline edits when it sends the document's epoch", async () => {
+    const started = await start();
+    const doc = new Y.Doc();
+    const first = await connect(started, doc);
+    await new Promise<void>((resolve) => first.provider.on("synced", resolve));
+    first.provider.destroy();
+
+    typeInto(doc, "Offline.");
+    const second = await connect(started, doc, EPOCH);
+    await new Promise<void>((resolve) => second.provider.on("synced", resolve));
+
+    await vi.waitFor(() =>
+      expect(started.bodyOnServer()).toContain("Offline.")
+    );
+    expect(started.bodyOnServer().split("Hello.")).toHaveLength(2);
+    expect(second.closeReasons).toEqual([]);
+  });
+
+  it("is closed before syncing when it sends another epoch", async () => {
+    const started = await start();
+    // The same text with other Yjs ids, as a document built again from its file.
+    const kept = (await loadSource()).value.content.doc;
+    typeInto(kept, "Offline.");
+
+    const { closeReasons } = await connect(started, kept, "epoch-0");
+
+    await vi.waitFor(() =>
+      expect(closeReasons).toContain(EPOCH_CHANGED_CLOSE_REASON)
+    );
+    expect(started.bodyOnServer()).not.toContain("Offline.");
+    expect(started.bodyOnServer().split("Hello.")).toHaveLength(2);
+  });
+});
 
 // TODO(co-edition): cover commands applied one at a time per document, a message that is not a
 // client message, a command whose document unloads before it finishes, and a command that times
