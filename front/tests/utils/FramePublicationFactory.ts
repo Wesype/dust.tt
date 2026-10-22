@@ -7,9 +7,23 @@ import type { FileResource } from "@app/lib/resources/file_resource";
 import { SandboxFunctionResource } from "@app/lib/resources/sandbox_function_resource";
 import { FramePublicationModel } from "@app/lib/resources/storage/models/frame_publication";
 import { withTransaction } from "@app/lib/utils/sql_utils";
-import { FrameManifestSchema } from "@app/types/api/frame_manifest";
+import { FileFactory } from "@app/tests/utils/FileFactory";
+import { createTestConversationFrameFile } from "@app/tests/utils/FrameFunctionFactory";
+import { fileStorageMock } from "@app/tests/utils/mocks/file_storage";
+import {
+  FRAME_MANIFEST_FILE,
+  FrameManifestSchema,
+  parseFrameManifest,
+} from "@app/types/api/frame_manifest";
 import type { FramePublishMode } from "@app/types/api/frame_publication";
+import {
+  contentTypeFromFileName,
+  DEFAULT_FILE_CONTENT_TYPE,
+  frameV2ContentType,
+} from "@app/types/files";
+import { getConversationFilesBasePath } from "@app/types/mount_path";
 import { ONE_DAY_MS } from "@app/types/shared/utils/date_utils";
+import assert from "assert";
 import type { JSONSchema7 as JSONSchema } from "json-schema";
 
 const inputSchema: JSONSchema = { type: "object" };
@@ -152,4 +166,117 @@ export async function publishTestFrameBundle(
     throw published.error;
   }
   return published.value.publicationId;
+}
+
+/** A Frame source tree: relative path to file content, `manifest.json` included. */
+export type TestFrameSourceTree = Record<string, string>;
+
+/**
+ * Publish `tree` as a publication of `frame` through the real publish path, so it gets a stored
+ * `source.tar`. Each file is typed as publish types it: by extension, else the GCS default.
+ */
+export async function publishTestFrameSourceTree(
+  auth: Authenticator,
+  {
+    frame,
+    tree,
+    mode,
+  }: { frame: FileResource; tree: TestFrameSourceTree; mode: FramePublishMode }
+): Promise<string> {
+  const manifest = parseFrameManifest(Buffer.from(tree[FRAME_MANIFEST_FILE]));
+  assert(manifest.isOk(), "test Frame manifest parses");
+  const published = await publishFramePublication(auth, {
+    frame,
+    functionArtifacts: [],
+    manifest: manifest.value,
+    sourceFiles: Object.entries(tree).map(([relativePath, content]) => ({
+      relativePath,
+      content: Buffer.from(content),
+      contentType:
+        contentTypeFromFileName(relativePath) ?? DEFAULT_FILE_CONTENT_TYPE,
+    })),
+    // Any change to the tree changes the bundle, so a changed tree is never "same as live".
+    uiBundleCode: `export default ${JSON.stringify(tree)};`,
+    mode,
+  });
+  assert(published.isOk(), "test Frame publish succeeds");
+  return published.value.publicationId;
+}
+
+/**
+ * A conversation Frame whose source folder holds `tree`, published live from it. The source files
+ * live in `fileStorageMock`, which cannot enumerate its objects: listing and existence checks are
+ * wired to the paths seeded through `setSource`. With `atMountRoot`, the manifest sits directly at
+ * the conversation's mount root instead of in a `folderName` subfolder.
+ */
+export async function createTestLiveFrameWithSource(
+  auth: Authenticator,
+  {
+    conversationId,
+    tree,
+    folderName = "Frame",
+    atMountRoot = false,
+  }: {
+    conversationId: string;
+    tree: TestFrameSourceTree;
+    folderName?: string;
+    atMountRoot?: boolean;
+  }
+) {
+  const conversationFilesPath = getConversationFilesBasePath({
+    workspaceId: auth.getNonNullableWorkspace().sId,
+    conversationId,
+  });
+  const frame = atMountRoot
+    ? await FileFactory.create(auth, null, {
+        contentType: frameV2ContentType,
+        fileName: FRAME_MANIFEST_FILE,
+        fileSize: 100,
+        status: "created",
+        useCase: "conversation",
+        useCaseMetadata: { conversationId },
+        mountFilePath: `${conversationFilesPath}${FRAME_MANIFEST_FILE}`,
+      })
+    : await createTestConversationFrameFile(auth, {
+        conversationId,
+        folderName,
+      });
+  const sourceDirectory = atMountRoot
+    ? conversationFilesPath.replace(/\/$/, "")
+    : `${conversationFilesPath}${folderName}`;
+
+  const seededPaths = new Set<string>();
+  const setSource = (relativePath: string, content: string) => {
+    const objectPath = `${sourceDirectory}/${relativePath}`;
+    seededPaths.add(objectPath);
+    fileStorageMock.setObject(objectPath, content);
+  };
+  const getSource = (relativePath: string) =>
+    fileStorageMock.getObject(`${sourceDirectory}/${relativePath}`);
+  fileStorageMock.setFileExists(
+    (filePath) => fileStorageMock.getObject(filePath) !== undefined
+  );
+  fileStorageMock.setFilesByPrefix((prefix) =>
+    [...seededPaths]
+      .filter(
+        (name) =>
+          name.startsWith(prefix) &&
+          fileStorageMock.getObject(name) !== undefined
+      )
+      .map((name) => ({
+        name,
+        metadata: { contentType: "text/plain", size: "10" },
+      }))
+  );
+
+  for (const [relativePath, content] of Object.entries(tree)) {
+    setSource(relativePath, content);
+  }
+  const liveId = await publishTestFrameSourceTree(auth, {
+    frame,
+    tree,
+    mode: "live",
+  });
+
+  return { frame, liveId, sourceDirectory, setSource, getSource };
 }

@@ -1312,6 +1312,23 @@ export class FileResource extends BaseResource<FileModel> {
     );
   }
 
+  /**
+   * Points `latestPublicationId` back at the live publication and turns draft mode off, in one
+   * update: what a discarded draft leaves.
+   */
+  async discardFrameDraftPointers(transaction?: Transaction) {
+    return this.update(
+      {
+        useCaseMetadata: {
+          ...this.useCaseMetadata,
+          latestPublicationId: this.useCaseMetadata?.activePublicationId,
+          frameDraftMode: undefined,
+        },
+      },
+      transaction
+    );
+  }
+
   // Content access logic.
   //
   // Files may have a "processed" version (text extraction, image resize, audio transcription) or

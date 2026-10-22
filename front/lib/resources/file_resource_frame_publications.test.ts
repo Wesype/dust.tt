@@ -1,4 +1,5 @@
 import { FileResource } from "@app/lib/resources/file_resource";
+import { FileModel } from "@app/lib/resources/storage/models/files";
 import { renderLightWorkspaceType } from "@app/lib/workspace";
 import { createTestFrameFile } from "@app/tests/utils/FrameFunctionFactory";
 import { createResourceTest } from "@app/tests/utils/generic_resource_tests";
@@ -6,7 +7,7 @@ import { fileStorageMock } from "@app/tests/utils/mocks/file_storage";
 import { SpaceFactory } from "@app/tests/utils/SpaceFactory";
 import { getFramePublicationUiBundlePath } from "@app/types/api/frame_storage";
 import assert from "assert";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 async function setupLiveFrame() {
   const { authenticator: auth, workspace } = await createResourceTest({
@@ -82,6 +83,29 @@ describe("Frame publication pointers", () => {
       "publication-live"
     );
     expect(reloaded?.pendingDraftPublicationId).toBeUndefined();
+  });
+
+  it("discardFrameDraftPointers points latest back at live and ends draft mode in one update", async () => {
+    const { auth, frame } = await setupLiveFrame();
+    await frame.enterFrameDraftMode({ userSId: auth.getNonNullableUser().sId });
+    await frame.setLatestFramePublication({
+      publicationId: "publication-draft",
+    });
+    const updateSpy = vi.spyOn(FileModel, "update");
+
+    await frame.discardFrameDraftPointers();
+
+    expect(updateSpy).toHaveBeenCalledTimes(1);
+    updateSpy.mockRestore();
+    const reloaded = await FileResource.fetchById(auth, frame.sId);
+    expect(reloaded?.useCaseMetadata?.activePublicationId).toBe(
+      "publication-live"
+    );
+    expect(reloaded?.useCaseMetadata?.latestPublicationId).toBe(
+      "publication-live"
+    );
+    expect(reloaded?.pendingDraftPublicationId).toBeUndefined();
+    expect(reloaded?.isInFrameDraftMode).toBe(false);
   });
 
   it("resolves the pending draft when a publication is activated", async () => {

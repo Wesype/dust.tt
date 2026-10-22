@@ -60,7 +60,7 @@ import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
 
 const FRAME_SOURCE_READ_CONCURRENCY = 8;
-const MAX_FRAME_SOURCE_FILE_COUNT = 1024;
+export const MAX_FRAME_SOURCE_FILE_COUNT = 1024;
 const MAX_FRAME_SOURCE_BYTES = 100 * 1024 * 1024;
 
 function frameError(code: FramePublicationError["code"], message: string) {
@@ -766,7 +766,7 @@ async function repointPodFrameReferences(
   }
 }
 
-async function resolveWritableFrameV2Source(
+export async function resolveWritableFrameV2Source(
   auth: Authenticator,
   frame: FileResource
 ): Promise<

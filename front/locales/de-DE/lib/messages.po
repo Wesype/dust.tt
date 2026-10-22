@@ -1130,6 +1130,14 @@ msgid "This Frame changed or is being updated. Refresh it and try again."
 msgstr "Dieses Frame wurde geändert oder wird gerade aktualisiert. Laden Sie es neu und versuchen Sie es erneut."
 
 #: front/lib/api_error_messages.ts
+msgid "This draft can't be discarded."
+msgstr "Dieser Entwurf kann nicht verworfen werden."
+
+#: front/lib/api_error_messages.ts
+msgid "The draft was only partly discarded. Discard it again to finish."
+msgstr "Der Entwurf wurde nur teilweise verworfen. Verwerfen Sie ihn erneut, um den Vorgang abzuschließen."
+
+#: front/lib/api_error_messages.ts
 msgid "This Frame has no live version yet."
 msgstr "Dieses Frame hat noch keine Live-Version."
 

@@ -322,6 +322,8 @@ const API_ERROR_TYPES = [
   "branding_asset_mismatch",
   "frame_text_edit_failed",
   "frame_draft_conflict",
+  "frame_discard_unavailable",
+  "frame_discard_incomplete",
   "frame_not_published",
   "frame_make_live_failed",
   "frame_not_in_conversation",

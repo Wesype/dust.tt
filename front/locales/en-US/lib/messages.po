@@ -1130,6 +1130,14 @@ msgid "This Frame changed or is being updated. Refresh it and try again."
 msgstr "This Frame changed or is being updated. Refresh it and try again."
 
 #: front/lib/api_error_messages.ts
+msgid "This draft can't be discarded."
+msgstr "This draft can't be discarded."
+
+#: front/lib/api_error_messages.ts
+msgid "The draft was only partly discarded. Discard it again to finish."
+msgstr "The draft was only partly discarded. Discard it again to finish."
+
+#: front/lib/api_error_messages.ts
 msgid "This Frame has no live version yet."
 msgstr "This Frame has no live version yet."
 

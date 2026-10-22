@@ -115,7 +115,8 @@ export class FramePublicationError extends Error {
   }
 }
 
-function sha256(content: string | Buffer): string {
+/** Hex sha256, as recorded in a publication descriptor's `*Sha256` fields. */
+export function sha256Hex(content: string | Buffer): string {
   return createHash("sha256").update(content).digest("hex");
 }
 export function isFramePublicationError(
@@ -303,7 +304,7 @@ export function buildFramePublicationContracts({
     databases.push({
       name: database.name,
       schemaSource,
-      schemaSha256: sha256(schemaSource),
+      schemaSha256: sha256Hex(schemaSource),
     });
   }
 
@@ -400,7 +401,7 @@ export function buildFramePublicationContracts({
 
     functions.push({
       name: fn.name,
-      bundleSha256: sha256(artifact.bundleCode),
+      bundleSha256: sha256Hex(artifact.bundleCode),
       userIdentity: artifact.userIdentity,
       inputSchema: artifact.inputSchema,
       outputSchema: artifact.outputSchema,
@@ -480,10 +481,10 @@ export async function storeFramePublication(
     sourceFiles: sourceFiles
       .map((sourceFile) => ({
         path: sourceFile.relativePath,
-        contentSha256: sha256(sourceFile.content),
+        contentSha256: sha256Hex(sourceFile.content),
       }))
       .sort((left, right) => left.path.localeCompare(right.path)),
-    ui: { bundleSha256: sha256(uiBundleCode) },
+    ui: { bundleSha256: sha256Hex(uiBundleCode) },
     functions: contracts.value.functions,
     databases: contracts.value.databases,
   } satisfies FramePublicationDescriptor);
@@ -685,7 +686,7 @@ export async function loadFramePublicationDescriptor(
   }
 
   const invalidDatabaseContract = descriptor.value.databases.find(
-    (database) => sha256(database.schemaSource) !== database.schemaSha256
+    (database) => sha256Hex(database.schemaSource) !== database.schemaSha256
   );
   if (invalidDatabaseContract) {
     return new Err(
@@ -719,7 +720,7 @@ function functionDefinitionsFromBundles({
     }
 
     const contract = descriptor.functions[index];
-    if (!contract || sha256(bundleCode) !== contract.bundleSha256) {
+    if (!contract || sha256Hex(bundleCode) !== contract.bundleSha256) {
       return new Err(
         new FramePublicationError(
           "invalid_function_artifact",
@@ -885,7 +886,7 @@ export async function activateFramePublication(
       );
     }
   }
-  if (sha256(uiBundleCode) !== descriptor.ui.bundleSha256) {
+  if (sha256Hex(uiBundleCode) !== descriptor.ui.bundleSha256) {
     return new Err(
       new FramePublicationError(
         "invalid_publication",

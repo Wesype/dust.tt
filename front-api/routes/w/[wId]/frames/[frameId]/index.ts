@@ -1,6 +1,7 @@
 import { workspaceApp } from "@front-api/middlewares/ctx";
 
 import authorizedFiles from "./authorized-files";
+import discardDraft from "./discard-draft";
 import draftMode from "./draft-mode";
 import functions from "./functions";
 import invocations from "./invocations";
@@ -12,6 +13,7 @@ import toolAuthorizations from "./tool-authorizations";
 const app = workspaceApp();
 
 app.route("/authorized-files", authorizedFiles);
+app.route("/discard-draft", discardDraft);
 app.route("/draft-mode", draftMode);
 app.route("/functions", functions);
 app.route("/invocations", invocations);

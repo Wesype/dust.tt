@@ -1,0 +1,11 @@
+{
+  "action": "frame.draft_discarded",
+  "targets": [
+    { "type": "workspace" },
+    { "type": "frame" }
+  ],
+  "metadata": {
+    "frame_id": "string",
+    "discarded_publication_id": "string"
+  }
+}

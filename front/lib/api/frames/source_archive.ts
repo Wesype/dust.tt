@@ -99,19 +99,3 @@ export async function loadFrameSourceArchive(
 
   return parseFrameSourceArchive(archive);
 }
-
-export async function hasFrameSourceArchive(
-  auth: Authenticator,
-  { frame, publicationId }: { frame: FileResource; publicationId: string }
-): Promise<boolean> {
-  const [exists] = await getPrivateUploadBucket()
-    .file(
-      getFramePublicationSourceArchivePath({
-        workspaceId: auth.getNonNullableWorkspace().sId,
-        frameId: frame.sId,
-        publicationId,
-      })
-    )
-    .exists();
-  return exists;
-}
