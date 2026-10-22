@@ -4,7 +4,6 @@ import "@front-api/lib/startup-log";
 
 import config from "@app/lib/api/config";
 import logger from "@app/logger/logger";
-import { COLLAB_INTERNAL_ROUTES_PREFIX } from "@app/types/collab_internal";
 import { setupGlobalErrorHandler } from "@app/types/shared/utils/global_error_handler";
 import type { WebSocketLike } from "@hocuspocus/server";
 import { serve } from "@hono/node-server";
@@ -19,7 +18,7 @@ import {
   recheckAllConnections,
 } from "./lib/connection_access";
 import { saveAllSessions, createCollabHocuspocus } from "./lib/hocuspocus";
-import { createInternalRoutes } from "./lib/internal_routes";
+import { createCollabRoutes } from "./routes";
 
 /**
  * @cc [owner:PopDaph;tdraier,label:product;concurrency] collab-server-internal-secret
@@ -43,7 +42,7 @@ const hocuspocus = createCollabHocuspocus();
 
 const app = createHono();
 app.route("/api/healthz", healthzApp);
-app.route(COLLAB_INTERNAL_ROUTES_PREFIX, createInternalRoutes(hocuspocus));
+app.route("/", createCollabRoutes(hocuspocus));
 app.onError(unhandledErrorHandler);
 
 // crossws types the upgraded socket as a partial WebSocket; on Node it is a full `ws` socket.

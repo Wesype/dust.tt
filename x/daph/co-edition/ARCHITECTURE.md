@@ -57,6 +57,11 @@ code is in `front-api/collab/`; front-api's own server never imports from it.
 front-api/collab/
 ├── README.md                  this map
 ├── server.ts                  starts the process: Hocuspocus, WebSocket upgrades, HTTP routes
+├── routes/                    the HTTP routes only front can call, one file per URL
+│   ├── index.ts               createCollabRoutes: the tree's root, given the Hocuspocus instance
+│   └── internal/              /internal: the internal secret, checked once here
+│       └── documents/         read.ts, write.ts, edit.ts, agent_activity.ts
+├── middlewares/               the internal secret check, withHocuspocus
 └── lib/
     ├── hocuspocus.ts          builds Hocuspocus; thin hooks that call session.ts;
     │                          parses and answers browsers' messages; shutdown
@@ -65,8 +70,7 @@ front-api/collab/
     ├── connection_access.ts   who may stay connected: at connect, then every 5 min
     ├── session_file.ts        load a session from its file, save it back
     ├── ydoc_state.ts          the Yjs state kept in Redis between saves
-    ├── comments.ts            apply a comment request, dispatch mentions
-    └── internal_routes.ts     the HTTP routes only front can call
+    └── comments.ts            apply a comment request, dispatch mentions
 
 front-api/lib/collab_access_errors.ts   CollabAccessError → HTTP errors, shared with front-api's
                                         collab ticket route

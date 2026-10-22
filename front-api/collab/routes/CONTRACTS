@@ -1,0 +1,7 @@
+@cc [owner:PopDaph;tdraier,label:api] collab-route-files
+The collab server's routes follow front-api's route rules (`url-aligned-route-files`,
+`directory-route-mounts`, `route-mounting-is-source-of-truth`) in this tree:
+`collab/routes/<path>.ts` maps 1:1 to `/<path>` on the collab server, such as
+`internal/documents/read.ts` for `/internal/documents/read`, and the tree's root is
+`createCollabRoutes` in `index.ts`, in place of `app.ts`. Only `collab/server.ts` mounts it, and the
+route tests' helper (`routes.test_utils.ts`), which mounts it as the server does.
