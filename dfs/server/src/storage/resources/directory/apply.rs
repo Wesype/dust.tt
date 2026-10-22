@@ -1,4 +1,9 @@
-use dfs_protocol::rpc::{CreateOperation, MoveOperation, Mutation, ObjectKind, RemoveOperation};
+use std::collections::HashMap;
+
+use dfs_protocol::{
+    ObjectId,
+    rpc::{CreateOperation, MoveOperation, Mutation, ObjectKind, RemoveOperation},
+};
 use foundationdb::{Transaction, tuple::pack};
 
 use super::{DirectoryResource, Error, VIRTUAL_SHARED_NAME};
@@ -7,7 +12,7 @@ use crate::{
     storage::{
         self,
         resources::{
-            object::{self, ObjectResource, locks::LockTokens},
+            object::{self, ObjectResource, locks::LockId},
             session::SessionResource,
         },
     },
@@ -28,7 +33,7 @@ impl DirectoryResource {
         tx: &Transaction,
         session: &SessionResource,
         operation: CreateOperation,
-        locks: &LockTokens,
+        locks: &HashMap<ObjectId, LockId>,
     ) -> Result<Mutation, storage::Error<Error>> {
         let kind = Self::supported_kind(operation.kind)?;
 
@@ -99,7 +104,7 @@ impl DirectoryResource {
         tx: &Transaction,
         session: &SessionResource,
         operation: MoveOperation,
-        locks: &LockTokens,
+        locks: &HashMap<ObjectId, LockId>,
     ) -> Result<Mutation, storage::Error<Error>> {
         Self::validate_name(&operation.name)?;
         if operation.object_id == session.tenant.root_id {
@@ -227,7 +232,7 @@ impl DirectoryResource {
         tx: &Transaction,
         session: &SessionResource,
         operation: RemoveOperation,
-        locks: &LockTokens,
+        locks: &HashMap<ObjectId, LockId>,
     ) -> Result<Mutation, storage::Error<Error>> {
         let kind = Self::supported_kind(operation.kind)?;
         if operation.object_id == session.tenant.root_id {

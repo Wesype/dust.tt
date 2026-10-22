@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use dfs_api::storage::{receipt::Receipt, resources::object::locks::LockTokens};
+use dfs_api::storage::receipt::Receipt;
 use dfs_protocol::rpc::{GrantUpdate, UpdateOperation, WriteOperation, operation::Operation};
 use foundationdb::{RangeOption, options::StreamingMode};
 
@@ -92,7 +94,7 @@ pub(crate) async fn writes_merge_blocks_and_preserve_unrelated_state() -> Result
                 data,
                 append: false,
             },
-            &LockTokens::default(),
+            &HashMap::new(),
         )
         .await?;
         let attr = mutation.object.context("missing written file")?;
@@ -174,8 +176,7 @@ pub(crate) async fn writes_reject_invalid_operations_without_staging_changes() -
     for subject in ["reader", "write-only", "no-access"] {
         let denied = SessionResource::new(tenant, vec![subject.to_owned()])?.0;
         assert!(matches!(
-            FileResource::apply_write(&tx, &denied, operation.clone(), &LockTokens::default())
-                .await,
+            FileResource::apply_write(&tx, &denied, operation.clone(), &HashMap::new()).await,
             Err(storage::Error::Resource(file::Error::Object(
                 object::Error::Forbidden
             )))
@@ -190,7 +191,7 @@ pub(crate) async fn writes_reject_invalid_operations_without_staging_changes() -
                 object_id: tenant.root_id,
                 ..operation.clone()
             },
-            &LockTokens::default()
+            &HashMap::new()
         )
         .await,
         Err(storage::Error::Resource(file::Error::IsDirectory))
@@ -203,7 +204,7 @@ pub(crate) async fn writes_reject_invalid_operations_without_staging_changes() -
                 object_id: ObjectId::new_v7(),
                 ..operation.clone()
             },
-            &LockTokens::default()
+            &HashMap::new()
         )
         .await,
         Err(storage::Error::Resource(file::Error::Object(
@@ -218,14 +219,14 @@ pub(crate) async fn writes_reject_invalid_operations_without_staging_changes() -
                 offset: u64::MAX,
                 ..operation.clone()
             },
-            &LockTokens::default()
+            &HashMap::new()
         )
         .await,
         Err(storage::Error::Resource(file::Error::InvalidRange))
     ));
     let (other, _) = fixture(0).await?;
     assert!(matches!(
-        FileResource::apply_write(&tx, &other, operation.clone(), &LockTokens::default()).await,
+        FileResource::apply_write(&tx, &other, operation.clone(), &HashMap::new()).await,
         Err(storage::Error::Resource(file::Error::Object(
             object::Error::NotFound
         )))
@@ -246,7 +247,7 @@ pub(crate) async fn writes_reject_invalid_operations_without_staging_changes() -
                 data: vec![1; BLOCK_SIZE_BYTES + 1],
                 ..operation.clone()
             },
-            &LockTokens::default()
+            &HashMap::new()
         )
         .await,
         Err(storage::Error::Resource(file::Error::InvalidBlock))
@@ -262,7 +263,7 @@ pub(crate) async fn writes_reject_invalid_operations_without_staging_changes() -
             data: vec![2; BLOCK_SIZE_BYTES],
             ..operation.clone()
         },
-        &LockTokens::default(),
+        &HashMap::new(),
     )
     .await?;
     let mutation = FileResource::apply_write(
@@ -272,7 +273,7 @@ pub(crate) async fn writes_reject_invalid_operations_without_staging_changes() -
             offset: u64::MAX - 1,
             ..operation.clone()
         },
-        &LockTokens::default(),
+        &HashMap::new(),
     )
     .await?;
     assert_eq!(
@@ -295,7 +296,7 @@ pub(crate) async fn writes_reject_invalid_operations_without_staging_changes() -
                 append: true,
                 ..operation
             },
-            &LockTokens::default()
+            &HashMap::new()
         )
         .await,
         Err(storage::Error::Resource(file::Error::InvalidRange))
@@ -341,7 +342,7 @@ pub(crate) async fn writes_replay_append_results_and_follow_truncation() -> Resu
                 let calls = &calls;
                 async move {
                     calls.fetch_add(1, Ordering::Relaxed);
-                    ObjectResource::apply(&tx, session, operations, &LockTokens::default())
+                    ObjectResource::apply(&tx, session, operations, &HashMap::new())
                         .await?
                         .into_iter()
                         .collect::<Result<Vec<_>, _>>()
@@ -388,8 +389,8 @@ pub(crate) async fn writes_conflict_with_concurrent_append_and_grant_revocation(
     };
     let first = fdb::database()?.create_trx()?;
     let second = fdb::database()?.create_trx()?;
-    FileResource::apply_write(&first, &session, operation.clone(), &LockTokens::default()).await?;
-    FileResource::apply_write(&second, &session, operation.clone(), &LockTokens::default()).await?;
+    FileResource::apply_write(&first, &session, operation.clone(), &HashMap::new()).await?;
+    FileResource::apply_write(&second, &session, operation.clone(), &HashMap::new()).await?;
     first.commit().await?;
     let error: foundationdb::FdbError = second
         .commit()
@@ -399,11 +400,11 @@ pub(crate) async fn writes_conflict_with_concurrent_append_and_grant_revocation(
         .into();
     assert_eq!(error.code(), 1020);
     let retry = fdb::database()?.create_trx()?;
-    FileResource::apply_write(&retry, &session, operation.clone(), &LockTokens::default()).await?;
+    FileResource::apply_write(&retry, &session, operation.clone(), &HashMap::new()).await?;
     retry.commit().await?;
 
     let tx = fdb::database()?.create_trx()?;
-    FileResource::apply_write(&tx, &session, operation.clone(), &LockTokens::default()).await?;
+    FileResource::apply_write(&tx, &session, operation.clone(), &HashMap::new()).await?;
     let revoke = fdb::database()?.create_trx()?;
     let mut root = ObjectResource::fetch(&revoke, tenant, &tenant.root_id)
         .await?
@@ -425,7 +426,7 @@ pub(crate) async fn writes_conflict_with_concurrent_append_and_grant_revocation(
     assert_eq!(error.code(), 1020);
     let tx = fdb::database()?.create_trx()?;
     assert!(matches!(
-        FileResource::apply_write(&tx, &session, operation, &LockTokens::default()).await,
+        FileResource::apply_write(&tx, &session, operation, &HashMap::new()).await,
         Err(storage::Error::Resource(file::Error::Object(
             object::Error::Forbidden
         )))

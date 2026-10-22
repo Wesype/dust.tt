@@ -13,6 +13,7 @@ use dfs_protocol::rpc::WriteOperation;
 
 pub(crate) async fn run() -> Result<()> {
     lock_checks_require_current_tokens().await?;
+    stored_lock_ids_must_decode().await?;
     expired_lock_invalidation_is_transactional().await?;
     lock_checks_conflict_with_concurrent_acquisition().await?;
     expiry_grace_and_refresh_never_shorten().await?;
@@ -36,10 +37,10 @@ async fn lock_checks_require_current_tokens() -> Result<()> {
     let lock = acquire(&tenant.tenant_id, object_id, clock::now_ms()?).await?;
     let tx = fdb::database()?.create_trx()?;
     assert!(matches!(
-        ObjectResource::check_locks(&tx, &session, &[object_id], &LockTokens::default()).await,
+        ObjectResource::check_locks(&tx, &session, &[object_id], &HashMap::new()).await,
         Err(storage::Error::Resource(Error::WouldBlock))
     ));
-    let wrong = LockTokens::new(vec![ObjectLock {
+    let wrong = lock_ids_by_object(vec![ObjectLock {
         object_id,
         lock_id: ObjectId::new_v7().as_bytes().to_vec(),
     }])?;
@@ -47,7 +48,7 @@ async fn lock_checks_require_current_tokens() -> Result<()> {
         ObjectResource::check_locks(&tx, &session, &[object_id], &wrong).await,
         Err(storage::Error::Resource(Error::LockLost))
     ));
-    let tokens = LockTokens::new(vec![ObjectLock {
+    let tokens = lock_ids_by_object(vec![ObjectLock {
         object_id,
         lock_id: lock.lock_id.clone(),
     }])?;
@@ -60,7 +61,7 @@ async fn lock_checks_require_current_tokens() -> Result<()> {
     let (other_tenant, _) = TenantResource::new(ObjectId::new_v7().to_string())?;
     let (other_session, _) = SessionResource::new(&other_tenant, vec![])?;
     assert!(
-        ObjectResource::check_locks(&tx, &other_session, &[object_id], &LockTokens::default())
+        ObjectResource::check_locks(&tx, &other_session, &[object_id], &HashMap::new())
             .await?
             .0
             .is_empty()
@@ -69,11 +70,17 @@ async fn lock_checks_require_current_tokens() -> Result<()> {
         ObjectResource::check_locks(&tx, &other_session, &[object_id], &tokens).await,
         Err(storage::Error::Resource(Error::LockLost))
     ));
-    ObjectResource::unlock(&tx, &tenant.tenant_id, object_id, &lock.lock_id).await?;
+    ObjectResource::unlock(
+        &tx,
+        &tenant.tenant_id,
+        object_id,
+        LockId::try_from(lock.lock_id.as_slice())?,
+    )
+    .await?;
     tx.commit().await?;
     let tx = fdb::database()?.create_trx()?;
     assert!(
-        ObjectResource::check_locks(&tx, &session, &[object_id], &LockTokens::default())
+        ObjectResource::check_locks(&tx, &session, &[object_id], &HashMap::new())
             .await?
             .0
             .is_empty()
@@ -81,6 +88,21 @@ async fn lock_checks_require_current_tokens() -> Result<()> {
     assert!(matches!(
         ObjectResource::check_locks(&tx, &session, &[object_id], &tokens).await,
         Err(storage::Error::Resource(Error::LockLost))
+    ));
+    Ok(())
+}
+
+async fn stored_lock_ids_must_decode() -> Result<()> {
+    let tenant_id = ObjectId::new_v7().to_string();
+    let object_id = ObjectId::new_v7();
+    let tx = fdb::database()?.create_trx()?;
+    tx.set(
+        &ObjectResource::lock_key(&tenant_id, object_id),
+        &pack(&(vec![0_u8; 16].as_slice(), 1_u64)),
+    );
+    assert!(matches!(
+        ObjectResource::fetch_lock(&tx, &tenant_id, object_id).await,
+        Err(storage::Error::Resource(Error::InvalidStoredLock))
     ));
     Ok(())
 }
@@ -98,13 +120,9 @@ async fn expired_lock_invalidation_is_transactional() -> Result<()> {
     let expiry_key = ObjectResource::lock_expiry_key(&tenant.tenant_id, object_id, lock.expires_at);
     for commit in [false, true] {
         let tx = fdb::database()?.create_trx()?;
-        let expired = ObjectResource::check_locks(
-            &tx,
-            &session,
-            &[object_id, object_id],
-            &LockTokens::default(),
-        )
-        .await?;
+        let expired =
+            ObjectResource::check_locks(&tx, &session, &[object_id, object_id], &HashMap::new())
+                .await?;
         assert_eq!(expired, ExpiredLocks(vec![(object_id, lock.clone())]));
         assert_eq!(
             ObjectResource::fetch_lock(&tx, &tenant.tenant_id, object_id).await?,
@@ -134,7 +152,7 @@ async fn expired_lock_invalidation_is_transactional() -> Result<()> {
             &tx,
             &tenant.tenant_id,
             object_id,
-            Some(&lock.lock_id),
+            Some(LockId::try_from(lock.lock_id.as_slice())?),
             lock.expires_at - 1,
         )
         .await,
@@ -149,7 +167,7 @@ async fn lock_checks_conflict_with_concurrent_acquisition() -> Result<()> {
     let object_id = tenant.root_id;
     let tx = fdb::database()?.create_trx()?;
     assert!(
-        ObjectResource::check_locks(&tx, &session, &[object_id], &LockTokens::default())
+        ObjectResource::check_locks(&tx, &session, &[object_id], &HashMap::new())
             .await?
             .0
             .is_empty()
@@ -171,7 +189,13 @@ async fn lock_checks_conflict_with_concurrent_acquisition() -> Result<()> {
         ObjectResource::fetch_lock(&tx, &tenant.tenant_id, object_id).await?,
         Some(lock.clone())
     );
-    ObjectResource::unlock(&tx, &tenant.tenant_id, object_id, &lock.lock_id).await?;
+    ObjectResource::unlock(
+        &tx,
+        &tenant.tenant_id,
+        object_id,
+        LockId::try_from(lock.lock_id.as_slice())?,
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -181,11 +205,17 @@ async fn expiry_grace_and_refresh_never_shorten() -> Result<()> {
     let object_id = ObjectId::new_v7();
     let lock = acquire(&tenant_id, object_id, 10_000).await?;
     let tx = fdb::database()?.create_trx()?;
-    let refreshed =
-        ObjectResource::lock_at(&tx, &tenant_id, object_id, Some(&lock.lock_id), 9_000).await?;
+    let refreshed = ObjectResource::lock_at(
+        &tx,
+        &tenant_id,
+        object_id,
+        Some(LockId::try_from(lock.lock_id.as_slice())?),
+        9_000,
+    )
+    .await?;
     assert_eq!(refreshed, lock);
     tx.commit().await?;
-    let tokens = LockTokens::new(vec![ObjectLock {
+    let tokens = lock_ids_by_object(vec![ObjectLock {
         object_id,
         lock_id: lock.lock_id.clone(),
     }])?;
@@ -199,18 +229,19 @@ async fn expiry_grace_and_refresh_never_shorten() -> Result<()> {
             Err(storage::Error::Resource(Error::WouldBlock))
         ));
         assert!(matches!(
-            ObjectResource::lock_at(&tx, &tenant_id, object_id, Some(&lock.lock_id), now_ms).await,
-            Err(storage::Error::Resource(Error::LockLost))
-        ));
-        assert!(matches!(
-            ObjectResource::check_locks_at(
+            ObjectResource::lock_at(
                 &tx,
                 &tenant_id,
-                &[object_id],
-                &LockTokens::default(),
+                object_id,
+                Some(LockId::try_from(lock.lock_id.as_slice())?),
                 now_ms
             )
             .await,
+            Err(storage::Error::Resource(Error::LockLost))
+        ));
+        assert!(matches!(
+            ObjectResource::check_locks_at(&tx, &tenant_id, &[object_id], &HashMap::new(), now_ms)
+                .await,
             Err(storage::Error::Resource(Error::WouldBlock))
         ));
         assert!(matches!(
@@ -226,12 +257,24 @@ async fn expiry_grace_and_refresh_never_shorten() -> Result<()> {
     .await?;
     assert_ne!(replacement.lock_id, lock.lock_id);
     let tx = fdb::database()?.create_trx()?;
-    ObjectResource::unlock(&tx, &tenant_id, object_id, &lock.lock_id).await?;
+    ObjectResource::unlock(
+        &tx,
+        &tenant_id,
+        object_id,
+        LockId::try_from(lock.lock_id.as_slice())?,
+    )
+    .await?;
     assert_eq!(
         ObjectResource::fetch_lock(&tx, &tenant_id, object_id).await?,
         Some(replacement.clone())
     );
-    ObjectResource::unlock(&tx, &tenant_id, object_id, &replacement.lock_id).await?;
+    ObjectResource::unlock(
+        &tx,
+        &tenant_id,
+        object_id,
+        LockId::try_from(replacement.lock_id.as_slice())?,
+    )
+    .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -280,7 +323,7 @@ async fn unlocked_mutation_prevents_slow_replica_revival() -> Result<()> {
                 offset: u64::MAX,
                 ..write.clone()
             },
-            &LockTokens::default(),
+            &HashMap::new(),
         )
         .await,
         Err(storage::Error::Resource(file::Error::InvalidRange))
@@ -309,7 +352,7 @@ async fn unlocked_mutation_prevents_slow_replica_revival() -> Result<()> {
             .await?
             .is_empty()
     );
-    FileResource::apply_write(&tx, &session, write.clone(), &LockTokens::default()).await?;
+    FileResource::apply_write(&tx, &session, write.clone(), &HashMap::new()).await?;
     tx.commit().await?;
     let tx = fdb::database()?.create_trx()?;
     assert!(matches!(
@@ -317,13 +360,13 @@ async fn unlocked_mutation_prevents_slow_replica_revival() -> Result<()> {
             &tx,
             tenant_id,
             object_id,
-            Some(&lock.lock_id),
+            Some(LockId::try_from(lock.lock_id.as_slice())?),
             lock.expires_at - 1,
         )
         .await,
         Err(storage::Error::Resource(Error::LockLost))
     ));
-    let tokens = LockTokens::new(vec![ObjectLock {
+    let tokens = lock_ids_by_object(vec![ObjectLock {
         object_id,
         lock_id: lock.lock_id.clone(),
     }])?;
@@ -368,7 +411,7 @@ async fn concurrent_refresh_conflicts_with_takeover() -> Result<()> {
             &refresh,
             tenant_id,
             object_id,
-            Some(&lock.lock_id),
+            Some(LockId::try_from(lock.lock_id.as_slice())?),
             lock.expires_at - 1,
         )
         .await?;
@@ -379,8 +422,7 @@ async fn concurrent_refresh_conflicts_with_takeover() -> Result<()> {
             data: b"unlocked writer".to_vec(),
             append: false,
         };
-        FileResource::apply_write(&takeover, &session, write.clone(), &LockTokens::default())
-            .await?;
+        FileResource::apply_write(&takeover, &session, write.clone(), &HashMap::new()).await?;
         let (first, second) = if refresh_first {
             (refresh, takeover)
         } else {
@@ -399,8 +441,7 @@ async fn concurrent_refresh_conflicts_with_takeover() -> Result<()> {
         let retry = fdb::database()?.create_trx()?;
         if refresh_first {
             assert!(matches!(
-                FileResource::apply_write(&retry, &session, write.clone(), &LockTokens::default())
-                    .await,
+                FileResource::apply_write(&retry, &session, write.clone(), &HashMap::new()).await,
                 Err(storage::Error::Resource(file::Error::Object(
                     Error::WouldBlock
                 )))
@@ -411,7 +452,7 @@ async fn concurrent_refresh_conflicts_with_takeover() -> Result<()> {
                     &retry,
                     tenant_id,
                     object_id,
-                    Some(&lock.lock_id),
+                    Some(LockId::try_from(lock.lock_id.as_slice())?),
                     lock.expires_at - 1,
                 )
                 .await,
@@ -446,7 +487,13 @@ async fn concurrent_refresh_conflicts_with_takeover() -> Result<()> {
             .is_some(),
             refresh_first
         );
-        ObjectResource::unlock(&tx, tenant_id, object_id, &lock.lock_id).await?;
+        ObjectResource::unlock(
+            &tx,
+            tenant_id,
+            object_id,
+            LockId::try_from(lock.lock_id.as_slice())?,
+        )
+        .await?;
         let (begin, end) = tenant_subspace(tenant_id).range();
         tx.clear_range(&begin, &end);
         tx.commit().await?;
@@ -459,8 +506,14 @@ async fn cleanup_preserves_refreshed_locks() -> Result<()> {
     let object_id = ObjectId::new_v7();
     let lock = acquire(&tenant_id, object_id, 10_000).await?;
     let tx = fdb::database()?.create_trx()?;
-    let refreshed =
-        ObjectResource::lock_at(&tx, &tenant_id, object_id, Some(&lock.lock_id), 20_000).await?;
+    let refreshed = ObjectResource::lock_at(
+        &tx,
+        &tenant_id,
+        object_id,
+        Some(LockId::try_from(lock.lock_id.as_slice())?),
+        20_000,
+    )
+    .await?;
     tx.commit().await?;
     let tx = fdb::database()?.create_trx()?;
     assert!(
@@ -499,9 +552,14 @@ async fn cleanup_conflicts_with_concurrent_refresh() -> Result<()> {
         let object_id = ObjectId::new_v7();
         let lock = acquire(&tenant_id, object_id, 10_000).await?;
         let refresh = fdb::database()?.create_trx()?;
-        let refreshed =
-            ObjectResource::lock_at(&refresh, &tenant_id, object_id, Some(&lock.lock_id), 20_000)
-                .await?;
+        let refreshed = ObjectResource::lock_at(
+            &refresh,
+            &tenant_id,
+            object_id,
+            Some(LockId::try_from(lock.lock_id.as_slice())?),
+            20_000,
+        )
+        .await?;
         let cleanup = fdb::database()?.create_trx()?;
         let sweep_at_ms = lock.expires_at + LOCK_TAKEOVER_GRACE_MS;
         ObjectResource::clear_expired_locks(&cleanup, sweep_at_ms).await?;
@@ -529,7 +587,7 @@ async fn cleanup_conflicts_with_concurrent_refresh() -> Result<()> {
                     &retry,
                     &tenant_id,
                     object_id,
-                    Some(&lock.lock_id),
+                    Some(LockId::try_from(lock.lock_id.as_slice())?),
                     20_000,
                 )
                 .await,
@@ -542,7 +600,13 @@ async fn cleanup_conflicts_with_concurrent_refresh() -> Result<()> {
             ObjectResource::fetch_lock(&tx, &tenant_id, object_id).await?,
             refresh_first.then_some(refreshed.clone())
         );
-        ObjectResource::unlock(&tx, &tenant_id, object_id, &lock.lock_id).await?;
+        ObjectResource::unlock(
+            &tx,
+            &tenant_id,
+            object_id,
+            LockId::try_from(lock.lock_id.as_slice())?,
+        )
+        .await?;
         tx.commit().await?;
     }
     Ok(())

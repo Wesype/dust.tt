@@ -661,21 +661,7 @@ During this grace period, expired holders receive `LOCK_LOST` and competing call
 `WOULD_BLOCK`. A successful unlocked mutation clears the expired token and its index atomically.
 A slower replica must never revive that invalidated token.
 
-Clients schedule renewal every 20 seconds, leaving room for transient failures and retries. This
-interval is a client convention, not a server timer or requirement. Front's `acquireLock` and the
-mount client's `acquire_lock` return managed leases that renew the same token automatically. Their
-`apply` methods attach the token. For operations requiring multiple locks, callers compose the
-front lease's `proof` or mount lease's `proof()` values through the existing client Apply API.
-Proofs are copies; changing a returned proof cannot change renewal or release of the held token.
-Callers must release every lease when finished. Ordinary low-level `lock` calls remain manual.
-Losing a lease never triggers automatic acquisition of a new token.
-
-The 5-second grace assumes at most 5 seconds of clock disagreement between replicas during the
-lease, including clock adjustments. Default GKE time synchronization does not provide a documented
-hard skew bound, so this is an operational assumption, not a platform guarantee. Arbitrary clock
-jumps can cause premature expiry or delayed takeover. TTL is measured from the server timestamp
-sample, not response delivery; transaction and network delays consume the remaining lifetime.
-Expiry and takeover do not depend on cleanup.
+Clients renew every 20 seconds, a client convention rather than a server time.
 
 `Apply.locks` supplies at most one `ObjectLock` per object; duplicates give `INVALID_INPUT`.
 After authorization, each operation checks locks in its write transaction: an active lock without

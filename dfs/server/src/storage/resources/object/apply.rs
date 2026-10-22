@@ -7,7 +7,7 @@ use dfs_protocol::{
 use foundationdb::{Transaction, tuple::pack};
 use futures::future::try_join_all;
 
-use super::{Error, Metadata, ObjectResource, locks::LockTokens};
+use super::{Error, Metadata, ObjectResource, locks::LockId};
 use crate::{
     clock,
     storage::{
@@ -43,7 +43,7 @@ impl ObjectResource {
         tx: &Transaction,
         session: &SessionResource,
         operations: Vec<Operation>,
-        locks: &LockTokens,
+        locks: &HashMap<ObjectId, LockId>,
     ) -> Result<Vec<Result<Mutation, Error>>, storage::Error<Error>> {
         let mut results: Vec<_> = (0..operations.len()).map(|_| None).collect();
         let batches = Self::group_by_targets(operations);
@@ -73,7 +73,7 @@ impl ObjectResource {
         tx: &Transaction,
         session: &SessionResource,
         operation: Operation,
-        locks: &LockTokens,
+        locks: &HashMap<ObjectId, LockId>,
     ) -> Result<Mutation, storage::Error<Error>> {
         match operation {
             Operation::Create(operation) => {
@@ -119,7 +119,7 @@ impl ObjectResource {
         tx: &Transaction,
         session: &SessionResource,
         operation: UpdateOperation,
-        locks: &LockTokens,
+        locks: &HashMap<ObjectId, LockId>,
     ) -> Result<Mutation, storage::Error<Error>> {
         // Check permissions and reuse the object fetched during authorization.
         let (mut object, mode) = Self::modes_for_session(tx, session, &[operation.object_id])

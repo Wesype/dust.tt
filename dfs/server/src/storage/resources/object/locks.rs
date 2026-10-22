@@ -27,21 +27,43 @@ const LOCK_SWEEP_BATCH_SIZE: usize = 100;
 pub const LOCK_TTL_MS: u64 = 60_000;
 pub const LOCK_TAKEOVER_GRACE_MS: u64 = 5_000;
 
-#[derive(Default)]
-pub struct LockTokens(HashMap<ObjectId, Vec<u8>>);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LockId([u8; 16]);
 
-impl LockTokens {
-    pub fn new(locks: Vec<ObjectLock>) -> Result<Self, Error> {
-        let mut tokens = HashMap::with_capacity(locks.len());
-        for lock in locks {
-            lock.object_id.validate().map_err(|_| Error::InvalidId)?;
-            validate_lock_id(&lock.lock_id)?;
-            if tokens.insert(lock.object_id, lock.lock_id).is_some() {
-                return Err(Error::InvalidLockId);
-            }
-        }
-        Ok(Self(tokens))
+impl LockId {
+    fn generate() -> Self {
+        Self(*uuid::Uuid::new_v7(uuid::Timestamp::now(uuid::NoContext)).as_bytes())
     }
+
+    pub fn as_bytes(&self) -> &[u8; 16] {
+        &self.0
+    }
+}
+
+impl TryFrom<&[u8]> for LockId {
+    type Error = Error;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        let uuid = uuid::Uuid::from_slice(bytes).map_err(|_| Error::InvalidLockId)?;
+        if uuid.get_version() != Some(uuid::Version::SortRand)
+            || uuid.get_variant() != uuid::Variant::RFC4122
+        {
+            return Err(Error::InvalidLockId);
+        }
+        Ok(Self(uuid.into_bytes()))
+    }
+}
+
+pub fn lock_ids_by_object(locks: Vec<ObjectLock>) -> Result<HashMap<ObjectId, LockId>, Error> {
+    let mut lock_ids = HashMap::with_capacity(locks.len());
+    for lock in locks {
+        lock.object_id.validate().map_err(|_| Error::InvalidId)?;
+        let lock_id = LockId::try_from(lock.lock_id.as_slice())?;
+        if lock_ids.insert(lock.object_id, lock_id).is_some() {
+            return Err(Error::InvalidLockId);
+        }
+    }
+    Ok(lock_ids)
 }
 
 #[must_use]
@@ -56,17 +78,12 @@ impl ExpiredLocks {
     }
 }
 
-pub fn validate_lock_id(lock_id: &[u8]) -> Result<(), Error> {
-    ObjectId::try_from(lock_id).map_err(|_| Error::InvalidLockId)?;
-    Ok(())
-}
-
 impl ObjectResource {
     pub async fn lock(
         tx: &Transaction,
         session: &SessionResource,
         object_id: ObjectId,
-        lock_id: Option<&[u8]>,
+        lock_id: Option<LockId>,
     ) -> Result<LockState, storage::Error<Error>> {
         let (object, mode) = Self::modes_for_session(tx, session, &[object_id])
             .await?
@@ -87,12 +104,9 @@ impl ObjectResource {
         tx: &Transaction,
         tenant_id: &str,
         object_id: ObjectId,
-        lock_id: Option<&[u8]>,
+        lock_id: Option<LockId>,
         now_ms: u64,
     ) -> Result<LockState, storage::Error<Error>> {
-        if let Some(lock_id) = lock_id {
-            validate_lock_id(lock_id)?;
-        }
         let previous = Self::fetch_lock(tx, tenant_id, object_id).await?;
         let expires_at_ms = now_ms
             .checked_add(LOCK_TTL_MS)
@@ -101,7 +115,9 @@ impl ObjectResource {
             Some(lock_id) => {
                 let previous = previous
                     .as_ref()
-                    .filter(|previous| previous.lock_id == lock_id && now_ms < previous.expires_at)
+                    .filter(|previous| {
+                        previous.lock_id == lock_id.as_bytes() && now_ms < previous.expires_at
+                    })
                     .ok_or(Error::LockLost)?;
                 LockState {
                     lock_id: previous.lock_id.clone(),
@@ -116,9 +132,7 @@ impl ObjectResource {
                     return Err(Error::WouldBlock.into());
                 }
                 LockState {
-                    lock_id: uuid::Uuid::new_v7(uuid::Timestamp::now(uuid::NoContext))
-                        .as_bytes()
-                        .to_vec(),
+                    lock_id: LockId::generate().as_bytes().to_vec(),
                     expires_at: expires_at_ms,
                 }
             }
@@ -141,12 +155,11 @@ impl ObjectResource {
         tx: &Transaction,
         tenant_id: &str,
         object_id: ObjectId,
-        lock_id: &[u8],
+        lock_id: LockId,
     ) -> Result<(), storage::Error<Error>> {
         object_id.validate().map_err(|_| Error::InvalidId)?;
-        validate_lock_id(lock_id)?;
         if let Some(lock) = Self::fetch_lock(tx, tenant_id, object_id).await?
-            && lock.lock_id == lock_id
+            && lock.lock_id == lock_id.as_bytes()
         {
             Self::clear_lock(tx, tenant_id, object_id, &lock);
         }
@@ -162,17 +175,17 @@ impl ObjectResource {
         tx: &Transaction,
         session: &SessionResource,
         targets: &[ObjectId],
-        tokens: &LockTokens,
+        lock_ids: &HashMap<ObjectId, LockId>,
     ) -> Result<ExpiredLocks, storage::Error<Error>> {
         let now_ms = clock::now_ms().map_err(|_| Error::TimestampGeneration)?;
-        Self::check_locks_at(tx, &session.tenant.tenant_id, targets, tokens, now_ms).await
+        Self::check_locks_at(tx, &session.tenant.tenant_id, targets, lock_ids, now_ms).await
     }
 
     async fn check_locks_at(
         tx: &Transaction,
         tenant_id: &str,
         targets: &[ObjectId],
-        tokens: &LockTokens,
+        lock_ids: &HashMap<ObjectId, LockId>,
         now_ms: u64,
     ) -> Result<ExpiredLocks, storage::Error<Error>> {
         let mut expired = Vec::new();
@@ -181,11 +194,10 @@ impl ObjectResource {
                 continue;
             }
             let lock = Self::fetch_lock(tx, tenant_id, *object_id).await?;
-            if let Some(token) = tokens.0.get(object_id) {
-                if !lock
-                    .as_ref()
-                    .is_some_and(|lock| lock.lock_id == *token && now_ms < lock.expires_at)
-                {
+            if let Some(lock_id) = lock_ids.get(object_id) {
+                if !lock.as_ref().is_some_and(|lock| {
+                    lock.lock_id == lock_id.as_bytes() && now_ms < lock.expires_at
+                }) {
                     return Err(Error::LockLost.into());
                 }
             } else if let Some(lock) = lock {
@@ -252,7 +264,7 @@ impl ObjectResource {
         };
         let (lock_id, expires_at): (Vec<u8>, u64) =
             unpack(&value).map_err(FdbBindingError::PackError)?;
-        ObjectId::try_from(lock_id.as_slice()).map_err(storage::Error::<Error>::InvalidObjectId)?;
+        LockId::try_from(lock_id.as_slice()).map_err(|_| Error::InvalidStoredLock)?;
         Ok(Some(LockState {
             lock_id,
             expires_at,

@@ -1,4 +1,9 @@
-use dfs_protocol::rpc::{Mutation, WriteOperation};
+use std::collections::HashMap;
+
+use dfs_protocol::{
+    ObjectId,
+    rpc::{Mutation, WriteOperation},
+};
 use foundationdb::{FdbBindingError, Transaction};
 use futures::future::try_join_all;
 
@@ -9,7 +14,7 @@ use crate::{
         self,
         resources::{
             keys::tenant_subspace,
-            object::{self, ObjectResource, locks::LockTokens},
+            object::{self, ObjectResource, locks::LockId},
             session::SessionResource,
         },
     },
@@ -79,7 +84,7 @@ impl FileResource {
         tx: &Transaction,
         session: &SessionResource,
         operation: WriteOperation,
-        locks: &LockTokens,
+        locks: &HashMap<ObjectId, LockId>,
     ) -> Result<Mutation, storage::Error<Error>> {
         // Check permissions using the same object fetched during authorization.
         let (object, mode) = ObjectResource::modes_for_session(tx, session, &[operation.object_id])

@@ -19,5 +19,5 @@ Cleanup MUST read the expiry range with conflict tracking and clear each indexed
 entry in the same transaction, so concurrent renewal and cleanup cannot both commit.
 
 @cc [owner:id13,label:security] lock-token-unpredictability
-Each acquired lock token MUST have 74 independently cryptographically random UUIDv7 payload bits.
-Lock tokens MUST NOT share an ordering counter with object IDs or other lock tokens.
+Each acquired lock ID MUST have 74 independently cryptographically random UUIDv7 payload bits.
+Lock IDs MUST NOT share an ordering counter with object IDs or other lock IDs.

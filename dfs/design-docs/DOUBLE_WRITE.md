@@ -108,7 +108,7 @@ Each acquisition returns a newer fencing token for that source. Every DFS mutati
 
 If renewal fails or times out, stop the transfer and DFS writes and fail the activity attempt. Do not report success after losing the lease. Renew only a matching, unexpired lease. Release only when the holder and token still match, so a delayed request cannot release a replacement worker's lease. Release after all writes finish or on cancellation when possible. Otherwise let the lease expire.
 
-The [DFS lock API](API.md#exclusive-locks) defines `Lock`, `Unlock` and `Apply.locks`, but storage enforcement is not implemented and these calls return `UNSUPPORTED`. These locks also leave grant management available, so they do not fence `UpdateGrants`. Front's Redis lock expires and does not fence DFS writes. The importer still needs protection for content, grants and completion markers before activation.
+The [DFS lock API](API.md#exclusive-locks) implements `Lock`, `Unlock` and `Apply.locks`, and the server enforces them on every Apply mutation. These locks leave grant management available, so they do not fence `UpdateGrants`. Front's Redis lock expires and does not fence DFS writes. The importer still needs protection for content, grants and completion markers before activation.
 
 A GCS precondition only protects the read. Without the lock, worker A can fetch version A, stall while worker B copies version B into DFS, then overwrite B with A. Both reads passed their preconditions, and no further event need arrive. A GCS recheck before an unlocked DFS write still leaves this race.
 

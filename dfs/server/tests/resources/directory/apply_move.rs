@@ -1,9 +1,8 @@
+use std::collections::HashMap;
+
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use dfs_api::storage::{
-    receipt::Receipt,
-    resources::{object::locks::LockTokens, session::SessionResource},
-};
+use dfs_api::storage::{receipt::Receipt, resources::session::SessionResource};
 use dfs_protocol::rpc::{GrantUpdate, MoveOperation, operation::Operation};
 
 use super::{
@@ -51,7 +50,7 @@ pub(crate) async fn apply_move_preserves_records_and_updates_versions() -> Resul
             target_id: Some(target.object_id),
             name: "moved".to_owned(),
         },
-        &LockTokens::default(),
+        &HashMap::new(),
     )
     .await?;
     let attr = result.object.context("missing moved file")?;
@@ -148,14 +147,8 @@ pub(crate) async fn apply_moves_in_separate_transactions_conflict_on_ancestry() 
     let (session, first, second) = cycle_fixture().await?;
     let tx = fdb::database()?.create_trx()?;
     let concurrent = fdb::database()?.create_trx()?;
-    DirectoryResource::apply_move(&tx, &session, first, &LockTokens::default()).await?;
-    DirectoryResource::apply_move(
-        &concurrent,
-        &session,
-        second.clone(),
-        &LockTokens::default(),
-    )
-    .await?;
+    DirectoryResource::apply_move(&tx, &session, first, &HashMap::new()).await?;
+    DirectoryResource::apply_move(&concurrent, &session, second.clone(), &HashMap::new()).await?;
     tx.commit().await?;
     let error: foundationdb::FdbError = concurrent
         .commit()
@@ -166,7 +159,7 @@ pub(crate) async fn apply_moves_in_separate_transactions_conflict_on_ancestry() 
     assert_eq!(error.code(), 1020);
     let retry = fdb::database()?.create_trx()?;
     assert!(matches!(
-        DirectoryResource::apply_move(&retry, &session, second, &LockTokens::default()).await,
+        DirectoryResource::apply_move(&retry, &session, second, &HashMap::new()).await,
         Err(storage::Error::Resource(directory::Error::InvalidMove))
     ));
     clear_tenant(&session.tenant).await
@@ -182,7 +175,7 @@ pub(crate) async fn apply_moves_with_disjoint_targets_cannot_create_a_cycle() ->
             Operation::Move(first.clone()),
             Operation::Move(second.clone()),
         ],
-        &LockTokens::default(),
+        &HashMap::new(),
     )
     .await?;
     assert!(results[0].is_ok());
@@ -236,7 +229,7 @@ pub(crate) async fn apply_move_receipt_preserves_per_operation_results() -> Resu
                 let operations = operations.clone();
                 async move {
                     calls.fetch_add(1, Ordering::Relaxed);
-                    ObjectResource::apply(&tx, session, operations, &LockTokens::default())
+                    ObjectResource::apply(&tx, session, operations, &HashMap::new())
                         .await?
                         .into_iter()
                         .collect::<Result<Vec<_>, _>>()
@@ -305,8 +298,7 @@ pub(crate) async fn apply_move_collisions_preserve_destinations_and_concurrent_c
         let tx = fdb::database()?.create_trx()?;
         let before = tenant_records(&tx, tenant).await?;
         assert!(matches!(
-            DirectoryResource::apply_move(&tx, &session, operation.clone(), &LockTokens::default())
-                .await,
+            DirectoryResource::apply_move(&tx, &session, operation.clone(), &HashMap::new()).await,
             Err(storage::Error::Resource(directory::Error::AlreadyExists))
         ));
         assert_eq!(tenant_records(&tx, tenant).await?, before);
@@ -321,8 +313,7 @@ pub(crate) async fn apply_move_collisions_preserve_destinations_and_concurrent_c
                 2
             );
             let tx = fdb::database()?.create_trx()?;
-            let results =
-                ObjectResource::apply(&tx, &session, operations, &LockTokens::default()).await?;
+            let results = ObjectResource::apply(&tx, &session, operations, &HashMap::new()).await?;
             assert!(
                 matches!(results[0], Err(object::Error::Directory(ref error))
                 if matches!(**error, directory::Error::AlreadyExists))
@@ -385,7 +376,7 @@ pub(crate) async fn apply_remove_then_move_serializes_destination_operations() -
         1
     );
     let tx = fdb::database()?.create_trx()?;
-    let results = ObjectResource::apply(&tx, &session, operations, &LockTokens::default()).await?;
+    let results = ObjectResource::apply(&tx, &session, operations, &HashMap::new()).await?;
     assert!(results[0].is_ok());
     assert!(results[1].is_ok());
     assert!(
@@ -458,8 +449,7 @@ pub(crate) async fn apply_move_rejections_leave_no_staged_writes() -> Result<()>
     for subject in ["read-only", "write-only", "no-access"] {
         let denied = SessionResource::new(tenant, vec![subject.to_owned()])?.0;
         assert!(matches!(
-            DirectoryResource::apply_move(&tx, &denied, operation.clone(), &LockTokens::default())
-                .await,
+            DirectoryResource::apply_move(&tx, &denied, operation.clone(), &HashMap::new()).await,
             Err(storage::Error::Resource(directory::Error::Forbidden))
         ));
         assert_eq!(tenant_records(&tx, tenant).await?, before);
@@ -482,7 +472,7 @@ pub(crate) async fn apply_move_rejections_leave_no_staged_writes() -> Result<()>
     }
     for operation in denied_operations {
         assert!(matches!(
-            DirectoryResource::apply_move(&tx, &session, operation, &LockTokens::default()).await,
+            DirectoryResource::apply_move(&tx, &session, operation, &HashMap::new()).await,
             Err(storage::Error::Resource(directory::Error::Forbidden))
         ));
         assert_eq!(tenant_records(&tx, tenant).await?, before);
@@ -549,7 +539,7 @@ pub(crate) async fn apply_move_rejections_leave_no_staged_writes() -> Result<()>
         ),
     ];
     for (operation, expected) in cases {
-        let error = DirectoryResource::apply_move(&tx, &session, operation, &LockTokens::default())
+        let error = DirectoryResource::apply_move(&tx, &session, operation, &HashMap::new())
             .await
             .err()
             .context("expected rejection")?;
@@ -593,7 +583,7 @@ pub(crate) async fn apply_move_rejections_leave_no_staged_writes() -> Result<()>
         },
     ] {
         assert!(matches!(
-            DirectoryResource::apply_move(&tx, &session, operation, &LockTokens::default()).await,
+            DirectoryResource::apply_move(&tx, &session, operation, &HashMap::new()).await,
             Err(storage::Error::Resource(directory::Error::Object(
                 object::Error::NotFound
             )))

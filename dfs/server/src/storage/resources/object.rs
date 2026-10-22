@@ -71,6 +71,7 @@ pub enum Error {
     InvalidGrantLimit,
     InvalidGrantCursor,
     InvalidStoredGrant,
+    InvalidStoredLock,
     InvalidAncestry,
     UnsupportedKind,
     // Boxed because directory and file errors can themselves wrap object errors.
@@ -100,6 +101,7 @@ impl fmt::Display for Error {
             Self::InvalidGrantLimit => f.write_str("invalid grant page limit"),
             Self::InvalidGrantCursor => f.write_str("invalid grant cursor"),
             Self::InvalidStoredGrant => f.write_str("invalid stored grant"),
+            Self::InvalidStoredLock => f.write_str("invalid stored lock"),
             Self::InvalidAncestry => f.write_str("invalid object ancestry"),
             Self::UnsupportedKind => f.write_str("unsupported object kind"),
             Self::Directory(error) => error.fmt(f),

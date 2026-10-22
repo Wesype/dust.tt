@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+
 use anyhow::{Context, Result};
 use dfs_api::storage::{
     self, fdb,
     resources::{
         directory::{self, DirectoryResource},
-        object::{self, ObjectResource, locks::LockTokens},
+        object::{self, ObjectResource},
         session::SessionResource,
     },
 };
@@ -306,7 +308,7 @@ pub(crate) async fn shared_lookup_rechecks_membership_and_accepts_stale_names() 
             target_id: None,
             name: "renamed".into(),
         },
-        &LockTokens::default(),
+        &HashMap::new(),
     )
     .await?;
     tx.commit().await?;

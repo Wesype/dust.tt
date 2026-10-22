@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use anyhow::{Context, Result};
-use dfs_api::storage::resources::{object::locks::LockTokens, session::SessionResource};
+use dfs_api::storage::resources::session::SessionResource;
 use dfs_protocol::rpc::{CreateOperation, GrantUpdate, RemoveOperation};
 
 use super::*;
@@ -60,7 +62,7 @@ pub(crate) async fn apply_create_receipt_preserves_per_operation_results() -> Re
                 let calls = &calls;
                 async move {
                     calls.fetch_add(1, Ordering::Relaxed);
-                    ObjectResource::apply(&tx, session, operations, &LockTokens::default())
+                    ObjectResource::apply(&tx, session, operations, &HashMap::new())
                         .await?
                         .into_iter()
                         .collect::<Result<Vec<_>, _>>()
@@ -129,7 +131,7 @@ pub(crate) async fn apply_create_rejections_leave_no_staged_writes() -> Result<(
     let tenant = &session.tenant;
     let file = create(tenant.root_id, "file", ObjectKind::File);
     let tx = fdb::database()?.create_trx()?;
-    DirectoryResource::apply_create(&tx, &session, file, &LockTokens::default()).await?;
+    DirectoryResource::apply_create(&tx, &session, file, &HashMap::new()).await?;
     tx.commit().await?;
 
     let tx = fdb::database()?.create_trx()?;
@@ -142,7 +144,7 @@ pub(crate) async fn apply_create_rejections_leave_no_staged_writes() -> Result<(
                     &tx,
                     &unauthorized,
                     create(tenant.root_id, "denied", kind),
-                    &LockTokens::default()
+                    &HashMap::new()
                 )
                 .await,
                 Err(storage::Error::Resource(directory::Error::Forbidden))
@@ -165,7 +167,7 @@ pub(crate) async fn apply_create_rejections_leave_no_staged_writes() -> Result<(
             invalid.xattrs.insert(String::new(), vec![]);
         }
         assert!(
-            DirectoryResource::apply_create(&tx, &session, invalid, &LockTokens::default())
+            DirectoryResource::apply_create(&tx, &session, invalid, &HashMap::new())
                 .await
                 .is_err()
         );
@@ -181,8 +183,7 @@ pub(crate) async fn apply_create_conflicts_with_grant_revocation() -> Result<()>
     let tenant = &session.tenant;
     let operation = create(tenant.root_id, "file", ObjectKind::File);
     let tx = fdb::database()?.create_trx()?;
-    DirectoryResource::apply_create(&tx, &session, operation.clone(), &LockTokens::default())
-        .await?;
+    DirectoryResource::apply_create(&tx, &session, operation.clone(), &HashMap::new()).await?;
     let revoke = fdb::database()?.create_trx()?;
     let mut root = ObjectResource::fetch(&revoke, tenant, &tenant.root_id)
         .await?
@@ -200,8 +201,7 @@ pub(crate) async fn apply_create_conflicts_with_grant_revocation() -> Result<()>
     assert_eq!(error.code(), 1020);
     let tx = fdb::database()?.create_trx()?;
     assert!(matches!(
-        DirectoryResource::apply_create(&tx, &session, operation.clone(), &LockTokens::default())
-            .await,
+        DirectoryResource::apply_create(&tx, &session, operation.clone(), &HashMap::new()).await,
         Err(storage::Error::Resource(directory::Error::Forbidden))
     ));
     assert!(
@@ -263,7 +263,7 @@ pub(crate) async fn apply_remove_clears_owned_records_and_updates_parent() -> Re
             object_id: file.object_id,
             kind: ObjectKind::File.into(),
         },
-        &LockTokens::default(),
+        &HashMap::new(),
     )
     .await?;
     assert!(mutation.object.is_none());
@@ -340,8 +340,7 @@ pub(crate) async fn apply_remove_rejections_leave_no_staged_writes() -> Result<(
     for subject in ["no-access", "read-only", "write-only"] {
         let denied = SessionResource::new(tenant, vec![subject.to_owned()])?.0;
         assert!(matches!(
-            DirectoryResource::apply_remove(&tx, &denied, remove.clone(), &LockTokens::default())
-                .await,
+            DirectoryResource::apply_remove(&tx, &denied, remove.clone(), &HashMap::new()).await,
             Err(storage::Error::Resource(directory::Error::Forbidden))
         ));
         assert_eq!(tenant_records(&tx, tenant).await?, before);
@@ -355,7 +354,7 @@ pub(crate) async fn apply_remove_rejections_leave_no_staged_writes() -> Result<(
                     object_id,
                     ..remove.clone()
                 },
-                &LockTokens::default()
+                &HashMap::new()
             )
             .await,
             Err(storage::Error::Resource(directory::Error::Forbidden))
@@ -371,7 +370,7 @@ pub(crate) async fn apply_remove_rejections_leave_no_staged_writes() -> Result<(
                 kind: ObjectKind::Directory.into(),
                 ..remove.clone()
             },
-            &LockTokens::default()
+            &HashMap::new()
         )
         .await,
         Err(storage::Error::Resource(directory::Error::NotEmpty))
@@ -385,7 +384,7 @@ pub(crate) async fn apply_remove_rejections_leave_no_staged_writes() -> Result<(
                 kind: ObjectKind::Directory.into(),
                 ..remove.clone()
             },
-            &LockTokens::default()
+            &HashMap::new()
         )
         .await,
         Err(storage::Error::Resource(directory::Error::InvalidKind))
@@ -402,7 +401,7 @@ pub(crate) async fn apply_remove_rejections_leave_no_staged_writes() -> Result<(
         },
     ] {
         assert!(matches!(
-            DirectoryResource::apply_remove(&tx, &session, operation, &LockTokens::default()).await,
+            DirectoryResource::apply_remove(&tx, &session, operation, &HashMap::new()).await,
             Err(storage::Error::Resource(directory::Error::Object(
                 object::Error::NotFound
             )))
@@ -418,7 +417,7 @@ pub(crate) async fn apply_remove_rejections_leave_no_staged_writes() -> Result<(
                 kind: ObjectKind::Directory.into(),
                 ..remove
             },
-            &LockTokens::default()
+            &HashMap::new()
         )
         .await,
         Err(storage::Error::Resource(directory::Error::Forbidden))
@@ -462,7 +461,7 @@ pub(crate) async fn apply_remove_receipt_preserves_deleted_parent_attributes() -
                 let calls = &calls;
                 async move {
                     calls.fetch_add(1, Ordering::Relaxed);
-                    ObjectResource::apply(&tx, session, operations, &LockTokens::default())
+                    ObjectResource::apply(&tx, session, operations, &HashMap::new())
                         .await?
                         .into_iter()
                         .collect::<Result<Vec<_>, _>>()
@@ -511,8 +510,7 @@ pub(crate) async fn apply_remove_conflicts_with_new_children() -> Result<()> {
     let tenant = &session.tenant;
     let directory = create(tenant.root_id, "directory", ObjectKind::Directory);
     let tx = fdb::database()?.create_trx()?;
-    DirectoryResource::apply_create(&tx, &session, directory.clone(), &LockTokens::default())
-        .await?;
+    DirectoryResource::apply_create(&tx, &session, directory.clone(), &HashMap::new()).await?;
     tx.commit().await?;
 
     let tx = fdb::database()?.create_trx()?;
@@ -524,13 +522,12 @@ pub(crate) async fn apply_remove_conflicts_with_new_children() -> Result<()> {
             object_id: directory.object_id,
             kind: ObjectKind::Directory.into(),
         },
-        &LockTokens::default(),
+        &HashMap::new(),
     )
     .await?;
     let concurrent = fdb::database()?.create_trx()?;
     let child = create(directory.object_id, "child", ObjectKind::File);
-    DirectoryResource::apply_create(&concurrent, &session, child.clone(), &LockTokens::default())
-        .await?;
+    DirectoryResource::apply_create(&concurrent, &session, child.clone(), &HashMap::new()).await?;
     concurrent.commit().await?;
     let error: foundationdb::FdbError =
         tx.commit().await.err().context("expected conflict")?.into();
