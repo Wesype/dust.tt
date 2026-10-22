@@ -374,22 +374,23 @@ export const AdminActionsList = ({
         header: t`Availability`,
         cell: (info: CellContext<RowData, SpaceType[]>) => {
           const globalSpace = info.getValue().find((s) => s.kind === "global");
+          const availability = globalSpace
+            ? t`Workspace`
+            : formatList(
+                info
+                  .getValue()
+                  .filter((s) => s.kind === "regular")
+                  .map((s) => s.name),
+                { type: "conjunction" },
+                getActiveLocale()
+              );
 
           return (
-            <DataTable.CellContent>
-              <div className="flex items-center gap-2">
-                {globalSpace
-                  ? t`Workspace`
-                  : formatList(
-                      info
-                        .getValue()
-                        .filter((s) => s.kind === "regular")
-                        .map((s) => s.name),
-                      { type: "conjunction" },
-                      getActiveLocale()
-                    )}
-              </div>
-            </DataTable.CellContent>
+            <DataTable.BasicCellContent
+              className="max-w-48"
+              label={availability}
+              tooltip={availability}
+            />
           );
         },
         sortingFn: (rowA, rowB) => {

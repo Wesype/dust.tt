@@ -19,6 +19,7 @@ vi.mock("@app/components/navigation/DesktopNavigationContext", () => ({
   useDesktopNavigation: () => ({
     isNavigationBarOpen: true,
     setIsNavigationBarOpen: () => {},
+    setNavigationBarPreference: () => {},
   }),
 }));
 vi.mock("@app/components/navigation/Navigation", () => ({

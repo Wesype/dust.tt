@@ -13,6 +13,10 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#: front/components/sparkle/AppContentLayout.tsx
+msgid "Lock sidebar open"
+msgstr "Seitenleiste geöffnet lassen"
+
 #: front/components/sparkle/ConversationFontContext.tsx
 msgctxt "conversation font"
 msgid "Default"

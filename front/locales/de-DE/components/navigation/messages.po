@@ -109,6 +109,14 @@ msgstr "Das verbleibende Credit-Guthaben Ihres Workspace ist unter den von Ihnen
 msgid "Open navigation"
 msgstr "Navigation öffnen"
 
+#: front/components/navigation/NavigationSidebar.tsx
+msgid "Close navigation"
+msgstr "Navigation schließen"
+
+#: front/components/navigation/NavigationSidebar.tsx
+msgid "Hide sidebar"
+msgstr "Seitenleiste ausblenden"
+
 #: front/components/navigation/TrialBanner.tsx
 msgid "Heads up, your trial has ended"
 msgstr "Achtung, Ihre Testphase ist beendet"

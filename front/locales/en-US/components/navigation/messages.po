@@ -109,6 +109,14 @@ msgstr "Your workspace's remaining credit balance has dropped below the threshol
 msgid "Open navigation"
 msgstr "Open navigation"
 
+#: front/components/navigation/NavigationSidebar.tsx
+msgid "Close navigation"
+msgstr "Close navigation"
+
+#: front/components/navigation/NavigationSidebar.tsx
+msgid "Hide sidebar"
+msgstr "Hide sidebar"
+
 #: front/components/navigation/TrialBanner.tsx
 msgid "Heads up, your trial has ended"
 msgstr "Heads up, your trial has ended"

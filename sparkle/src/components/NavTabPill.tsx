@@ -90,17 +90,12 @@ const NavTabPillTrigger = React.forwardRef<
     };
 
     const triggerClassName = cn(
-      "group flex h-nav-button items-center justify-center whitespace-nowrap rounded-lg pl-2 group-data-[state=active]:pl-2.5 [&:not([data-state=active])]:pr-2 text-sm",
-      "text-muted-foreground",
-      "hover:bg-hover",
-      "font-medium",
-      "bg-transparent",
+      "pill-button touch-hitbox group whitespace-nowrap group-data-[state=active]:pl-2.5 text-sm font-medium",
+      "data-[state=active]:pr-0",
       "data-[state=active]:bg-selected data-[state=active]:text-foreground",
-      "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
       "disabled:pointer-events-none disabled:opacity-100",
       "data-[state=active]:overflow-hidden data-[state=active]:shrink",
       "transition-[padding,background-color,color] duration-200 motion-reduce:transition-none",
-      "touch-hitbox",
       className
     );
 

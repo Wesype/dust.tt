@@ -3,6 +3,7 @@ import {
   getDefaultRightPanelSize,
 } from "@app/components/assistant/conversation/constant";
 import { useConversationSidePanelContext } from "@app/components/assistant/conversation/ConversationSidePanelContext";
+import { SidebarToggleSlotProvider } from "@app/components/navigation/SidebarToggleSlotContext";
 import { useHashParam } from "@app/hooks/useHashParams";
 import { useLockDocumentScroll } from "@app/hooks/useLockDocumentScroll";
 import { useIsMobile } from "@app/lib/swr/useIsMobile";
@@ -70,7 +71,13 @@ export function SidePanelContainer({
       minContentSize={0}
       isResizable={!isFullScreen}
       onCollapse={onPanelClosed}
-      panel={isPanelOpen && panel}
+      panel={
+        isPanelOpen && (
+          <SidebarToggleSlotProvider value={false}>
+            {panel}
+          </SidebarToggleSlotProvider>
+        )
+      }
     >
       <div className="flex h-panel flex-col">{children}</div>
     </ResizableSidePanel>

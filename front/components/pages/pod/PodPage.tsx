@@ -1,3 +1,4 @@
+import { useHasSidebarToggleSlot } from "@app/components/navigation/SidebarToggleSlotContext";
 import { PodFileTabNavTrigger } from "@app/components/pod/PodFileTabNavTrigger";
 import { PodHeaderActions } from "@app/components/pod/PodHeaderActions";
 import { PodNavAddFileTabButton } from "@app/components/pod/PodNavAddFileTabButton";
@@ -89,6 +90,7 @@ export function PodPage() {
     });
 
   const isMobile = useIsMobile();
+  const hasSidebarToggleSlot = useHasSidebarToggleSlot();
 
   const { currentTab, handleTabChange } = usePodTabs({
     podId,
@@ -181,7 +183,8 @@ export function PodPage() {
         <div
           className={classNames(
             "flex h-title shrink-0 items-center justify-between border-b border-separator px-2",
-            isMobile && "pl-12"
+            isMobile && "pl-12",
+            hasSidebarToggleSlot && "pl-sidebar-toggle-slot"
           )}
         >
           <NavTabPillList className="group/pod-tabs">

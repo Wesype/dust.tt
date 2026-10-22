@@ -2,16 +2,20 @@
 
 import { DocumentOrTableDeleteDialog } from "@app/components/data_source/DocumentOrTableDeleteDialog";
 import DataSourceViewDocumentModal from "@app/components/DataSourceViewDocumentModal";
+import { PageLayout } from "@app/components/layouts/PageLayout";
 import type { ContentActionsRef } from "@app/components/spaces/ContentActions";
 import { getMenuItems } from "@app/components/spaces/ContentActions";
 import {
   makeColumnsForSearchResults,
   SORTING_KEYS,
 } from "@app/components/spaces/search/columns";
-import { SearchLocation } from "@app/components/spaces/search/SearchingInSpace";
 import type { SpaceSearchContextType } from "@app/components/spaces/search/SpaceSearchContext";
 import { SpaceSearchContext } from "@app/components/spaces/search/SpaceSearchContext";
-import { SpacePageHeader } from "@app/components/spaces/SpacePageHeaders";
+import {
+  SpacePageActionButtons,
+  SpacePageDescription,
+  SpacePageTitle,
+} from "@app/components/spaces/SpacePageHeaders";
 import { useCursorPaginationForDataTable } from "@app/hooks/useCursorPaginationForDataTable";
 import { useDebounce } from "@app/hooks/useDebounce";
 import { useHashParam } from "@app/hooks/useHashParams";
@@ -71,9 +75,8 @@ interface BaseSpaceSearchInputProps {
   parentId: string | undefined;
   category: DataSourceViewCategory | undefined;
   /**
-   * When set, replaces the default SpacePageHeader (breadcrumbs + action
-   * buttons portal). The custom header must include the action-buttons
-   * container id if action buttons should still portal.
+   * When set, replaces the default SpacePageTitle (breadcrumbs) above the
+   * search input. Action buttons still portal next to the search input.
    */
   header?: React.ReactNode;
   /**
@@ -442,93 +445,96 @@ function BackendSearch({
 
   return (
     <SpaceSearchContext.Provider value={searchContextValue}>
-      <SearchInput
-        name="search"
-        placeholder={getSearchInputPlaceholder(
-          t,
-          space,
-          category,
-          dataSourceView
-        )}
-        value={searchTerm}
-        onChange={handleSearchChange}
-        disabled={isSearchDisabled}
-      />
-
-      <div
-        className={cn(
-          "transition-opacity duration-150",
-          isChanging && "opacity-0"
-        )}
-      >
-        {showSearch ? (
-          <SearchLocation
-            category={category}
-            dataSourceViews={
-              dataSourceView ? [dataSourceView] : targetDataSourceViews
-            }
-            space={space}
+      {header ?? (
+        <SpacePageTitle
+          owner={owner}
+          space={space}
+          category={category}
+          dataSourceView={dataSourceView}
+          parentId={parentId}
+        />
+      )}
+      <PageLayout className="gap-5 sm:pt-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchInput
+            name="search"
+            className="min-w-60 flex-1"
+            placeholder={getSearchInputPlaceholder(
+              t,
+              space,
+              category,
+              dataSourceView
+            )}
+            value={searchTerm}
+            onChange={handleSearchChange}
+            disabled={isSearchDisabled}
           />
-        ) : (
-          (header ?? (
-            <SpacePageHeader
-              owner={owner}
+          <SpacePageActionButtons />
+        </div>
+
+        <div
+          className={cn(
+            "transition-opacity duration-150 empty:hidden",
+            isChanging && "opacity-0"
+          )}
+        >
+          {!showSearch && (
+            <SpacePageDescription
               space={space}
               category={category}
               dataSourceView={dataSourceView}
-              parentId={parentId}
             />
-          ))
-        )}
-      </div>
+          )}
+        </div>
 
-      <div
-        className={cn(
-          "transform transition-all duration-150",
-          isChanging && "translate-y-1 opacity-0"
-        )}
-      >
-        {showSearch ? (
-          <div className="flex w-full flex-col gap-2">
-            <div className="text-end text-sm text-muted-foreground">
-              {t`${plural(searchHitCount, {
-                one: `Showing ${resultsCount} of # result`,
-                other: `Showing ${resultsCount} of # results`,
-              })}`}
+        <div
+          className={cn(
+            "transform transition-all duration-150",
+            isChanging && "translate-y-1 opacity-0"
+          )}
+        >
+          {showSearch ? (
+            <div className="flex w-full flex-col gap-2">
+              <div className="text-end text-sm text-muted-foreground">
+                {t`${plural(searchHitCount, {
+                  one: `Showing ${resultsCount} of # result`,
+                  other: `Showing ${resultsCount} of # results`,
+                })}`}
+              </div>
+              <SearchResultsTable
+                searchResultNodes={searchResults}
+                category={category}
+                isSearchValidating={isSearchValidating}
+                owner={owner}
+                totalNodesCount={searchHitCount}
+                canReadInSpace={canReadInSpace}
+                canWriteInSpace={canWriteInSpace}
+                onLoadMore={handleLoadMore}
+                isLoading={isSearchLoading}
+                onOpenDocument={handleOpenDocument}
+                setEffectiveContentNode={setEffectiveContentNode}
+                onClearSearchState={handleClearSearchState}
+                onNavigateToSearchResult={onNavigateToSearchResult}
+                sorting={sorting}
+                setSorting={handleSortingChange}
+                scrollableDataTableRef={scrollableDataTableRef}
+              />
             </div>
-            <SearchResultsTable
-              searchResultNodes={searchResults}
-              category={category}
-              isSearchValidating={isSearchValidating}
-              owner={owner}
-              totalNodesCount={searchHitCount}
-              canReadInSpace={canReadInSpace}
-              canWriteInSpace={canWriteInSpace}
-              onLoadMore={handleLoadMore}
-              isLoading={isSearchLoading}
-              onOpenDocument={handleOpenDocument}
-              setEffectiveContentNode={setEffectiveContentNode}
-              onClearSearchState={handleClearSearchState}
-              onNavigateToSearchResult={onNavigateToSearchResult}
-              sorting={sorting}
-              setSorting={handleSortingChange}
-              scrollableDataTableRef={scrollableDataTableRef}
-            />
-          </div>
-        ) : (
-          children
-        )}
-      </div>
-      <DataSourceViewDocumentModal
-        owner={owner}
-        dataSourceView={effectiveDataSourceView}
-        onClose={handleCloseModal}
-      />
-      <DocumentOrTableDeleteDialog
-        dataSourceView={effectiveDataSourceView}
-        contentNode={effectiveContentNode}
-        owner={owner}
-      />
+          ) : (
+            children
+          )}
+        </div>
+        <DataSourceViewDocumentModal
+          owner={owner}
+          dataSourceView={effectiveDataSourceView}
+          onClose={handleCloseModal}
+        />
+        <DocumentOrTableDeleteDialog
+          dataSourceView={effectiveDataSourceView}
+          contentNode={effectiveContentNode}
+          owner={owner}
+        />
+      </PageLayout>
     </SpaceSearchContext.Provider>
   );
 }
@@ -576,31 +582,40 @@ function FrontendSearch({
 
   return (
     <SpaceSearchContext.Provider value={providerValue}>
-      <SearchInput
-        name="search"
-        placeholder={getSearchInputPlaceholder(
-          t,
-          space,
-          category,
-          dataSourceView
-        )}
-        value={searchTerm}
-        onChange={handleSearchChange}
-        disabled={isSearchDisabled}
-      />
-      <div className="flex w-full justify-between gap-2">
-        {header ?? (
-          <SpacePageHeader
-            owner={owner}
-            space={space}
-            category={category}
-            dataSourceView={dataSourceView}
-            parentId={parentId}
+      {header ?? (
+        <SpacePageTitle
+          owner={owner}
+          space={space}
+          category={category}
+          dataSourceView={dataSourceView}
+          parentId={parentId}
+        />
+      )}
+      <PageLayout className="gap-5 sm:pt-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchInput
+            name="search"
+            className="min-w-60 flex-1"
+            placeholder={getSearchInputPlaceholder(
+              t,
+              space,
+              category,
+              dataSourceView
+            )}
+            value={searchTerm}
+            onChange={handleSearchChange}
+            disabled={isSearchDisabled}
           />
-        )}
-      </div>
+          <SpacePageActionButtons />
+        </div>
+        <SpacePageDescription
+          space={space}
+          category={category}
+          dataSourceView={dataSourceView}
+        />
 
-      {children}
+        {children}
+      </PageLayout>
     </SpaceSearchContext.Provider>
   );
 }

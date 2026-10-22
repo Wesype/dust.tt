@@ -258,6 +258,8 @@ export { Page } from "./Page";
 export { PaginatedCitationsGrid } from "./PaginatedCitationsGrid";
 export { Pagination } from "./Pagination";
 export { ColorPicker, IconPicker } from "./Picker";
+export type { PillButtonProps } from "./PillButton";
+export { PillButton } from "./PillButton";
 export {
   AnchoredPopover,
   Popover,

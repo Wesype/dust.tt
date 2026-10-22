@@ -21,6 +21,20 @@
   min-height: var(--panel-height);
 }
 
+@theme {
+  --spacing-sidebar: 20rem;
+  --spacing-sidebar-toggle-slot: 3rem;
+}
+
+@utility sidebar-motion-* {
+  transition-property: --value([*]);
+  transition-duration: 200ms;
+  transition-timing-function: var(--ease-out-quint);
+  @media (prefers-reduced-motion: reduce) {
+    transition-property: none;
+  }
+}
+
 /* The expanded input bar paints its own surface color rather than one of the
    shared background tokens (see InputBar.tsx). Defined here, in the one entry
    every app's Tailwind pass imports, so the value lives in a single place and

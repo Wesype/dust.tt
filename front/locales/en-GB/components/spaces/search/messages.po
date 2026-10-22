@@ -13,10 +13,6 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#: front/components/spaces/search/SearchingInSpace.tsx
-msgid "Searching in <0>\"{searchingIn}\"</0>"
-msgstr ""
-
 #: front/components/spaces/search/columns.tsx
 msgid "Name"
 msgstr ""

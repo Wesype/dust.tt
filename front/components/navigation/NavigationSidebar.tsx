@@ -9,7 +9,9 @@ import {
 import { useDesktopNavigation } from "@app/components/navigation/DesktopNavigationContext";
 import { SidebarUserMenu } from "@app/components/navigation/SidebarUserMenu";
 import { SidebarContext } from "@app/components/sparkle/SidebarContext";
+import { useKeyboardShortcutLabel } from "@app/hooks/useKeyboardShortcutLabel";
 import { useAuth, useFeatureFlags } from "@app/lib/auth/AuthContext";
+import { APP_KEYBOARD_SHORTCUTS } from "@app/lib/keyboard_shortcuts";
 import { FREE_TRIAL_PHONE_PLAN_CODE } from "@app/lib/plans/plan_codes";
 import { useAppRouter } from "@app/lib/platform";
 import { useWorkspacePermissions } from "@app/lib/swr/permissions";
@@ -18,12 +20,12 @@ import type { SubscriptionType } from "@app/types/plan";
 import type { UserTypeWithWorkspaces, WorkspaceType } from "@app/types/user";
 import { isAdmin } from "@app/types/user";
 import {
-  CollapseButton,
   cn,
   LayoutLeft,
   NavigationList,
   NavigationListCompactLabel,
   NavigationListItem,
+  PillButton,
   NavTabPill,
   NavTabPillContent,
   NavTabPillList,
@@ -31,7 +33,7 @@ import {
   XClose,
 } from "@dust-tt/sparkle";
 import { useLingui } from "@lingui/react/macro";
-import React, { useCallback, useContext, useMemo } from "react";
+import React, { useContext, useMemo } from "react";
 
 interface NavigationSidebarProps {
   children: React.ReactNode;
@@ -100,12 +102,17 @@ export const NavigationSidebar = React.forwardRef<
   );
 
   const { setSidebarOpen } = useContext(SidebarContext);
-  const { setIsNavigationBarOpen } = useDesktopNavigation();
+  const { isNavigationBarOpen, setNavigationBarPreference } =
+    useDesktopNavigation();
+
+  const toggleSidebarShortcut = useKeyboardShortcutLabel(
+    APP_KEYBOARD_SHORTCUTS.toggleNavigationBar
+  );
 
   const isAdminTab = currentTab?.id === "settings";
 
   return (
-    <div ref={ref} className="flex min-w-0 grow flex-col pt-2">
+    <div ref={ref} className="flex min-w-0 grow flex-col pt-4">
       <div className={cn("flex flex-col gap-3")}>
         {navs.length > 1 && (
           <NavTabPill value={currentTab?.id ?? "conversations"}>
@@ -124,17 +131,20 @@ export const NavigationSidebar = React.forwardRef<
               ))}
               <div className="flex flex-grow justify-end">
                 {isMobile ? (
-                  <NavTabPillTrigger
-                    value="close-icon"
+                  <PillButton
                     icon={XClose}
+                    label={t`Close navigation`}
                     onClick={() => setSidebarOpen(false)}
                   />
                 ) : (
-                  <NavTabPillTrigger
-                    icon={LayoutLeft}
-                    value="close-icon"
-                    onClick={() => setIsNavigationBarOpen(false)}
-                  />
+                  isNavigationBarOpen && (
+                    <PillButton
+                      icon={LayoutLeft}
+                      label={t`Hide sidebar`}
+                      onClick={() => setNavigationBarPreference(false)}
+                      tooltipShortcut={toggleSidebarShortcut}
+                    />
+                  )
                 )}
               </div>
             </NavTabPillList>
@@ -199,41 +209,6 @@ export const NavigationSidebar = React.forwardRef<
           isFairUseAwuLimitDisabled={hasFeature("disable_fair_use_awu_limit")}
         />
       )}
-    </div>
-  );
-});
-
-interface ToggleNavigationSidebarButtonProps {
-  isNavigationBarOpened: boolean;
-  isFullScreen: boolean;
-  toggleNavigationBarVisibility: (isOpened: boolean) => void;
-}
-
-export const ToggleNavigationSidebarButton = React.forwardRef<
-  HTMLDivElement,
-  ToggleNavigationSidebarButtonProps
->(function ToggleSideBarButton(
-  {
-    isNavigationBarOpened,
-    isFullScreen,
-    toggleNavigationBarVisibility,
-  }: ToggleNavigationSidebarButtonProps,
-  ref
-) {
-  const handleClick = useCallback(() => {
-    toggleNavigationBarVisibility(!isNavigationBarOpened);
-  }, [isNavigationBarOpened, toggleNavigationBarVisibility]);
-
-  if (isNavigationBarOpened || isFullScreen) {
-    return null;
-  }
-
-  return (
-    <div ref={ref} onClick={handleClick} className="lg:top-1/2 lg:flex lg:w-5">
-      <CollapseButton
-        direction={isNavigationBarOpened ? "left" : "right"}
-        variant="light"
-      />
     </div>
   );
 });

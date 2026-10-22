@@ -109,6 +109,14 @@ msgstr ""
 msgid "Open navigation"
 msgstr ""
 
+#: front/components/navigation/NavigationSidebar.tsx
+msgid "Close navigation"
+msgstr ""
+
+#: front/components/navigation/NavigationSidebar.tsx
+msgid "Hide sidebar"
+msgstr ""
+
 #: front/components/navigation/TrialBanner.tsx
 msgid "Heads up, your trial has ended"
 msgstr ""

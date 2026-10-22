@@ -63,6 +63,9 @@
           if (isDark) {
             document.documentElement.classList.add("dark");
           }
+          if (localStorage.getItem("navigationBarCollapsed") === "true") {
+            document.documentElement.classList.add("loading-nav-collapsed");
+          }
         } catch (e) {}
       })();
     </script>
@@ -109,6 +112,13 @@
 
         #loading-sidebar {
           display: block;
+        }
+
+        .loading-nav-collapsed #loading-sidebar {
+          display: none;
+        }
+        .loading-nav-collapsed #loading-main {
+          margin-inline-start: 0.5rem;
         }
       }
 

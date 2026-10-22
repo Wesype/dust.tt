@@ -1,9 +1,6 @@
 import { CreateOrEditSpaceModal } from "@app/components/spaces/CreateOrEditSpaceModal";
 import SpaceSideBarMenu from "@app/components/spaces/SpaceSideBarMenu";
-import {
-  useSetContentWidth,
-  useSetNavChildren,
-} from "@app/components/sparkle/AppLayoutContext";
+import { useSetNavChildren } from "@app/components/sparkle/AppLayoutContext";
 import { useAuth, useWorkspace } from "@app/lib/auth/AuthContext";
 import { isEnterprisePlanPrefix } from "@app/lib/plans/plan_codes";
 import { useAppRouter, usePathParams } from "@app/lib/platform";
@@ -84,23 +81,22 @@ export function SpaceLayout({ children }: SpaceLayoutProps) {
     [owner, isAdmin, openSpaceCreationModal]
   );
 
-  useSetContentWidth("wide");
   useSetNavChildren(navChildren);
 
   return (
     <>
       {isSpaceInfoLoading || !space ? (
-        <div className="flex h-full items-center justify-center">
+        <div className="flex flex-1 items-center justify-center">
           <Spinner />
         </div>
       ) : (
-        <div className="flex w-full flex-col mb-4">
+        <div className="flex w-full flex-col pt-2 mb-4">
           <Page.Vertical gap="lg" align="stretch">
             {
               // Message to admins that are not members of the space.
               // No need to show it for system space since it's a no-member space.
               !canReadInSpace && space.kind !== "system" && (
-                <div>
+                <div className="px-4">
                   <Chip
                     color="warning"
                     label={t`You are not a member of this space.`}

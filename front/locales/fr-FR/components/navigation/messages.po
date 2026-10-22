@@ -109,6 +109,14 @@ msgstr "Le solde de crédits de votre workspace est passé sous le seuil que vou
 msgid "Open navigation"
 msgstr "Ouvrir la navigation"
 
+#: front/components/navigation/NavigationSidebar.tsx
+msgid "Close navigation"
+msgstr "Fermer la navigation"
+
+#: front/components/navigation/NavigationSidebar.tsx
+msgid "Hide sidebar"
+msgstr "Masquer la barre latérale"
+
 #: front/components/navigation/TrialBanner.tsx
 msgid "Heads up, your trial has ended"
 msgstr "Attention, votre essai est terminé"

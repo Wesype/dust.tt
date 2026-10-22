@@ -1,5 +1,9 @@
 import { useCommandPalette } from "@app/components/command_palette/CommandPaletteContext";
 import { useDesktopNavigation } from "@app/components/navigation/DesktopNavigationContext";
+import {
+  APP_KEYBOARD_SHORTCUTS,
+  matchesKeyboardShortcut,
+} from "@app/lib/keyboard_shortcuts";
 import { useAppRouter } from "@app/lib/platform";
 import { isEditableTarget } from "@app/lib/utils/dom";
 import { getConversationRoute } from "@app/lib/utils/router";
@@ -20,14 +24,12 @@ export function useAppKeyboardShortcuts(owner: LightWorkspaceType) {
     }
 
     function handleKeyboardShortcuts(event: KeyboardEvent) {
-      const isModifier = event.metaKey || event.ctrlKey;
-
       // Bare "c" → new conversation (Linear/Gmail-style). Skip while typing.
       if (
-        !isModifier &&
-        !event.altKey &&
-        !event.shiftKey &&
-        event.key.toLowerCase() === "c" &&
+        matchesKeyboardShortcut(
+          event,
+          APP_KEYBOARD_SHORTCUTS.newConversation
+        ) &&
         !isEditableTarget(event.target)
       ) {
         event.preventDefault();
@@ -35,33 +37,39 @@ export function useAppKeyboardShortcuts(owner: LightWorkspaceType) {
         return;
       }
 
-      if (!isModifier) {
+      // Mod+B is bold in text editors, so only the legacy binding works there.
+      if (
+        (matchesKeyboardShortcut(
+          event,
+          APP_KEYBOARD_SHORTCUTS.toggleNavigationBar
+        ) &&
+          !isEditableTarget(event.target)) ||
+        matchesKeyboardShortcut(
+          event,
+          APP_KEYBOARD_SHORTCUTS.toggleNavigationBarLegacy
+        )
+      ) {
+        event.preventDefault();
+        toggleNavigationBar();
+        return;
+      }
+
+      if (
+        matchesKeyboardShortcut(
+          event,
+          APP_KEYBOARD_SHORTCUTS.openCommandPalette
+        )
+      ) {
+        event.preventDefault();
+        openCommandPalette();
         return;
       }
 
       // Legacy Mod+/: match produced "/" so AZERTY (Shift+:) still works.
       // Not shown in the UI — browsers like Firefox may still steal this combo.
-      if (event.key === "/") {
+      if ((event.metaKey || event.ctrlKey) && event.key === "/") {
         event.preventDefault();
         openNewConversation();
-        return;
-      }
-
-      if (event.shiftKey) {
-        switch (event.key.toLowerCase()) {
-          case "b":
-            event.preventDefault();
-            toggleNavigationBar();
-            break;
-        }
-        return;
-      }
-
-      switch (event.key.toLowerCase()) {
-        case "k":
-          event.preventDefault();
-          openCommandPalette();
-          break;
       }
     }
 
