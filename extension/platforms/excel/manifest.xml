@@ -12,6 +12,7 @@
   <Description DefaultValue="Dust in Excel."/>
   <IconUrl DefaultValue="https://dust.tt/static/favicon.png"/>
   <HighResolutionIconUrl DefaultValue="https://dust.tt/static/favicon@2x.png"/>
+  <SupportUrl DefaultValue="https://dust.tt/home/support"/>
   <Hosts>
     <Host Name="Workbook"/>
   </Hosts>
