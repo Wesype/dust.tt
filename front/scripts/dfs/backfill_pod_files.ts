@@ -1,10 +1,10 @@
 import { importGcsPodFile } from "@app/lib/api/dfs/gcs_import/pod";
 import { Authenticator } from "@app/lib/auth";
 import { SpaceResource } from "@app/lib/resources/space_resource";
-import type { UserResource } from "@app/lib/resources/user_resource";
 import type { Logger } from "@app/logger/logger";
 import type { DfsBackfillCounts } from "@app/scripts/dfs/backfill_helpers";
 import {
+  getFirstEditor,
   listGcsReplicationSources,
   listGcsResourceIds,
   withGcsImportContext,
@@ -15,16 +15,6 @@ import { Ok } from "@app/types/shared/result";
 import type { LightWorkspaceType } from "@app/types/user";
 
 const CONCURRENCY_DEFAULT = 4;
-
-// The default owner of the pod folder in `getOrCreatePodFolder`. As an editor, they can write the
-// pod and its dfs folder.
-async function getFirstEditor(
-  auth: Authenticator,
-  pod: SpaceResource
-): Promise<UserResource | null> {
-  const editors = await pod.fetchActiveEditorUsers(auth);
-  return editors.sort((a, b) => a.id - b.id)[0] ?? null;
-}
 
 // `pod` is null when no pod of the workspace has the ID of this GCS folder.
 async function backfillPodFiles(

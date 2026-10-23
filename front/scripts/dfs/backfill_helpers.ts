@@ -6,6 +6,8 @@ import { createDfsSession } from "@app/lib/api/dfs/sessions";
 import type { Authenticator } from "@app/lib/auth";
 import type { DfsClient } from "@app/lib/dfs/client";
 import { getPrivateUploadBucket } from "@app/lib/file_storage";
+import type { SpaceResource } from "@app/lib/resources/space_resource";
+import type { UserResource } from "@app/lib/resources/user_resource";
 import logger from "@app/logger/logger";
 import { getBaseMountPathForWorkspace } from "@app/types/mount_path";
 import type { Result } from "@app/types/shared/result";
@@ -59,10 +61,23 @@ export async function withGcsImportContext<T>(
   );
 }
 
-/** The IDs of the pods or users that have a folder in GCS (`w/<workspaceId>/<namespace>/<id>/`). */
+// The default owner of the pod folder in `getOrCreatePodFolder`. As an editor, they can write the
+// pod and its dfs folder.
+export async function getFirstEditor(
+  auth: Authenticator,
+  pod: SpaceResource
+): Promise<UserResource | null> {
+  const editors = await pod.fetchActiveEditorUsers(auth);
+  return editors.sort((a, b) => a.id - b.id)[0] ?? null;
+}
+
+/**
+ * The IDs of the pods, users or conversations that have a folder in GCS
+ * (`w/<workspaceId>/<namespace>/<id>/`).
+ */
 export async function listGcsResourceIds(
   workspaceId: string,
-  namespace: "pods" | "users"
+  namespace: "pods" | "users" | "conversations"
 ): Promise<string[]> {
   return getPrivateUploadBucket().listSubdirectoryNames({
     prefix: `${getBaseMountPathForWorkspace({ workspaceId })}${namespace}/`,
@@ -70,12 +85,12 @@ export async function listGcsResourceIds(
 }
 
 /**
- * The objects under the `files/` folder of a pod or user in GCS, without the ones the importers
- * ignore (directory markers).
+ * The objects under the `files/` folder of a pod, user or conversation in GCS, without the ones the
+ * importers ignore (directory markers).
  */
 export async function listGcsReplicationSources(
   workspaceId: string,
-  namespace: "pods" | "users",
+  namespace: "pods" | "users" | "conversations",
   resourceId: string
 ): Promise<GcsReplicationSource[]> {
   const bucket = getPrivateUploadBucket();
