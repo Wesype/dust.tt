@@ -1,4 +1,10 @@
+import { amountCents, currencyToAwuCredits } from "@app/lib/metronome/amounts";
 import type { MetronomePackageSummary } from "@app/lib/metronome/client";
+import {
+  addDuration,
+  commitmentAmount,
+  commitmentPeriodEnd,
+} from "@app/lib/metronome/seat_commitment";
 import {
   CREDIT_PRICED_ENTERPRISE_DEFAULT_PLAN_CODE,
   CREDIT_PRICED_ENTERPRISE_PILOT_PLAN_CODE,
@@ -8,7 +14,12 @@ import {
   CP_MAX_SEAT_COST_YEARLY,
   CP_PRO_SEAT_COST_YEARLY,
 } from "@app/lib/plans/pricing";
+import type { SupportedCurrency } from "@app/types/currency";
 import type { MembershipSeatType } from "@app/types/memberships";
+import type { SwitchContractBodySchema } from "@app/types/poke/switch_contract";
+import type { Result } from "@app/types/shared/result";
+import { Err, Ok } from "@app/types/shared/result";
+import type { z } from "zod";
 
 // Hardcoded pre-fill templates for the Switch Contract poke dialog. Selecting a
 // template fills the form with these values; the operator can then edit any
@@ -74,6 +85,9 @@ export type SwitchContractTemplate = {
   usageCapCredits?: number;
   // Default per-user workspace credit pool monthly limit (credits).
   defaultPoolCapCredits?: number;
+  // Workspace monthly cap on programmatic (API) usage (credits). 0 or unset
+  // blocks programmatic access.
+  programmaticMonthlyCapCredits?: number;
   paygEnabled?: boolean;
   autoSeatUpgradeEnabled?: boolean;
   topUpEnabled?: boolean;
@@ -97,6 +111,17 @@ export type SwitchContractTemplate = {
   // for it (the granted seats are unchanged).
   offerFreePeriod?: { value: number; unit: ContractDurationUnit };
 };
+
+export const FREE_PILOT_TEMPLATE_ID = "enterprise-free-pilot-2w";
+export const PAID_PILOT_TEMPLATE_ID = "enterprise-pilot-2m";
+// Minimum programmatic (API) monthly cap of a workspace created from a template
+// by the "Create Workspace from Template" poke plugin, and the free pilot's
+// default.
+export const MIN_PROGRAMMATIC_MONTHLY_CAP_DOLLARS = 50;
+export const MIN_PROGRAMMATIC_MONTHLY_CAP_CREDITS = currencyToAwuCredits(
+  MIN_PROGRAMMATIC_MONTHLY_CAP_DOLLARS,
+  "usd"
+);
 
 export const SWITCH_CONTRACT_TEMPLATES: SwitchContractTemplate[] = [
   {
@@ -181,7 +206,7 @@ export const SWITCH_CONTRACT_TEMPLATES: SwitchContractTemplate[] = [
     },
   },
   {
-    id: "enterprise-free-pilot-2w",
+    id: FREE_PILOT_TEMPLATE_ID,
     name: "Free pilot — 2 weeks",
     description:
       "Enterprise pooled, 2-week commitment, free workspace seats, 10k free credits per committed seat.",
@@ -195,6 +220,7 @@ export const SWITCH_CONTRACT_TEMPLATES: SwitchContractTemplate[] = [
     stripeCollectionMethod: "send_invoice",
     duration: { value: 2, unit: "weeks" },
     defaultPoolCapCredits: 10000,
+    programmaticMonthlyCapCredits: MIN_PROGRAMMATIC_MONTHLY_CAP_CREDITS,
     seats: {
       workspace_yearly: { selected: true, rate: 0 },
     },
@@ -206,7 +232,7 @@ export const SWITCH_CONTRACT_TEMPLATES: SwitchContractTemplate[] = [
     },
   },
   {
-    id: "enterprise-pilot-2m",
+    id: PAID_PILOT_TEMPLATE_ID,
     name: "Paid pilot",
     description:
       "Enterprise pooled, 2-month commitment, workspace seats at 600/year, first 2 weeks free, 10k initial credits per committed seat.",
@@ -255,3 +281,226 @@ export const SWITCH_CONTRACT_TEMPLATES: SwitchContractTemplate[] = [
     defaultPoolCapCredits: 10000,
   },
 ];
+
+export type TemplateSeatValue = {
+  selected: boolean;
+  minSeats: number;
+  maxSeats?: number;
+  rate: number;
+  commitmentPrice?: number;
+  paymentSchedule: TemplatePaymentSchedule;
+};
+
+// Default seat settings for a package: entitled seats pre-selected, the rest
+// unchecked for the operator to opt into; minSeats 0 and the rate converted from
+// Metronome's fiat unit to major units (dollars / euros).
+export function buildDefaultSeats(
+  seats: { seatType: string; defaultRate: number | null; entitled: boolean }[],
+  resolvedCurrency: SupportedCurrency | null | undefined
+): Record<string, TemplateSeatValue> {
+  const next: Record<string, TemplateSeatValue> = {};
+  for (const seat of seats) {
+    const rate =
+      seat.defaultRate != null && resolvedCurrency
+        ? amountCents(seat.defaultRate, resolvedCurrency) / 100
+        : (seat.defaultRate ?? 0);
+    next[seat.seatType] = {
+      selected: seat.entitled,
+      minSeats: 0,
+      maxSeats: undefined,
+      rate,
+      paymentSchedule: { frequency: "one_time" },
+    };
+  }
+  return next;
+}
+
+// Merge a template's per-seat overrides onto a package's default seats. Seat
+// types the package does not sell have no entry to merge onto and are skipped.
+export function mergeTemplateSeats(
+  base: Record<string, TemplateSeatValue>,
+  templateSeats: SwitchContractTemplate["seats"]
+): Record<string, TemplateSeatValue> {
+  if (!templateSeats) {
+    return base;
+  }
+  const next = { ...base };
+  for (const [seatType, override] of Object.entries(templateSeats)) {
+    if (!override || !next[seatType]) {
+      continue;
+    }
+    next[seatType] = { ...next[seatType], ...override };
+  }
+  return next;
+}
+
+// Resolve a template's contract type to a concrete package in the given
+// currency: same tier and, when given, a case-insensitive name-substring match
+// and billing anchor.
+export function findTemplatePackage(
+  template: SwitchContractTemplate,
+  packages: MetronomePackageSummary[],
+  currency: SupportedCurrency | null | undefined
+): MetronomePackageSummary | null {
+  const templatePackage = template.package;
+  if (!templatePackage) {
+    return null;
+  }
+  const pattern = templatePackage.namePattern?.toLowerCase();
+  return (
+    packages.find(
+      (p) =>
+        p.tier === templatePackage.tier &&
+        p.currency === currency &&
+        (!pattern || p.name.toLowerCase().includes(pattern)) &&
+        (!templatePackage.billingAnchor ||
+          p.billingAnchor === templatePackage.billingAnchor)
+    ) ?? null
+  );
+}
+
+/**
+ * @cc [owner:thomasvicaire,label:product] immediate-start-with-template-duration
+ * The returned body MUST leave `startingAt` unset (the contract starts at the
+ * current hour, whatever the template's `startMode`) and, when a `duration` is
+ * given (falling back to the template's), MUST set `endingAt` to the current UTC
+ * hour floored plus that duration. Fails when that duration value is not a
+ * positive integer. `programmaticMonthlyCapCredits`, when given, overrides the
+ * template's.
+ */
+/**
+ * @cc [owner:thomasvicaire,label:product] committed-seats-commitment-and-cap
+ * Every seat the template marks `selected: true` MUST get `minSeats` and
+ * `maxSeats` equal to `committedSeats`; every other package seat MUST get
+ * `minSeats` 0 and no cap, whatever the template sets. Fails when the template
+ * has no package or selects no seat type, no package matches `currency`, that
+ * package does not sell every selected seat type, or `committedSeats` is not a
+ * positive integer.
+ */
+export function buildSwitchContractBodyFromTemplate({
+  template,
+  packages,
+  currency,
+  committedSeats,
+  duration = template.duration,
+  programmaticMonthlyCapCredits = template.programmaticMonthlyCapCredits,
+  now,
+}: {
+  template: SwitchContractTemplate;
+  packages: MetronomePackageSummary[];
+  currency: SupportedCurrency;
+  committedSeats: number;
+  duration?: { value: number; unit: ContractDurationUnit };
+  programmaticMonthlyCapCredits?: number;
+  now: Date;
+}): Result<z.input<typeof SwitchContractBodySchema>, Error> {
+  if (!Number.isInteger(committedSeats) || committedSeats < 1) {
+    return new Err(
+      new Error("The number of seats must be a positive integer.")
+    );
+  }
+  if (duration && (!Number.isInteger(duration.value) || duration.value < 1)) {
+    return new Err(
+      new Error("The contract duration must be a positive integer.")
+    );
+  }
+  if (!template.planCode) {
+    return new Err(new Error(`Template "${template.name}" has no plan code.`));
+  }
+  const pkg = findTemplatePackage(template, packages, currency);
+  if (!pkg) {
+    return new Err(
+      new Error(
+        `Template "${template.name}": no ${template.package?.tier ?? ""} package` +
+          (template.package?.namePattern
+            ? ` matching "${template.package.namePattern}"`
+            : "") +
+          ` found for ${currency.toUpperCase()}.`
+      )
+    );
+  }
+
+  const start = new Date(now);
+  start.setUTCMinutes(0, 0, 0);
+  const endingAt = duration
+    ? addDuration(start, duration.value, duration.unit)
+    : undefined;
+  const commitmentEnd = commitmentPeriodEnd(start, endingAt);
+
+  const selectedSeatTypes = new Set(
+    Object.entries(template.seats ?? {})
+      .filter(([, seat]) => seat?.selected)
+      .map(([seatType]) => seatType)
+  );
+  if (selectedSeatTypes.size === 0) {
+    return new Err(
+      new Error(`Template "${template.name}" selects no seat type.`)
+    );
+  }
+  const missingSeatTypes = [...selectedSeatTypes].filter(
+    (seatType) => !pkg.seats.some((s) => s.seatType === seatType)
+  );
+  if (missingSeatTypes.length > 0) {
+    return new Err(
+      new Error(
+        `Package "${pkg.name}" does not sell the seat types selected by template ` +
+          `"${template.name}": ${missingSeatTypes.join(", ")}.`
+      )
+    );
+  }
+
+  const mergedSeats = mergeTemplateSeats(
+    buildDefaultSeats(pkg.seats, currency),
+    template.seats
+  );
+  const seats: Record<string, TemplateSeatValue> = {};
+  for (const [seatType, seat] of Object.entries(mergedSeats)) {
+    if (!selectedSeatTypes.has(seatType)) {
+      seats[seatType] = { ...seat, minSeats: 0, maxSeats: undefined };
+      continue;
+    }
+    // Same default as the Switch Contract dialog: a paid seat commitment is
+    // invoiced at its prorated value over the commitment period.
+    const commitmentPriceCurrencyUnits =
+      seat.commitmentPrice ??
+      (seat.rate > 0
+        ? Math.round(
+            commitmentAmount({
+              minSeats: committedSeats,
+              ratePerPeriod: seat.rate,
+              isAnnual: seatType.endsWith("_yearly"),
+              start,
+              end: commitmentEnd,
+            }) * 100
+          ) / 100
+        : undefined);
+    seats[seatType] = {
+      ...seat,
+      minSeats: committedSeats,
+      maxSeats: committedSeats,
+      commitmentPrice: commitmentPriceCurrencyUnits,
+    };
+  }
+
+  return new Ok({
+    planCode: template.planCode,
+    metronomePackageId: pkg.id,
+    endingAt: endingAt?.toISOString(),
+    netPaymentTermsDays: template.netPaymentTermsDays,
+    stripeCollectionMethod: template.stripeCollectionMethod,
+    paygEnabled: template.paygEnabled,
+    usageCapCredits: template.usageCapCredits,
+    initialCredits: template.initialCredits,
+    scheduledCharge: template.scheduledCharge,
+    recurringFreeCredit: template.recurringFreeCredit,
+    promoteNoneSeatsTo: template.promoteNoneSeatsTo,
+    seats,
+    defaultDiscountPercent: template.defaultDiscountPercent,
+    defaultPoolCapCredits: template.defaultPoolCapCredits,
+    programmaticMonthlyCapCredits,
+    autoSeatUpgradeEnabled: template.autoSeatUpgradeEnabled,
+    topUpEnabled: template.topUpEnabled,
+    autoInvoiceFinalizationEnabled: template.autoInvoiceFinalizationEnabled,
+    offerFreePeriod: template.offerFreePeriod,
+  });
+}

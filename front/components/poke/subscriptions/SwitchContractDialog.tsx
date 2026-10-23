@@ -5,7 +5,6 @@ import {
 } from "@app/components/poke/shadcn/ui/form/fields";
 import { clientFetch } from "@app/lib/egress/client";
 import { formatDateTime, formatNumber } from "@app/lib/i18n/format";
-import { amountCents } from "@app/lib/metronome/amounts";
 import {
   commitmentAmount,
   commitmentMonths,
@@ -24,14 +23,18 @@ import type {
   ContractDurationUnit,
   SwitchContractTemplate,
 } from "@app/lib/poke/switch_contract_templates";
-import { SWITCH_CONTRACT_TEMPLATES } from "@app/lib/poke/switch_contract_templates";
+import {
+  buildDefaultSeats,
+  findTemplatePackage,
+  mergeTemplateSeats,
+  SWITCH_CONTRACT_TEMPLATES,
+} from "@app/lib/poke/switch_contract_templates";
 import {
   usePokeMetronomePackages,
   usePokePlans,
   usePokeStripeCustomerCurrency,
 } from "@app/lib/swr/poke";
 import { usePokePluginAsyncArgs } from "@app/poke/swr/plugins";
-import type { SupportedCurrency } from "@app/types/currency";
 import { SUPPORTED_CURRENCIES } from "@app/types/currency";
 import { BILLABLE_SEAT_TYPES } from "@app/types/memberships";
 import { isCreditPricedPlan } from "@app/types/plan";
@@ -149,67 +152,6 @@ function toDatetimeLocalUTC(d: Date): string {
     `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}` +
     `T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
   );
-}
-
-type SeatFormValue = {
-  selected: boolean;
-  minSeats: number;
-  maxSeats?: number;
-  rate: number;
-  commitmentPrice?: number;
-  paymentSchedule: {
-    frequency:
-      | "one_time"
-      | "monthly"
-      | "quarterly"
-      | "semi_annually"
-      | "annually";
-    periods?: number;
-  };
-};
-
-// Default seat settings for a package: entitled seats pre-selected, the rest
-// unchecked for the operator to opt into; minSeats 0 and the rate converted from
-// Metronome's fiat unit to the dialog's major units. Shared by the seat-reset
-// effect and template application so they can't drift.
-function buildDefaultSeats(
-  seats: { seatType: string; defaultRate: number | null; entitled: boolean }[],
-  resolvedCurrency: SupportedCurrency | null | undefined
-): Record<string, SeatFormValue> {
-  const next: Record<string, SeatFormValue> = {};
-  for (const seat of seats) {
-    const rate =
-      seat.defaultRate != null && resolvedCurrency
-        ? amountCents(seat.defaultRate, resolvedCurrency) / 100
-        : (seat.defaultRate ?? 0);
-    next[seat.seatType] = {
-      selected: seat.entitled,
-      minSeats: 0,
-      maxSeats: undefined,
-      rate,
-      paymentSchedule: { frequency: "one_time" },
-    };
-  }
-  return next;
-}
-
-// Merge a template's per-seat overrides onto a package's default seats. Seat
-// types the package does not sell have no entry to merge onto and are skipped.
-function mergeTemplateSeats(
-  base: Record<string, SeatFormValue>,
-  templateSeats: SwitchContractTemplate["seats"]
-): Record<string, SeatFormValue> {
-  if (!templateSeats) {
-    return base;
-  }
-  const next = { ...base };
-  for (const [seatType, override] of Object.entries(templateSeats)) {
-    if (!override || !next[seatType]) {
-      continue;
-    }
-    next[seatType] = { ...next[seatType], ...override };
-  }
-  return next;
 }
 
 const isLegacyPackageName = (name: string) => /\blegacy\b/i.test(name);
@@ -539,21 +481,9 @@ export default function SwitchContractDialog({
   // Resolve a template's contract type to a concrete package id in the resolved
   // currency: same tier and, when given, a case-insensitive name-substring match.
   const resolveTemplatePackageId = useCallback(
-    (template: SwitchContractTemplate): string | null => {
-      if (!template.package) {
-        return null;
-      }
-      const pattern = template.package.namePattern?.toLowerCase();
-      const match = metronomePackages.find(
-        (p) =>
-          p.tier === template.package?.tier &&
-          p.currency === resolvedCurrency &&
-          (!pattern || p.name.toLowerCase().includes(pattern)) &&
-          (!template.package?.billingAnchor ||
-            p.billingAnchor === template.package.billingAnchor)
-      );
-      return match?.id ?? null;
-    },
+    (template: SwitchContractTemplate): string | null =>
+      findTemplatePackage(template, metronomePackages, resolvedCurrency)?.id ??
+      null,
     [metronomePackages, resolvedCurrency]
   );
 
@@ -592,6 +522,12 @@ export default function SwitchContractDialog({
       }
       if (template.defaultPoolCapCredits !== undefined) {
         form.setValue("defaultPoolCapCredits", template.defaultPoolCapCredits);
+      }
+      if (template.programmaticMonthlyCapCredits !== undefined) {
+        form.setValue(
+          "programmaticMonthlyCapCredits",
+          template.programmaticMonthlyCapCredits
+        );
       }
       if (template.paygEnabled !== undefined) {
         form.setValue("paygEnabled", template.paygEnabled);

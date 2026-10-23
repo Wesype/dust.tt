@@ -135,8 +135,16 @@ export class WorkspaceFactory {
     return this.createWithPlan(plan, overrides, subscriptionOverrides);
   }
 
+  // A freshly created workspace that has not subscribed to any plan yet: it
+  // resolves to the FREE_NO_PLAN subscription.
+  static async withoutSubscription(
+    overrides?: WorkspaceOverrides
+  ): Promise<WorkspaceType> {
+    return this.createWithPlan(null, overrides);
+  }
+
   private static async createWithPlan(
-    plan: PlanModel,
+    plan: PlanModel | null,
     overrides?: WorkspaceOverrides,
     subscriptionOverrides?: { metronomeContractId?: string }
   ): Promise<WorkspaceType> {
@@ -160,19 +168,21 @@ export class WorkspaceFactory {
       }),
     });
 
-    await SubscriptionResource.makeNew(
-      {
-        sId: generateRandomModelSId(),
-        workspaceId: workspace.id,
-        planId: plan.id,
-        status: "active",
-        startDate: new Date(),
-        stripeSubscriptionId: null,
-        endDate: null,
-        ...subscriptionOverrides,
-      },
-      renderPlanFromModel({ plan })
-    );
+    if (plan) {
+      await SubscriptionResource.makeNew(
+        {
+          sId: generateRandomModelSId(),
+          workspaceId: workspace.id,
+          planId: plan.id,
+          status: "active",
+          startDate: new Date(),
+          stripeSubscriptionId: null,
+          endDate: null,
+          ...subscriptionOverrides,
+        },
+        renderPlanFromModel({ plan })
+      );
+    }
 
     const workspaceType: WorkspaceType = {
       ...renderLightWorkspaceType({ workspace }),
