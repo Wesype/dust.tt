@@ -35,7 +35,6 @@
         "sdks/js/**",
         "viz/**",
         "extension/**",
-        "cli/dust-cli/**",
         "firebase-functions/**",
         "sparkle/**",
         "connectors/**",

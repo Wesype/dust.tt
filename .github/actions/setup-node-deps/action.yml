@@ -45,7 +45,6 @@ runs:
           marketing/node_modules
           connectors/node_modules
           sparkle/node_modules
-          cli/dust-cli/node_modules
           extension/node_modules
           viz/node_modules
           sdks/js/node_modules

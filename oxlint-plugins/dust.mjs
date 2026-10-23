@@ -559,7 +559,7 @@ const nextjsPageComponentNaming = {
 // Packages on the classic JSX runtime, where `React` must stay imported.
 // Matched here rather than in an override: oxlint ignores `excludeFiles`
 // of an extended config, which is how react-doctor loads ours.
-const CLASSIC_JSX_RUNTIME_PATHS = /(^|\/)(sparkle|cli\/dust-cli)\//;
+const CLASSIC_JSX_RUNTIME_PATHS = /(^|\/)sparkle\//;
 
 const noUnusedReactImport = {
   create(context) {

@@ -9,7 +9,6 @@
     "marketing",
     "sparkle",
     "connectors",
-    "cli/dust-cli",
     "extension",
     "viz",
     "sdks/js"
@@ -21,8 +20,8 @@
     "i18n:extract": "tsx scripts/i18n/extract.ts",
     "i18n:check": "tsx scripts/i18n/check.ts",
     "knip": "knip",
-    "lint": "oxlint sdks/js viz extension cli/dust-cli firebase-functions sparkle connectors front-spa front front-api marketing cli/dust-sandbox/functions-runner cli/dust-sandbox/pod",
-    "lint:fix": "oxlint --fix sdks/js viz extension cli/dust-cli firebase-functions sparkle connectors front-spa front front-api marketing cli/dust-sandbox/functions-runner cli/dust-sandbox/pod",
+    "lint": "oxlint sdks/js viz extension firebase-functions sparkle connectors front-spa front front-api marketing cli/dust-sandbox/functions-runner cli/dust-sandbox/pod",
+    "lint:fix": "oxlint --fix sdks/js viz extension firebase-functions sparkle connectors front-spa front front-api marketing cli/dust-sandbox/functions-runner cli/dust-sandbox/pod",
     "format": "oxfmt --write '**/*.{js,jsx,ts,tsx,css,scss}'",
     "format:check": "oxfmt --check '**/*.{js,jsx,ts,tsx,css,scss}'",
     "format:ci": "npm run lint && npm run format:check",
