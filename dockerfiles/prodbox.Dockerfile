@@ -1,14 +1,24 @@
 FROM node:24.22.1 AS base
 
+ARG FDB_VERSION=7.4.8
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y vim redis-tools postgresql-client htop curl libpq-dev build-essential cmake tmux screen
+
+WORKDIR /tmp/foundationdb
+RUN package="foundationdb-clients_${FDB_VERSION}-1_amd64.deb" && \
+    url="https://github.com/apple/foundationdb/releases/download/${FDB_VERSION}/${package}" && \
+    curl --fail --location --retry 3 --output "$package" "$url" && \
+    echo "4a97efef549c583c3938266cfa71a17199421be5747c2cf0a4cca65b8e64fb63  ${package}" | sha256sum --check - && \
+    dpkg -i "$package" && \
+    rm -rf /tmp/foundationdb
+
+# Set the working directory to /dust
+WORKDIR /dust
 
 # Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
-
-# Set the working directory to /dust
-WORKDIR /dust
 
 RUN npm install -g npm@11.19.0
 
