@@ -190,8 +190,8 @@ export interface DfsLockState {
 }
 
 export interface DfsObjectLock {
-  objectId: DfsObjectId;
-  lockId: DfsLockId;
+  readonly objectId: DfsObjectId;
+  readonly lockId: DfsLockId;
 }
 
 // Filesystem mutations.

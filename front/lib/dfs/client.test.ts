@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { DfsClient } from "@app/lib/dfs/client";
+import { DfsClient, DFS_LOCK_REFRESH_INTERVAL_MS } from "@app/lib/dfs/client";
 import { dfsErrorCodeFromWire, MAX_UINT64 } from "@app/lib/dfs/codec";
 import { newDfsObjectId } from "@app/lib/dfs/object_id";
 import type { DfsMethod } from "@app/lib/dfs/proto";
@@ -9,7 +9,7 @@ import { FakeDfsTransport } from "@app/tests/utils/dfs/FakeDfsTransport";
 import type { DfsSearchRequest } from "@app/types/dfs";
 import { DfsError, isDfsObjectId } from "@app/types/dfs";
 import { Err, Ok } from "@app/types/shared/result";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const ROOT_ID = "0190c3a0b1c27d4e8f0a1b2c3d4e5f60";
 const FILE_ID = "0190c3a0b1c37aaa9bbbccccddddeeee";
@@ -23,17 +23,21 @@ function setup(answers: Partial<Record<DfsMethod, FakeDfsAnswer>>) {
   return { transport, client: new DfsClient(transport, SESSION_KEY) };
 }
 
+afterEach(() => vi.useRealTimers());
+
 describe("DfsClient", () => {
-  it("acquires a lock and decodes its UUIDv7 string and expiry", async () => {
+  it("acquires an immutable lock and invalidates it when unlocking", async () => {
     const { client, transport } = setup({
       Lock: new Ok(DfsWireFactory.lockState(LOCK_ID)),
+      Unlock: new Ok({}),
     });
     const result = await client.lock({ objectId: FILE_ID });
 
-    expect(result.isOk() && result.value).toEqual({
-      lockId: LOCK_ID,
-      expiresAtMs: 1700000060000,
-    });
+    if (result.isErr()) {
+      throw result.error;
+    }
+    expect(result.value).toEqual({ objectId: FILE_ID, lockId: LOCK_ID });
+    expect(Object.isFrozen(result.value)).toBe(true);
     expect(transport.calls).toEqual([
       {
         method: "Lock",
@@ -43,62 +47,21 @@ describe("DfsClient", () => {
         },
       },
     ]);
-  });
-
-  it("refreshes and releases the exact lock, rejecting a replacement ID in the response", async () => {
-    const { client, transport } = setup({
-      Lock: new Ok(DfsWireFactory.lockState(LOCK_ID)),
-      Unlock: new Ok({}),
+    expect((await client.unlock(result.value)).isOk()).toBe(true);
+    expect(transport.calls.at(-1)?.request).toEqual({
+      objectId: wireId(FILE_ID),
+      lockId: Buffer.from(LOCK_ID, "hex"),
     });
-    const lockId = LOCK_ID;
-    const request = { objectId: FILE_ID, lockId };
-    const refreshed = await client.lock(request);
-    expect(refreshed.isOk() && refreshed.value.lockId).toEqual(lockId);
-    expect((await client.unlock(request)).isOk()).toBe(true);
-    expect(
-      transport.calls.map(({ method, request }) => [method, request])
-    ).toEqual([
-      [
-        "Lock",
-        { objectId: wireId(FILE_ID), lockId: Buffer.from(lockId, "hex") },
-      ],
-      [
-        "Unlock",
-        { objectId: wireId(FILE_ID), lockId: Buffer.from(lockId, "hex") },
-      ],
+    const applied = await client.apply({
+      operations: [{ type: "update", objectId: FILE_ID }],
+      locks: [result.value],
+    });
+    expect(applied.isErr() && applied.error.code).toBe("lock_lost");
+    expect(transport.calls.map((call) => call.method)).toEqual([
+      "Lock",
+      "Unlock",
     ]);
-
-    const wrongLock = await client.lock({
-      objectId: FILE_ID,
-      lockId: "0190c3a0b1c57abc8def0123456789ab",
-    });
-    expect(wrongLock.isErr() && wrongLock.error.code).toBe("invalid_response");
   });
-
-  it.each([
-    "not-an-id",
-    LOCK_ID.slice(2),
-    LOCK_ID.toUpperCase(),
-    "0190c3a0b1c44abc8def0123456789ab",
-    "0190c3a0b1c47abc0def0123456789ab",
-  ])(
-    "rejects malformed lock ID %s before calling the server",
-    async (badId) => {
-      const { client, transport } = setup({});
-      const results = [
-        await client.lock({ objectId: FILE_ID, lockId: badId }),
-        await client.unlock({ objectId: FILE_ID, lockId: badId }),
-        await client.apply({
-          operations: [],
-          locks: [{ objectId: FILE_ID, lockId: badId }],
-        }),
-      ];
-      for (const result of results) {
-        expect(result.isErr() && result.error.code).toBe("invalid_input");
-      }
-      expect(transport.calls).toHaveLength(0);
-    }
-  );
 
   it.each([
     { lockId: Buffer.alloc(15) },
@@ -120,10 +83,16 @@ describe("DfsClient", () => {
     expect(dfsErrorCodeFromWire("LOCK_LOST")).toBe("lock_lost");
   });
 
-  it("sends lock IDs with Apply and preserves per-operation lock conflicts", async () => {
+  it("sends lock IDs with Apply, renews only when stale, and preserves lock conflicts", async () => {
+    vi.useFakeTimers();
     const { client, transport } = setup({
+      Lock: new Ok(DfsWireFactory.lockState(LOCK_ID)),
       Apply: new Ok({ results: [{ error: { code: "WOULD_BLOCK" } }] }),
     });
+    const acquired = await client.lock({ objectId: FILE_ID });
+    if (acquired.isErr()) {
+      throw acquired.error;
+    }
     const lockId = LOCK_ID;
     const result = await client.apply({
       operations: [
@@ -135,13 +104,13 @@ describe("DfsClient", () => {
           append: false,
         },
       ],
-      locks: [{ objectId: FILE_ID, lockId }],
+      locks: [acquired.value],
     });
 
     expect(result.isOk() && result.value.results).toEqual([
       { status: "error", errorCode: "would_block" },
     ]);
-    expect(transport.calls[0].request).toEqual({
+    expect(transport.calls.at(-1)?.request).toEqual({
       operations: [
         {
           write: {
@@ -156,6 +125,52 @@ describe("DfsClient", () => {
         { objectId: wireId(FILE_ID), lockId: Buffer.from(lockId, "hex") },
       ],
     });
+    expect(transport.calls.map((call) => call.method)).toEqual([
+      "Lock",
+      "Apply",
+    ]);
+    await vi.advanceTimersByTimeAsync(DFS_LOCK_REFRESH_INTERVAL_MS);
+    expect(transport.calls).toHaveLength(2);
+    expect(vi.getTimerCount()).toBe(0);
+    await client.apply({
+      operations: [{ type: "update", objectId: FILE_ID }],
+      locks: [acquired.value],
+    });
+    expect(transport.calls.slice(2).map((call) => call.method)).toEqual([
+      "Lock",
+      "Apply",
+    ]);
+    expect(transport.calls[2].request.lockId).toEqual(
+      Buffer.from(LOCK_ID, "hex")
+    );
+  });
+
+  it("blocks Apply after lock loss without reacquiring", async () => {
+    vi.useFakeTimers();
+    const answers: Partial<Record<DfsMethod, FakeDfsAnswer>> = {
+      Lock: new Ok(DfsWireFactory.lockState(LOCK_ID)),
+    };
+    const { client, transport } = setup(answers);
+    const acquired = await client.lock({ objectId: FILE_ID });
+    if (acquired.isErr()) {
+      throw acquired.error;
+    }
+    answers.Lock = new Err(new DfsError("lock_lost"));
+    await vi.advanceTimersByTimeAsync(DFS_LOCK_REFRESH_INTERVAL_MS);
+    const request = {
+      operations: [{ type: "update" as const, objectId: FILE_ID }],
+      locks: [acquired.value],
+    };
+    const result = await client.apply(request);
+    expect(result.isErr() && result.error.code).toBe("lock_lost");
+    expect((await client.apply(request)).isErr()).toBe(true);
+    expect(transport.calls.map((call) => call.method)).toEqual([
+      "Lock",
+      "Lock",
+    ]);
+    expect(transport.calls[1].request.lockId).toEqual(
+      Buffer.from(LOCK_ID, "hex")
+    );
   });
 
   it("creates a session and decodes ids and timestamps", async () => {

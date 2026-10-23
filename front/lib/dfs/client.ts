@@ -31,13 +31,12 @@ import type {
   DfsGrantPage,
   DfsLookupTarget,
   DfsObjectId,
+  DfsObjectLock,
+  DfsLockState,
   DfsObjectRef,
   DfsOperation,
   DfsEntryPage,
   DfsFilesBatch,
-  DfsLockId,
-  DfsLockState,
-  DfsObjectLock,
   DfsReadData,
   DfsSearchRequest,
   DfsSearchResults,
@@ -47,13 +46,15 @@ import type {
 } from "@app/types/dfs";
 import { DfsError, isDfsObjectId } from "@app/types/dfs";
 import type { Result } from "@app/types/shared/result";
-import { Err } from "@app/types/shared/result";
+import { Err, Ok } from "@app/types/shared/result";
 import type { z } from "zod";
 
 // Maximum `limit` of `ListGrants`, see `dfs/design-docs/API.md`.
 
 // `dfs-read-data-limit`: a read never returns more than 1 MiB.
 const MAX_READ_BYTES = 1024 * 1024;
+
+export const DFS_LOCK_REFRESH_INTERVAL_MS = 20_000;
 
 // `dfs-search-request-limits` in dfs/protocol/proto/dfs.proto.
 const MAX_SEARCH_QUERY_BYTES = 4096;
@@ -144,6 +145,8 @@ function attrMatchesTarget(
  * than the one its input names (by id, or by name for lookups outside virtual `shared`).
  */
 export class DfsClient {
+  private readonly lockLeases = new WeakMap<DfsObjectLock, DfsLockLease>();
+
   constructor(
     private readonly transport: DfsTransport,
     private readonly key: string
@@ -263,35 +266,51 @@ export class DfsClient {
     return this.call("RefreshSession", () => ({}), WireSessionSchema);
   }
 
-  // Enforced locks. Require the session key; storage support is not implemented yet.
-
   async lock({
     objectId,
-    lockId,
   }: {
     objectId: DfsObjectId;
-    lockId?: DfsLockId;
-  }): Promise<Result<DfsLockState, DfsError>> {
-    return this.callMatching(
+  }): Promise<Result<DfsObjectLock, DfsError>> {
+    const startedMs = performance.now();
+    const result = await this.call(
       "Lock",
-      () => ({
-        objectId: encodeObjectId(objectId),
-        lockId: lockId === undefined ? undefined : encodeLockId(lockId),
-      }),
-      WireLockStateSchema,
-      (lock) => lockId === undefined || lock.lockId === lockId
+      () => ({ objectId: encodeObjectId(objectId) }),
+      WireLockStateSchema
     );
+    if (result.isErr()) {
+      return result;
+    }
+    const lock = Object.freeze({ objectId, lockId: result.value.lockId });
+    this.lockLeases.set(
+      lock,
+      new DfsLockLease(startedMs, () =>
+        this.callMatching(
+          "Lock",
+          () => ({
+            objectId: encodeObjectId(objectId),
+            lockId: encodeLockId(lock.lockId),
+          }),
+          WireLockStateSchema,
+          (refreshed) => refreshed.lockId === lock.lockId
+        )
+      )
+    );
+    return new Ok(lock);
   }
 
-  async unlock({
-    objectId,
-    lockId,
-  }: DfsObjectLock): Promise<Result<void, DfsError>> {
+  async unlock(lock: DfsObjectLock): Promise<Result<void, DfsError>> {
+    const lease = this.lockLeases.get(lock);
+    if (!lease) {
+      return new Err(
+        new DfsError("invalid_input", "Lock was not acquired by this client.")
+      );
+    }
+    await lease.invalidate();
     return this.call(
       "Unlock",
       () => ({
-        objectId: encodeObjectId(objectId),
-        lockId: encodeLockId(lockId),
+        objectId: encodeObjectId(lock.objectId),
+        lockId: encodeLockId(lock.lockId),
       }),
       WireEmptySchema
     );
@@ -457,7 +476,15 @@ export class DfsClient {
     operations: DfsOperation[];
     locks?: DfsObjectLock[];
   }): Promise<Result<DfsOperationBatch, DfsError>> {
-    return this.callMatching(
+    const leases: DfsLockLease[] = [];
+    for (const lock of locks ?? []) {
+      const lease = await DfsLockLease.fromObjectLock(lock, this.lockLeases);
+      if (lease.isErr()) {
+        return new Err(lease.error);
+      }
+      leases.push(lease.value);
+    }
+    const result = await this.callMatching(
       "Apply",
       () => ({
         operations: operations.map(encodeOperation),
@@ -477,6 +504,17 @@ export class DfsClient {
             r.mutation.object.id === operations[i].objectId
         )
     );
+    if (
+      result.isOk() &&
+      result.value.results.some(
+        (entry) => entry.status === "error" && entry.errorCode === "lock_lost"
+      )
+    ) {
+      for (const lease of leases) {
+        await lease.invalidate();
+      }
+    }
+    return result;
   }
 
   // Search. Requires the session key.
@@ -527,5 +565,72 @@ export class DfsClient {
       () => encodeSearchRequest(request),
       WireSearchResultsSchema
     );
+  }
+}
+
+class DfsLockLease {
+  private refreshing: Promise<Result<void, DfsError>> | undefined;
+  private failure: DfsError | undefined;
+
+  constructor(
+    private lastRefreshedAtMs: number,
+    private readonly renew: () => Promise<Result<DfsLockState, DfsError>>
+  ) {}
+
+  static async fromObjectLock(
+    lock: DfsObjectLock,
+    leases: WeakMap<DfsObjectLock, DfsLockLease>
+  ): Promise<Result<DfsLockLease, DfsError>> {
+    const lease = leases.get(lock);
+    if (!lease) {
+      return new Err(
+        new DfsError("invalid_input", "Lock was not acquired by this client.")
+      );
+    }
+    const refreshed = await lease.refreshIfNeeded();
+    if (refreshed.isErr()) {
+      return new Err(refreshed.error);
+    }
+    return new Ok(lease);
+  }
+
+  private async refreshIfNeeded(): Promise<Result<void, DfsError>> {
+    if (this.failure) {
+      return new Err(this.failure);
+    }
+    if (
+      !this.refreshing &&
+      performance.now() - this.lastRefreshedAtMs < DFS_LOCK_REFRESH_INTERVAL_MS
+    ) {
+      return new Ok(undefined);
+    }
+    this.refreshing ??= this.refresh();
+    try {
+      const result = await this.refreshing;
+      return this.failure ? new Err(this.failure) : result;
+    } finally {
+      this.refreshing = undefined;
+    }
+  }
+
+  async invalidate(): Promise<void> {
+    this.failure = new DfsError("lock_lost");
+    await this.refreshing;
+  }
+
+  private async refresh(): Promise<Result<void, DfsError>> {
+    const startedMs = performance.now();
+    const result = await this.renew();
+    if (result.isErr()) {
+      if (
+        result.error.code !== "unavailable" &&
+        result.error.code !== "internal"
+      ) {
+        this.failure = result.error;
+      }
+      return new Err(result.error);
+    }
+    this.lastRefreshedAtMs = startedMs;
+    return new Ok(undefined);
   }
 }
