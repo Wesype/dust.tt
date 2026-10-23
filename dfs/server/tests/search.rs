@@ -1,7 +1,10 @@
 use std::{collections::VecDeque, time::Duration};
 
 use anyhow::{Context, Result, ensure};
-use dfs_api::search::{IndexCell, create_objects_index, objects_index_body};
+use dfs_api::search::{
+    IndexCell, client::Client, create_objects_index, objects_index_body, query::Plan,
+};
+use dfs_protocol::rpc::SearchRequest;
 use elasticsearch::{
     Elasticsearch,
     http::transport::{SingleNodeConnectionPool, TransportBuilder},
@@ -241,6 +244,176 @@ fn cell_settings_preserve_shared_analysis_and_target_the_available_nodes() -> Re
                 .all(|key| { !key.starts_with("routing.allocation.") })
         );
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn search_pagination_keeps_routing_and_uses_the_latest_pit() -> Result<()> {
+    let server = MockElasticsearch::start(vec![
+        (200, json!({"id": "first"})),
+        (200, json!({"pit_id": "second", "timed_out": false, "_shards": {"failed": 0}, "hits": {"hits": [{
+            "_source": {"tenant_id": "tenant", "object_id": "object", "attr_version": 1, "content_version": 2},
+            "sort": [1.5, "object", 42], "matched_queries": ["c0c"],
+            "highlight": {"content_text": ["é".repeat(600)]}
+        }]}})),
+        (200, json!({"pit_id": "third", "timed_out": false, "_shards": {"failed": 0}, "hits": {"hits": []}})),
+        (200, json!({"succeeded": true})),
+    ]).await?;
+    let client = Client::new(server.client.clone());
+    let pit = client.open("tenant").await?;
+    let query = Plan::compile(SearchRequest::default())?.candidate_query("tenant", None)?;
+    let page = client.page(&pit, &query, 1, None, true).await?;
+    assert_eq!(
+        page.hits[0]
+            .excerpt()
+            .context("missing excerpt")?
+            .chars()
+            .count(),
+        512
+    );
+    let next_page = client
+        .page(&page.pit_id, &query, 1, Some(&page.hits[0].sort), false)
+        .await?;
+    assert!(next_page.hits.is_empty());
+    client.close(&next_page.pit_id).await?;
+    let requests = server.finish().await?;
+    assert!(requests[0].path.starts_with("/dfs.objects/_pit?"));
+    assert!(requests[0].path.contains("routing=tenant"));
+    assert!(requests[0].path.contains("keep_alive=30s"));
+    for request in &requests[1..3] {
+        assert!(request.path.starts_with("/_search?"));
+        assert!(!request.path.contains("routing="));
+        assert_eq!(request.body["query"], serde_json::to_value(&query)?);
+        assert_eq!(request.body["pit"]["keep_alive"], "30s");
+        assert_eq!(request.body["size"], 1);
+        assert_eq!(request.body["track_total_hits"], false);
+        assert_eq!(
+            request.body["_source"],
+            json!(["tenant_id", "object_id", "attr_version", "content_version"])
+        );
+        assert_eq!(
+            request.body["sort"],
+            json!([
+                {"_score": {"order": "desc"}},
+                {"object_id": {"order": "asc"}},
+                {"_shard_doc": {"order": "asc"}},
+            ])
+        );
+    }
+    assert_eq!(requests[1].body["pit"]["id"], "first");
+    assert!(requests[1].body["highlight"].is_object());
+    assert_eq!(requests[1].body["highlight"]["number_of_fragments"], 1);
+    assert_eq!(
+        requests[1].body["highlight"]["max_analyzed_offset"],
+        100_000
+    );
+    assert!(requests[2].body["highlight"].is_null());
+    assert_eq!(requests[2].body["pit"]["id"], "second");
+    assert_eq!(requests[2].body["search_after"], json!([1.5, "object", 42]));
+    assert_eq!(requests[3].body["id"], "third");
+    Ok(())
+}
+
+#[tokio::test]
+async fn search_preserves_null_empty_and_large_cursor_values() -> Result<()> {
+    let server = MockElasticsearch::start(vec![(
+        200,
+        json!({"timed_out": false, "_shards": {"failed": 0}, "hits": {"hits": []}}),
+    )])
+    .await?;
+    let client = Client::new(server.client.clone());
+    let query = Plan::compile(SearchRequest::default())?.candidate_query("tenant", None)?;
+    let cursor = [Value::Null, json!(""), json!(u64::MAX)];
+
+    client.page("pit", &query, 1, Some(&cursor), false).await?;
+
+    let requests = server.finish().await?;
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].body["search_after"], json!(cursor));
+    Ok(())
+}
+
+#[tokio::test]
+async fn search_errors_preserve_the_latest_usable_pit_for_cleanup() -> Result<()> {
+    let query = Plan::compile(SearchRequest::default())?.candidate_query("tenant", None)?;
+    let hit = json!({
+        "_source": {"tenant_id": "tenant", "object_id": "object"},
+        "sort": [1.5, "object", 42],
+    });
+
+    for (status, body, expected_pit) in [
+        (
+            200,
+            json!({"pit_id": "latest", "timed_out": false, "_shards": {"failed": 1}, "hits": {"hits": []}}),
+            "latest",
+        ),
+        (
+            200,
+            json!({"pit_id": "latest", "timed_out": true, "_shards": {"failed": 0}, "hits": {"hits": []}}),
+            "latest",
+        ),
+        (
+            200,
+            json!({"pit_id": "latest", "timed_out": false, "_shards": {"failed": 0}, "hits": {"hits": [{"_source": hit["_source"], "sort": []}]}}),
+            "latest",
+        ),
+        (
+            200,
+            json!({"pit_id": "latest", "timed_out": false, "_shards": {"failed": 0}, "hits": {"hits": [hit.clone(), hit.clone()]}}),
+            "latest",
+        ),
+        (
+            200,
+            json!({"pit_id": "", "timed_out": false, "_shards": {"failed": 0}, "hits": {"hits": []}}),
+            "original",
+        ),
+        (
+            200,
+            json!({"pit_id": "latest", "timed_out": false, "_shards": {"failed": 0}, "hits": {"hits": [{"sort": []}]}}),
+            "original",
+        ),
+        (503, json!({"error": "unavailable"}), "original"),
+    ] {
+        let server =
+            MockElasticsearch::start(vec![(status, body), (200, json!({"succeeded": true}))])
+                .await?;
+        let client = Client::new(server.client.clone());
+        let error = client
+            .page("original", &query, 1, None, false)
+            .await
+            .err()
+            .context("expected a page error")?;
+        assert_eq!(error.pit_id, expected_pit);
+        client.close(&error.pit_id).await?;
+
+        let requests = server.finish().await?;
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[1].method, "DELETE");
+        assert_eq!(requests[1].body["id"], expected_pit);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn search_keeps_the_pit_when_elasticsearch_omits_a_replacement() -> Result<()> {
+    let server = MockElasticsearch::start(vec![
+        (
+            200,
+            json!({"timed_out": false, "_shards": {"failed": 0}, "hits": {"hits": []}}),
+        ),
+        (200, json!({"succeeded": true})),
+    ])
+    .await?;
+    let client = Client::new(server.client.clone());
+    let query = Plan::compile(SearchRequest::default())?.candidate_query("tenant", None)?;
+    let page = client.page("original", &query, 1, None, false).await?;
+    assert_eq!(page.pit_id, "original");
+    assert!(page.hits.is_empty());
+    client.close(&page.pit_id).await?;
+
+    let requests = server.finish().await?;
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[1].body["id"], "original");
     Ok(())
 }
 

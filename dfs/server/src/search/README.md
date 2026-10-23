@@ -277,7 +277,7 @@ ELASTICSEARCH_URL=http://127.0.0.1:9200 \
 For production, choose `--cell cell-00000`, `cell-00001`, or `cell-00002`, or set `CELL`.
 Provide `ELASTICSEARCH_URL`, `ELASTICSEARCH_USERNAME`, and `ELASTICSEARCH_PASSWORD`.
 Username and password must be supplied together. They are optional for an unsecured local cluster.
-`ELASTICSEARCH_CA_CERT` can point to a PEM CA certificate. TLS certificate and hostname checks stay on.
+TLS certificate and hostname checks stay on. Custom CA support is deferred.
 
 The command checks that both names are unused, then creates the index and alias in one request.
 A timeout or missing acknowledgement can leave the index created, so inspect ES before retrying.

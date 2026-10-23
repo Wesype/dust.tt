@@ -7,6 +7,7 @@ use elasticsearch::{
 };
 use serde_json::{Value, json};
 
+pub mod client;
 pub mod lexer;
 pub mod query;
 
