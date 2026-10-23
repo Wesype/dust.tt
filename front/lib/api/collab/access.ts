@@ -110,7 +110,7 @@ export type CollabAccessError =
     }
   | CollabFileError;
 
-const READ_ONLY: CollabAccessError = {
+export const READ_ONLY: CollabAccessError = {
   code: "read_only",
   message: "Live editing needs write access to this file.",
 };
@@ -193,7 +193,7 @@ export async function checkCollabReadAccess(
 export async function recheckCollabAccess(
   auth: Authenticator,
   canonicalPath: string
-): Promise<Result<{ canWrite: boolean }, CollabAccessError>> {
+): Promise<Result<CollabAccess, CollabAccessError>> {
   const rights = await checkCollabRights(auth);
   if (rights.isErr()) {
     return new Err(rights.error);
@@ -205,6 +205,10 @@ export async function recheckCollabAccess(
     return new Err({ code: "unavailable", message: dustFs.error.message });
   }
   return new Ok({
+    auth,
+    workspaceId: auth.getNonNullableWorkspace().sId,
+    canonicalPath,
+    dustFs: dustFs.value,
     canWrite: dustFs.value.checkWriteAccess(canonicalPath).isOk(),
   });
 }

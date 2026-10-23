@@ -66,7 +66,7 @@ const hocuspocus = createCollabHocuspocus({
 
 const app = createHono();
 app.route("/api/healthz", healthzApp);
-app.route("/", createCollabRoutes(hocuspocus));
+app.route("/", createCollabRoutes(hocuspocus, { ownership }));
 app.onError(unhandledErrorHandler);
 
 // crossws types the upgraded socket as a partial WebSocket; on Node it is a full `ws` socket.

@@ -1,4 +1,7 @@
-import type { CollabAccess } from "@app/lib/api/collab/access";
+import type {
+  CollabAccess,
+  CollabAccessError,
+} from "@app/lib/api/collab/access";
 import { replaceYDocContent, yDocToDfm } from "@app/lib/api/collab/ydoc";
 import type { EditSourceFailure } from "@app/lib/api/documents/agent_edit_source";
 import {
@@ -53,6 +56,10 @@ export interface CollabSession {
   comments: DfmComment[];
   lastSave: CollabSave;
   epoch: string;
+  peerAccesses: Map<
+    string,
+    { access: Result<CollabAccess, CollabAccessError>; checkedAtMs: number }
+  >;
   loadedEditsNeedWriter: boolean;
   loadedStateNeedsStore: boolean;
   pendingStateStore: Promise<void> | undefined;

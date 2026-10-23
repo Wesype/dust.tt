@@ -17,7 +17,7 @@ describe("POST /internal/documents/agent_activity", () => {
   });
 
   it("shows an agent's activity in a thread only to a document its user may open", async () => {
-    const { hocuspocus, name, request } = await openNotes();
+    const { server, hocuspocus, name, request } = await openNotes();
     const { authenticator: outsider } = await createResourceTest({});
     const document = hocuspocus.documents.get(name);
     if (!document) {
@@ -30,7 +30,7 @@ describe("POST /internal/documents/agent_activity", () => {
         COLLAB_AGENT_ACTIVITY_PATH,
         { ...request, userId, agent, activity: "thinking" },
         `Bearer ${SECRET}`,
-        hocuspocus
+        server
       );
 
     expect((await showAs(outsider.getNonNullableUser().sId)).status).toBe(403);

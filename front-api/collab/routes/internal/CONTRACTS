@@ -2,4 +2,4 @@
 Every internal route MUST answer 401 unless the request carries the configured internal secret,
 and MUST answer 401 to every request when none is configured. `index.ts` checks it once
 (`collabInternalAuth`), for every route mounted below it. Each route's own access rules are
-contracts next to its handler (`collab-internal-document-*`).
+contracts next to its handler (`collab-internal-document-*`, `collab-internal-peer-*`).

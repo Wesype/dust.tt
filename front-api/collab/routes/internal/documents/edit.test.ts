@@ -27,13 +27,13 @@ describe("POST /internal/documents/edit", () => {
   });
 
   it("applies an edit to the open document's current source", async () => {
-    const { hocuspocus, request } = await openNotes();
+    const { server, request } = await openNotes();
 
     const response = await post(
       COLLAB_SOURCE_EDIT_PATH,
       { ...request, edit: EDIT },
       `Bearer ${SECRET}`,
-      hocuspocus
+      server
     );
 
     expect(await response.json()).toEqual({
@@ -44,13 +44,13 @@ describe("POST /internal/documents/edit", () => {
       COLLAB_SOURCE_READ_PATH,
       request,
       `Bearer ${SECRET}`,
-      hocuspocus
+      server
     );
     expect(await after.json()).toEqual({ open: true, source: "# Edited\n" });
   });
 
   it("refuses an edit for a user who can only read the document, changing nothing", async () => {
-    const { hocuspocus, request } = await openNotes();
+    const { server, request } = await openNotes();
     vi.spyOn(DustFileSystem.prototype, "checkWriteAccess").mockReturnValue(
       new Err(new DustFileSystemError("internal", "Read-only mount."))
     );
@@ -59,7 +59,7 @@ describe("POST /internal/documents/edit", () => {
       COLLAB_SOURCE_EDIT_PATH,
       { ...request, edit: EDIT },
       `Bearer ${SECRET}`,
-      hocuspocus
+      server
     );
 
     expect(response.status).toBe(403);
@@ -70,20 +70,20 @@ describe("POST /internal/documents/edit", () => {
       COLLAB_SOURCE_READ_PATH,
       request,
       `Bearer ${SECRET}`,
-      hocuspocus
+      server
     );
     expect(await after.json()).toEqual({ open: true, source: "# Notes\n" });
   });
 
   it("answers 500 to an edit when the session cannot read its own document", async () => {
-    const { hocuspocus, name, request } = await openNotes();
+    const { server, hocuspocus, name, request } = await openNotes();
     hocuspocus.documents.get(name)?.getMap(ENVELOPE_MAP_NAME).clear();
 
     const response = await post(
       COLLAB_SOURCE_EDIT_PATH,
       { ...request, edit: EDIT },
       `Bearer ${SECRET}`,
-      hocuspocus
+      server
     );
 
     expect(response.status).toBe(500);

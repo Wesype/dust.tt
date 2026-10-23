@@ -50,14 +50,14 @@ describe("POST /internal/documents/read", () => {
   });
 
   it("serves an open document's source only to a user who can open it", async () => {
-    const { hocuspocus, request } = await openNotes();
+    const { server, request } = await openNotes();
     const { authenticator: outsider } = await createResourceTest({});
     const readAs = (userId?: string) =>
       post(
         COLLAB_SOURCE_READ_PATH,
         { ...request, userId },
         `Bearer ${SECRET}`,
-        hocuspocus
+        server
       );
 
     const allowed = await readAs(request.userId);
@@ -68,7 +68,7 @@ describe("POST /internal/documents/read", () => {
   });
 
   it("shows an agent reading only once its user may open the document", async () => {
-    const { hocuspocus, name, request } = await openNotes();
+    const { server, hocuspocus, name, request } = await openNotes();
     const { authenticator: outsider } = await createResourceTest({});
     const document = hocuspocus.documents.get(name);
     if (!document) {
@@ -81,7 +81,7 @@ describe("POST /internal/documents/read", () => {
         COLLAB_SOURCE_READ_PATH,
         { ...request, userId, agent },
         `Bearer ${SECRET}`,
-        hocuspocus
+        server
       );
 
     expect((await readAs(outsider.getNonNullableUser().sId)).status).toBe(403);
@@ -97,7 +97,7 @@ describe("POST /internal/documents/read", () => {
   });
 
   it("serves an open document's source to a user who can only read it, never their write", async () => {
-    const { hocuspocus, request } = await openNotes();
+    const { server, request } = await openNotes();
     vi.spyOn(DustFileSystem.prototype, "checkWriteAccess").mockReturnValue(
       new Err(new DustFileSystemError("internal", "Read-only mount."))
     );
@@ -106,13 +106,13 @@ describe("POST /internal/documents/read", () => {
       COLLAB_SOURCE_READ_PATH,
       request,
       `Bearer ${SECRET}`,
-      hocuspocus
+      server
     );
     const written = await post(
       COLLAB_SOURCE_WRITE_PATH,
       { ...request, base: "# Notes\n", source: "# Edited\n" },
       `Bearer ${SECRET}`,
-      hocuspocus
+      server
     );
 
     expect(await read.json()).toEqual({ open: true, source: "# Notes\n" });
@@ -123,14 +123,14 @@ describe("POST /internal/documents/read", () => {
   });
 
   it("refuses a read of an open document it cannot read before telling why", async () => {
-    const { hocuspocus, name, request } = await openNotes();
+    const { server, hocuspocus, name, request } = await openNotes();
     hocuspocus.documents.get(name)?.getMap(ENVELOPE_MAP_NAME).clear();
     const readAs = (userId?: string) =>
       post(
         COLLAB_SOURCE_READ_PATH,
         { ...request, userId },
         `Bearer ${SECRET}`,
-        hocuspocus
+        server
       );
 
     expect((await readAs(undefined)).status).toBe(403);

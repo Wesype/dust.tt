@@ -306,6 +306,7 @@ export function createCollabHocuspocus({
         comments: content.comments,
         lastSave,
         epoch,
+        peerAccesses: new Map(),
         loadedEditsNeedWriter: hasUnsavedEdits,
         loadedStateNeedsStore: shouldStoreState,
         pendingStateStore: undefined,

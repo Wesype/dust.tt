@@ -132,6 +132,7 @@ const API_ERROR_TYPES = [
   "collab_session_conflict",
   "collab_session_write_refused",
   "collab_session_unsupported_location",
+  "collab_session_not_owned",
   // Runs:
   "run_not_found",
   // Spaces:

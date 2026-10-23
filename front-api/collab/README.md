@@ -13,11 +13,12 @@ and the DFM codec (`front/lib/markdown/dfm/`).
 |---|---|
 | `server.ts` | Starts the server: Hocuspocus, WebSocket upgrades, the HTTP routes, shutdown. |
 | `routes/` | The HTTP routes only front can call (agent tools, file uploads), one file per URL as for front-api's routes. `routes/index.ts` (`createCollabRoutes`) is their root. They call `lib/session.ts`. |
-| `middlewares/` | The internal secret check, and `withHocuspocus`, which gives the routes the server's Hocuspocus instance. |
+| `middlewares/` | The internal secret check, and `withCollabServer`, which gives the routes the server's Hocuspocus instance and its ownership of documents. |
 | `lib/hocuspocus.ts` | Builds Hocuspocus and its hooks: connect, load, change, save, unload. Parses and answers browsers' comment messages. Saves every session on shutdown (`saveAllSessions`). |
 | `lib/session.ts` | What the server holds for each open file (`CollabSession`), and reading and writing its source for front. |
 | `lib/ownership.ts` | Which server owns each open document, the one that saves it: a record in the main Redis, claimed on load, renewed, released on unload. |
 | `lib/relay.ts` | The Hocuspocus Redis extension relaying a document's edits between the servers holding it, its save lock left out. |
+| `lib/peers.ts` | What a server asks another over its internal routes, a document's copy, its save state, and who edited it, and how the document's owner answers. |
 | `lib/connection_access.ts` | Who may stay connected: checked when a browser connects, then every 5 minutes. |
 | `lib/session_file.ts` | Loads a session from its file and saves it back, keeping a copy on a save conflict. |
 | `lib/ydoc_state.ts` | The Yjs state kept in Redis between saves, so a reload keeps its Yjs ids. |

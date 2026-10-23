@@ -426,6 +426,10 @@ msgid "Only files in a conversation or a Pod can be edited live."
 msgstr "Seuls les fichiers d'une conversation ou d'un Pod peuvent être modifiés en direct."
 
 #: front/lib/api_error_messages.ts
+msgid "This file's live session is held by another server. Try again."
+msgstr "La session en direct de ce fichier est gérée par un autre serveur. Réessayez."
+
+#: front/lib/api_error_messages.ts
 msgid "Run not found."
 msgstr "Exécution introuvable."
 

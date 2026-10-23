@@ -43,7 +43,7 @@ describe("POST /internal/documents/write", () => {
   });
 
   it("answers a refused access with the error type naming why", async () => {
-    const { hocuspocus, request } = await openNotes();
+    const { server, request } = await openNotes();
 
     const response = await post(
       COLLAB_SOURCE_WRITE_PATH,
@@ -54,7 +54,7 @@ describe("POST /internal/documents/write", () => {
         source: "# Notes\n",
       },
       `Bearer ${SECRET}`,
-      hocuspocus
+      server
     );
 
     expect(response.status).toBe(400);
@@ -64,7 +64,7 @@ describe("POST /internal/documents/write", () => {
   });
 
   it("refuses a source too large for a save to write", async () => {
-    const { hocuspocus, request } = await openNotes();
+    const { server, request } = await openNotes();
 
     const response = await post(
       COLLAB_SOURCE_WRITE_PATH,
@@ -74,7 +74,7 @@ describe("POST /internal/documents/write", () => {
         source: "a".repeat(WRITE_CANONICAL_FILE_CONTENT_MAX_BYTES + 1),
       },
       `Bearer ${SECRET}`,
-      hocuspocus
+      server
     );
 
     expect(await response.json()).toMatchObject({ result: "refused" });
@@ -82,7 +82,7 @@ describe("POST /internal/documents/write", () => {
       COLLAB_SOURCE_READ_PATH,
       request,
       `Bearer ${SECRET}`,
-      hocuspocus
+      server
     );
     expect(await after.json()).toEqual({ open: true, source: "# Notes\n" });
   });
