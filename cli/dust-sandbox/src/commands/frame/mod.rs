@@ -1,4 +1,5 @@
 mod call;
+mod discard_draft;
 mod draft_mode;
 mod make_live;
 mod publish;
@@ -10,6 +11,7 @@ use anyhow::{bail, Context};
 use clap::Subcommand;
 
 pub use call::run as cmd_frame_call;
+pub use discard_draft::run as cmd_frame_discard_draft;
 pub use draft_mode::run as cmd_frame_draft_mode;
 pub use make_live::run as cmd_frame_make_live;
 pub use publish::run as cmd_frame_publish;
@@ -51,6 +53,11 @@ pub enum FrameCommand {
     /// Validate a Frame's draft: the share link starts serving its latest version, whoever
     /// published it, and the Frame leaves draft mode
     MakeLive {
+        /// Absolute path to the Frame's v2 manifest under /files
+        manifest: PathBuf,
+    },
+    /// Discard the Frame's draft: reset its source files to the live version and leave draft mode
+    DiscardDraft {
         /// Absolute path to the Frame's v2 manifest under /files
         manifest: PathBuf,
     },

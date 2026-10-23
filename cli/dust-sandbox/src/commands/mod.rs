@@ -14,8 +14,8 @@ pub use env::cmd_env;
 pub use filesystem::{run as run_filesystem, FilesystemCommand};
 pub use forward::cmd_forward;
 pub use frame::{
-    cmd_frame_call, cmd_frame_draft_mode, cmd_frame_make_live, cmd_frame_publish,
-    cmd_frame_share_link,
+    cmd_frame_call, cmd_frame_discard_draft, cmd_frame_draft_mode, cmd_frame_make_live,
+    cmd_frame_publish, cmd_frame_share_link,
 };
 pub use function::{
     cmd_function_build, cmd_function_get, cmd_function_materialize_archive, cmd_function_run,

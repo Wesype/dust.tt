@@ -880,6 +880,10 @@ dsbx frame make-live /files/<scope>/<frame-folder>/manifest.json
 
 The user can also validate from the Frame panel.
 
+If the user wants to abandon the draft, run \`dsbx frame discard-draft <manifest>\`. It resets the
+Frame's source files to the live version and leaves draft mode; re-read the files before editing
+again, since your earlier edits are gone. The user can also discard from the Frame panel.
+
 `
     : ""
 }${hasFunctions ? `${MIGRATING_LEGACY_FRAME}\n` : ""}## Editing

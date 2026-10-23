@@ -93,6 +93,12 @@ pub struct FrameMakeLiveRequest<'a> {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct FrameDiscardDraftRequest<'a> {
+    pub manifest_path: &'a str,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct FrameDraftModeRequest<'a> {
     pub manifest_path: &'a str,
 }
@@ -101,6 +107,13 @@ pub struct FrameDraftModeRequest<'a> {
 #[serde(rename_all = "camelCase")]
 pub struct FrameDraftModeResponse {
     pub frame_id: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameDiscardDraftResponse {
+    pub frame_id: String,
+    pub publication_id: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -64,6 +64,6 @@ export const framesSkill = {
   files: FRAME_SKILL_FILES,
   // Frames authoring runs entirely through the Computer.
   warmsConversationSandbox: async () => true,
-  version: 20,
+  version: 21,
   icon: "ActionFrameIcon",
 } as const satisfies GlobalSkillDefinition;

@@ -216,6 +216,9 @@ async fn run() -> anyhow::Result<()> {
             commands::frame::FrameCommand::MakeLive { manifest } => {
                 commands::cmd_frame_make_live(&manifest).await?
             }
+            commands::frame::FrameCommand::DiscardDraft { manifest } => {
+                commands::cmd_frame_discard_draft(&manifest).await?
+            }
         },
         Commands::Filesystem { command } => commands::run_filesystem(command)?,
         Commands::Tools {
@@ -806,6 +809,27 @@ mod tests {
                 std::path::PathBuf::from("/files/pod-vlt_123/Status/manifest.json")
             ),
             Commands::Frame { .. } => panic!("expected make-live"),
+            _ => panic!("expected frame"),
+        }
+    }
+
+    #[test]
+    fn frame_discard_draft_parses() {
+        let cli = Cli::try_parse_from([
+            "dsbx",
+            "frame",
+            "discard-draft",
+            "/files/pod-vlt_123/Status/manifest.json",
+        ])
+        .expect("parse");
+        match cli.command {
+            Commands::Frame {
+                command: commands::frame::FrameCommand::DiscardDraft { manifest },
+            } => assert_eq!(
+                manifest,
+                std::path::PathBuf::from("/files/pod-vlt_123/Status/manifest.json")
+            ),
+            Commands::Frame { .. } => panic!("expected discard-draft"),
             _ => panic!("expected frame"),
         }
     }

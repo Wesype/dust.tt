@@ -11,9 +11,10 @@ use super::types::{
     interpret_call_tool_post_response, parse_action_poll_response, ActionPollResponse,
     CallToolPostOutcome, CallToolPostResponse, CallToolRequest, CallToolResponse, CallToolResult,
     FrameCallByIdRequest, FrameCallFromSourceRequest, FrameCallResponse, FrameDatabaseListResponse,
-    FrameDatabaseQueryRequest, FrameDatabaseQueryResponse, FrameDraftModeRequest,
-    FrameDraftModeResponse, FrameMakeLiveRequest, FrameMakeLiveResponse, FramePublishRequest,
-    FramePublishResponse, FrameShareLinkResponse, MCPServerView, SandboxServerViewsResponse,
+    FrameDatabaseQueryRequest, FrameDatabaseQueryResponse, FrameDiscardDraftRequest,
+    FrameDiscardDraftResponse, FrameDraftModeRequest, FrameDraftModeResponse, FrameMakeLiveRequest,
+    FrameMakeLiveResponse, FramePublishRequest, FramePublishResponse, FrameShareLinkResponse,
+    MCPServerView, SandboxServerViewsResponse,
 };
 
 // Action poll schedule after a 202 create: Temporal + MCP need time before
@@ -187,6 +188,18 @@ impl DustApiClient {
         self.post_with_timeout(
             "sandbox/frames/make-live",
             &FrameMakeLiveRequest { manifest_path },
+            FRAME_LOCK_REQUEST_TIMEOUT,
+        )
+        .await
+    }
+
+    pub async fn discard_frame_draft(
+        &self,
+        manifest_path: &str,
+    ) -> anyhow::Result<FrameDiscardDraftResponse> {
+        self.post_with_timeout(
+            "sandbox/frames/discard-draft",
+            &FrameDiscardDraftRequest { manifest_path },
             FRAME_LOCK_REQUEST_TIMEOUT,
         )
         .await
@@ -603,6 +616,51 @@ mod tests {
 
         let error = api
             .make_live_frame("conversation-c/App/manifest.json")
+            .await
+            .expect_err("a 409 must fail");
+
+        let api_error = error
+            .downcast_ref::<DustApiError>()
+            .expect("typed API error");
+        assert_eq!(api_error.status, Some(409));
+        assert_eq!(api_error.message, message);
+        assert!(format!("{error:#}").contains(message));
+        server.await.expect("test server completes");
+    }
+
+    #[tokio::test]
+    async fn discard_frame_draft_posts_the_manifest_path_and_parses_the_response() {
+        let (api, server) = one_shot_mock(
+            "POST /sandbox/frames/discard-draft ",
+            r#"{"manifestPath":"conversation-c/App/manifest.json"}"#,
+            "200 OK",
+            r#"{"frameId":"fil_abc123","publicationId":"pub-1"}"#,
+        )
+        .await;
+
+        let response = api
+            .discard_frame_draft("conversation-c/App/manifest.json")
+            .await
+            .expect("discard-draft succeeds");
+
+        assert_eq!(response.frame_id, "fil_abc123");
+        assert_eq!(response.publication_id, "pub-1");
+        server.await.expect("test server completes");
+    }
+
+    #[tokio::test]
+    async fn discard_frame_draft_surfaces_the_api_error_message() {
+        let message = "This Frame's live version was published before its source was stored, so its draft cannot be discarded.";
+        let (api, server) = one_shot_mock(
+            "POST /sandbox/frames/discard-draft ",
+            r#"{"manifestPath":"conversation-c/App/manifest.json"}"#,
+            "409 Conflict",
+            r#"{"error":{"type":"frame_discard_unavailable","message":"This Frame's live version was published before its source was stored, so its draft cannot be discarded."}}"#,
+        )
+        .await;
+
+        let error = api
+            .discard_frame_draft("conversation-c/App/manifest.json")
             .await
             .expect_err("a 409 must fail");
 

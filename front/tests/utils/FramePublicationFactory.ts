@@ -1,3 +1,4 @@
+import { enterFrameDraftMode } from "@app/lib/api/frames/draft_mode";
 import type { FramePublicationFunctionArtifact } from "@app/lib/api/frames/publication_storage";
 import {
   createFramePublicationFunctionRows,
@@ -409,4 +410,37 @@ export async function createTestScheduledFramePublication({
     frame,
     publicationId,
   };
+}
+
+/**
+ * `createTestLiveFrameWithSource`, then draft mode turned on and `draftTree` published as the
+ * Frame's pending draft.
+ */
+export async function createTestFrameInDraftMode(
+  auth: Authenticator,
+  {
+    conversationId,
+    tree,
+    draftTree,
+    folderName,
+  }: {
+    conversationId: string;
+    tree: TestFrameSourceTree;
+    draftTree: TestFrameSourceTree;
+    folderName?: string;
+  }
+) {
+  const live = await createTestLiveFrameWithSource(auth, {
+    conversationId,
+    tree,
+    folderName,
+  });
+  const entered = await enterFrameDraftMode(auth, { frame: live.frame });
+  assert(entered.isOk(), "test Frame enters draft mode");
+  const draftId = await publishTestFrameSourceTree(auth, {
+    frame: live.frame,
+    tree: draftTree,
+    mode: "draft",
+  });
+  return { ...live, draftId };
 }

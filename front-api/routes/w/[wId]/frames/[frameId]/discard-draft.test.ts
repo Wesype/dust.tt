@@ -1,4 +1,3 @@
-import { enterFrameDraftMode } from "@app/lib/api/frames/draft_mode";
 import { seedFramePublicationFunctionsArchive } from "@app/lib/api/frames/seed_functions_archive";
 import { getPrivateUploadBucket } from "@app/lib/file_storage";
 import { ConversationFactory } from "@app/tests/utils/ConversationFactory";
@@ -6,17 +5,13 @@ import { FeatureFlagFactory } from "@app/tests/utils/FeatureFlagFactory";
 import { FileFactory } from "@app/tests/utils/FileFactory";
 import { makeTestFrameFunction } from "@app/tests/utils/FrameFunctionFactory";
 import type { TestFrameSourceTree } from "@app/tests/utils/FramePublicationFactory";
-import {
-  createTestLiveFrameWithSource,
-  publishTestFrameSourceTree,
-} from "@app/tests/utils/FramePublicationFactory";
+import { createTestFrameInDraftMode } from "@app/tests/utils/FramePublicationFactory";
 import { createPrivateApiMockRequest } from "@app/tests/utils/generic_private_api_tests";
 import { fileStorageMock } from "@app/tests/utils/mocks/file_storage";
 import { FRAME_MANIFEST_FILE } from "@app/types/api/frame_manifest";
 import { getFramePublicationSourceArchivePath } from "@app/types/api/frame_storage";
 import { frameContentType } from "@app/types/files";
 import { honoApp } from "@front-api/app";
-import assert from "assert";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@app/lib/api/frames/seed_functions_archive", () => ({
@@ -42,15 +37,13 @@ async function setupFrameInDraftMode() {
     agentConfigurationId: "test-agent",
     messagesCreatedAt: [],
   });
-  const { frame, liveId } = await createTestLiveFrameWithSource(auth, {
+  const { frame, liveId } = await createTestFrameInDraftMode(auth, {
     conversationId: conversation.sId,
     tree: LIVE_SOURCE,
-  });
-  assert((await enterFrameDraftMode(auth, { frame })).isOk());
-  await publishTestFrameSourceTree(auth, {
-    frame,
-    tree: { ...LIVE_SOURCE, "index.tsx": "export default function B() {}" },
-    mode: "draft",
+    draftTree: {
+      ...LIVE_SOURCE,
+      "index.tsx": "export default function B() {}",
+    },
   });
   return { auth, workspace, frame, liveId };
 }

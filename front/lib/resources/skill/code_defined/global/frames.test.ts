@@ -237,6 +237,7 @@ describe("framesSkill.fetchInstructions", () => {
     );
     expect(instructions).toContain("never say it is visible on the share link");
     expect(instructions).not.toContain("publicationId");
+    expect(instructions).toContain("dsbx frame discard-draft <manifest>");
   });
 
   it("does not mention drafts without the drafts flag, even with functions", async () => {
@@ -249,6 +250,7 @@ describe("framesSkill.fetchInstructions", () => {
 
     expect(instructions).not.toMatch(/draft/i);
     expect(instructions).not.toContain("make-live");
+    expect(instructions).not.toContain("discard-draft");
     expect(instructions).toContain("records a publication and makes it live");
     expect(instructions).toContain(
       "do not parse the Frame ID from the CLI output"
