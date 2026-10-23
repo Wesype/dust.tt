@@ -11,6 +11,10 @@
 mod attributes;
 mod budget;
 mod cache;
+// TODO(content): serve reads from the content cache, under live cached attributes, with one fetch
+// per file (a read waits for bytes already being fetched) and a budget (fixed or a flag, undecided).
+#[cfg_attr(not(test), expect(dead_code, reason = "not used by `Fs` yet"))]
+mod content;
 mod errno;
 mod fs;
 mod inodes;
