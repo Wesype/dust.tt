@@ -1,4 +1,5 @@
 import { InfiniteScroll } from "@app/components/InfiniteScroll";
+import { trackPodsBrowseOpen } from "@app/components/pod/podTracking";
 import { useSearchPods } from "@app/hooks/useSearchPods";
 import { useAppRouter } from "@app/lib/platform";
 import { getSpaceIcon } from "@app/lib/spaces";
@@ -96,7 +97,16 @@ export function PodsBrowsePopover({ owner }: PodsBrowsePopoverProps) {
 
   return (
     <div>
-      <PopoverRoot open={isOpen} onOpenChange={setIsOpen} modal>
+      <PopoverRoot
+        open={isOpen}
+        onOpenChange={(open) => {
+          if (open) {
+            trackPodsBrowseOpen();
+          }
+          setIsOpen(open);
+        }}
+        modal
+      >
         <PopoverTrigger asChild>
           <Button
             aria-label={t`Browse Pods`}

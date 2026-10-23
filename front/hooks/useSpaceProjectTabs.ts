@@ -27,7 +27,7 @@ const SYSTEM_POD_TAB_HASHES = new Set<string>([
   "tasks",
 ]);
 
-function isSystemPodTab(tab: string): tab is SystemPodTab {
+export function isSystemPodTab(tab: string): tab is SystemPodTab {
   return SYSTEM_POD_TAB_HASHES.has(tab);
 }
 

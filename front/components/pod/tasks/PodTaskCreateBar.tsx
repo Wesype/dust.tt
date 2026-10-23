@@ -1,3 +1,7 @@
+import {
+  podTaskAssignee,
+  trackPodTaskAdd,
+} from "@app/components/pod/podTracking";
 import { AddTaskComposer } from "@app/components/pod/tasks/AddTaskComposer";
 import { usePodTasksPanel } from "@app/components/pod/tasks/PodTasksPanelContext";
 import { Spinner } from "@dust-tt/sparkle";
@@ -11,7 +15,16 @@ export function PodTaskCreateBar() {
     isPodInfoLoading,
     defaultNewAssigneeId,
     handleAddTask,
+    podId,
   } = usePodTasksPanel();
+
+  const handleAdd = (text: string, assigneeId: string | null) => {
+    trackPodTaskAdd({
+      podId,
+      assignee: podTaskAssignee(assigneeId, viewerUserId),
+    });
+    return handleAddTask(text, assigneeId);
+  };
 
   if (isReadOnly) {
     return null;
@@ -38,7 +51,7 @@ export function PodTaskCreateBar() {
       podMembers={podMembers}
       viewerUserId={viewerUserId}
       defaultAssigneeId={defaultNewAssigneeId}
-      onAdd={handleAddTask}
+      onAdd={handleAdd}
     />
   );
 }

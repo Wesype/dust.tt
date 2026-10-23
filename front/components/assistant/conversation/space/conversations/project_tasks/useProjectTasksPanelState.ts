@@ -540,6 +540,7 @@ export function usePodTasksPanelState({
     onTaskOwnerFilterChange,
     owner,
     patchTaskItem,
+    podId,
     podMembers: podMembers,
     requestDelete,
     setDebouncedTaskSearchQuery,

@@ -3,6 +3,7 @@ import { PodFileTabNavTrigger } from "@app/components/pod/PodFileTabNavTrigger";
 import { PodHeaderActions } from "@app/components/pod/PodHeaderActions";
 import { PodNavAddFileTabButton } from "@app/components/pod/PodNavAddFileTabButton";
 import { PodPageContent } from "@app/components/pod/PodPageContent";
+import { trackPodTabSelect } from "@app/components/pod/podTracking";
 import { useActivePodId } from "@app/hooks/useActivePodId";
 import { useAgentFromSearchParam } from "@app/hooks/useAgentFromSearchParam";
 import { useScopedPodUiPreferences } from "@app/hooks/useScopedUIPreferences";
@@ -176,6 +177,7 @@ export function PodPage() {
         value={currentTab}
         onValueChange={(value) => {
           if (isValidPodTabValue(value)) {
+            trackPodTabSelect({ podId: podInfo.sId, tab: value });
             handleTabChange(value);
           }
         }}

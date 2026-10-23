@@ -15,6 +15,7 @@ export type PodTasksPanelData = {
   viewerUserId: string | null;
   isReadOnly?: boolean;
   owner: LightWorkspaceType;
+  podId: string;
   combinedGroupedTasksByUser: CombinedGroupedTasksByUser;
   activeAgents: LightAgentConfigurationType[];
   isAgentsLoading: boolean;

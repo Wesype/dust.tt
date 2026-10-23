@@ -1,3 +1,4 @@
+import { trackPodOnboardingStart } from "@app/components/pod/podTracking";
 import { useSeedInitialPodTasks } from "@app/lib/swr/pods";
 import type { LightWorkspaceType } from "@app/types/user";
 import { Button, MagicWand02 } from "@dust-tt/sparkle";
@@ -23,6 +24,7 @@ export function PodEmptyCallout({
   });
 
   const handleOnboardingClick = async () => {
+    trackPodOnboardingStart({ podId, isEditor });
     if (isEditor) {
       const result = await seedInitialPodTasks();
       if (result.isErr()) {

@@ -1,5 +1,9 @@
 import { useTypingAnimation } from "@app/components/assistant/conversation/space/conversations/project_tasks/useTypingAnimation";
-import { stripNewlines } from "@app/components/assistant/conversation/space/conversations/project_tasks/utils";
+import {
+  isOnboardingTask,
+  stripNewlines,
+} from "@app/components/assistant/conversation/space/conversations/project_tasks/utils";
+import { trackPodSuggestionAccept } from "@app/components/pod/podTracking";
 import {
   TaskMetadataTooltip,
   TaskSources,
@@ -17,6 +21,7 @@ import { useLingui } from "@lingui/react/macro";
 import { memo, useState } from "react";
 
 interface SuggestedTaskItemProps {
+  podId: string;
   task: PodTaskType;
   viewerUserId: string | null;
   onApproveAgentSuggestion: (task: PodTaskType) => void | Promise<void>;
@@ -27,6 +32,7 @@ interface SuggestedTaskItemProps {
 }
 
 export const SuggestedTaskItem = memo(function SuggestedTaskItem({
+  podId,
   task,
   viewerUserId,
   onApproveAgentSuggestion,
@@ -112,6 +118,11 @@ export const SuggestedTaskItem = memo(function SuggestedTaskItem({
             disabled={isApproving}
             onClick={async (e) => {
               e.stopPropagation();
+              trackPodSuggestionAccept({
+                podId,
+                taskId: task.sId,
+                isOnboardingTask: isOnboardingTask(task),
+              });
               setIsApproving(true);
               try {
                 await onApproveAgentSuggestion(task);

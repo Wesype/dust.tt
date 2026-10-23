@@ -1,3 +1,7 @@
+import {
+  trackPodCreateDialogClose,
+  trackPodCreateDialogSubmit,
+} from "@app/components/pod/podTracking";
 import { usePodConversationsSummary } from "@app/hooks/conversations";
 import { useCheckPodName } from "@app/lib/swr/pods";
 import { useCreateSpace } from "@app/lib/swr/spaces";
@@ -86,12 +90,20 @@ export function CreatePodModal({
     }, 500);
   }, [onClose, setNameToCheck]);
 
+  // Closing without creating (Cancel, Escape, outside click). `handleClose` alone is also used
+  // after a successful creation, which must not count as a close.
+  const handleCancel = useCallback(() => {
+    trackPodCreateDialogClose({ hasName: podName.trim().length > 0 });
+    handleClose();
+  }, [podName, handleClose]);
+
   const onSave = useCallback(async () => {
     const trimmedName = podName.trim();
     if (!trimmedName || !isNameAvailable) {
       return;
     }
 
+    trackPodCreateDialogSubmit({ access: isPodOpen ? "open" : "restricted" });
     setIsSaving(true);
     const createdSpace = await doCreate(
       {
@@ -136,7 +148,7 @@ export function CreatePodModal({
   const nameNotAvailable = podName.trim() && !isChecking && !isNameAvailable;
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={handleCancel}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
@@ -184,7 +196,7 @@ export function CreatePodModal({
           </div>
         </DialogContainer>
         <DialogFooter>
-          <Button label={t`Cancel`} variant="outline" onClick={handleClose} />
+          <Button label={t`Cancel`} variant="outline" onClick={handleCancel} />
           <Button
             label={isSaving ? t`Creating...` : t`Create`}
             onClick={onSave}

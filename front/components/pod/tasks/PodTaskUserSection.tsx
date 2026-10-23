@@ -1,3 +1,5 @@
+import { isOnboardingTask } from "@app/components/assistant/conversation/space/conversations/project_tasks/utils";
+import { trackPodSuggestionsBulk } from "@app/components/pod/podTracking";
 import { EditableTaskItem } from "@app/components/pod/tasks/EditableTaskItem";
 import { usePodTasksPanel } from "@app/components/pod/tasks/PodTasksPanelContext";
 import { SuggestedTaskItem } from "@app/components/pod/tasks/SuggestedTaskItem";
@@ -23,6 +25,7 @@ export function PodTaskUserSection({
   const {
     viewerUserId,
     owner,
+    podId,
     agentNameById,
     newItemKeys,
     isReadOnly,
@@ -44,6 +47,12 @@ export function PodTaskUserSection({
     setBulkAction(kind);
     try {
       const ids = suggestedTasks.map((t) => t.sId);
+      trackPodSuggestionsBulk({
+        podId,
+        decision: kind === "approve" ? "accept" : "dismiss",
+        taskIds: ids,
+        onboardingTaskCount: suggestedTasks.filter(isOnboardingTask).length,
+      });
       if (kind === "approve") {
         await onApproveAllSuggestedForAssignee(ids);
       } else {
@@ -90,6 +99,7 @@ export function PodTaskUserSection({
               {suggestedTasks.map((task) => (
                 <SuggestedTaskItem
                   key={task.sId}
+                  podId={podId}
                   task={task}
                   viewerUserId={viewerUserId}
                   onApproveAgentSuggestion={onApproveAgentSuggestion}

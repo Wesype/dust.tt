@@ -2,11 +2,13 @@ import { ConversationSidebarStatusDot } from "@app/components/assistant/conversa
 import { useTaskInlineEdit } from "@app/components/assistant/conversation/space/conversations/project_tasks/useTaskInlineEdit";
 import { useTypingAnimation } from "@app/components/assistant/conversation/space/conversations/project_tasks/useTypingAnimation";
 import {
+  isOnboardingTask,
   NEW_MANUAL_TASK_MAX_CHARS,
   stripNewlines,
   TASK_DESKTOP_HOVER_REVEAL_CLASS,
   TASK_TEXTAREA_FIELD_CLASS,
 } from "@app/components/assistant/conversation/space/conversations/project_tasks/utils";
+import { trackPodTaskStart } from "@app/components/pod/podTracking";
 import { usePodTasksPanel } from "@app/components/pod/tasks/PodTasksPanelContext";
 import { PodTaskStartWorkingDropdown } from "@app/components/pod/tasks/PodTaskStartWorkingDropdown";
 import { TaskOverflowMenu } from "@app/components/pod/tasks/TaskOverflowMenu";
@@ -39,6 +41,7 @@ export function EditableTaskItem({ task }: EditableTaskItemProps) {
   const {
     viewerUserId,
     owner,
+    podId,
     activeAgents,
     defaultAgentId,
     isAgentsLoading,
@@ -235,7 +238,16 @@ export function EditableTaskItem({ task }: EditableTaskItemProps) {
                 defaultGoToConversation={!!task.agentInstructions?.trim()}
                 defaultAgentId={defaultAgentId}
                 onOpenChange={setStartMenuOpen}
-                onStart={(opts) => handleStartWorking(task, opts)}
+                onStart={(opts) => {
+                  trackPodTaskStart({
+                    podId,
+                    taskId: task.sId,
+                    isOnboardingTask: isOnboardingTask(task),
+                    isFirstOnboardingTask,
+                    goToConversation: !!opts.goToConversation,
+                  });
+                  return handleStartWorking(task, opts);
+                }}
               />
             </div>
           )}
