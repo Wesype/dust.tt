@@ -1,4 +1,7 @@
-import { serializeDocumentHtml } from "@app/components/editor/document/content";
+import {
+  DOCUMENT_CONTENT_CLASS_NAME,
+  serializeDocumentHtml,
+} from "@app/components/editor/document/content";
 import {
   loadDfm,
   loggableRefusal,
@@ -24,6 +27,7 @@ import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
 import { escapeXml } from "@app/types/shared/utils/string_utils";
 import path from "path";
+import documentPrintStyle from "@app/lib/api/documents/document.print.css";
 
 export type DocumentPdfExportErrorCode =
   | "not_configured"
@@ -45,20 +49,6 @@ export function isDocumentPdfExportError(
 ): error is DocumentPdfExportError {
   return error instanceof DocumentPdfExportError;
 }
-
-// The editor's Tailwind classes ride along unstyled. Chromium's default stylesheet styles the
-// elements; these rules only fix what it gets wrong for the editor's HTML.
-// TODO(louisjc): print with the editor's own styles once its CSS can be built for the server.
-const DOCUMENT_PDF_STYLE = `
-body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.5; }
-li > p, td > p { margin: 0; }
-li[data-task] { list-style-type: "☐  "; }
-li[data-checked] { list-style-type: "☑  "; }
-pre { white-space: pre-wrap; }
-table { border-collapse: collapse; }
-td { border: 1px solid #d1d5db; padding: 4px 8px; vertical-align: top; }
-[data-document-frame] { padding: 16px; border: 1px dashed #d1d5db; color: #6b7280; }
-`;
 
 // Override the renderer defaults, which print Frames full-bleed at 80% scale.
 const DOCUMENT_PDF_OPTIONS: PdfOptions = {
@@ -100,12 +90,14 @@ export function renderDocumentHtml(
 <html>
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; font-src data:">
   <title>${escapeXml(title)}</title>
-  <style>${DOCUMENT_PDF_STYLE}</style>
+  <style>${documentPrintStyle}</style>
 </head>
 <body>
+<div class="${DOCUMENT_CONTENT_CLASS_NAME}">
 ${body}
+</div>
 </body>
 </html>`);
 }

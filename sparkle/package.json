@@ -58,7 +58,8 @@
     },
     "./dist/sparkle.css": "./dist/sparkle.css",
     "./styles/tailwind.css": "./src/styles/tailwind.css",
-    "./styles/theme.css": "./src/styles/theme.css"
+    "./styles/theme.css": "./src/styles/theme.css",
+    "./styles/tokens.css": "./src/styles/tokens.css"
   },
   "files": [
     "dist/",

@@ -61,3 +61,5 @@
 
 # Static SPA assets are deployed separately and are not used by workers or front-api.
 front/public
+# Except the fonts inlined in the stylesheet of documents printed to PDF (`document.print.css`).
+!front/public/static/fonts/

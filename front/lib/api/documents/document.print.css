@@ -1,0 +1,61 @@
+/*
+ * The stylesheet of a document printed to PDF: the editor's own Tailwind classes, with Sparkle's
+ * theme in its light colours. Compiled at build time by `compilePrintCss`, which inlines its fonts.
+ */
+@import "tailwindcss" source(none);
+@import "@dust-tt/sparkle/styles/tokens.css";
+@import "@dust-tt/sparkle/styles/theme.css";
+@source "../../../components/editor/document";
+
+/* `front/public` is out of the Docker build context but its fonts: see its `.dockerignore`. */
+@font-face {
+  font-family: "Geist";
+  src: url("../../../public/static/fonts/GeistVariable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Geist";
+  src: url("../../../public/static/fonts/GeistVariable-Italic.woff2")
+    format("woff2");
+  font-weight: 100 900;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("../../../public/static/fonts/GeistMonoVariable.woff2")
+    format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+}
+
+/* The `@container` ancestor `DOCUMENT_CONTENT_CLASS_NAME` sizes the title against. */
+@layer base {
+  body {
+    @apply @container;
+  }
+}
+
+/* A page cannot scroll: code blocks wrap their long lines instead of the editor's `whitespace-pre`. */
+pre {
+  white-space: pre-wrap;
+}
+
+/*
+ * The editor draws tasks' badges and Frames in node views, which the serialized HTML lacks.
+ * TODO(louisjc): print them as the editor draws them.
+ */
+li[data-task] {
+  list-style-type: "☐  ";
+}
+
+li[data-checked] {
+  list-style-type: "☑  ";
+}
+
+/* As `DocumentFrame` shows a Frame it cannot display. */
+[data-document-frame] {
+  @apply my-6 rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground;
+}

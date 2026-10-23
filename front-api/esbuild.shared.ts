@@ -1,6 +1,7 @@
 import type esbuild from "esbuild";
 
 import { linguiPlugin } from "./esbuild.lingui";
+import { printCssPlugin } from "./esbuild.print_css";
 
 // ESM-only packages that Node 22 cannot correctly `require()` at runtime
 // (it wraps the default export in `{ default: ... }`, breaking the
@@ -73,7 +74,7 @@ export function getBaseBuildOptions(target: BuildTarget): esbuild.BuildOptions {
     alias: {
       "@app": "../front",
     },
-    plugins: [bundleEsmPlugin, linguiPlugin],
+    plugins: [bundleEsmPlugin, linguiPlugin, printCssPlugin],
     logLevel: "info",
     metafile: true,
     minifyIdentifiers: false,

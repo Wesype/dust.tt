@@ -14,7 +14,8 @@
   "include": [
     "**/*.ts",
     "../front/global.d.ts",
-    "../front/lib/i18n/catalog.d.ts"
+    "../front/lib/i18n/catalog.d.ts",
+    "./print_css.d.ts"
   ],
   "exclude": [
     "node_modules",

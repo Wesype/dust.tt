@@ -712,6 +712,14 @@ export const serializeDocumentMarkdown = (
     : serializeReadingBack(content, anchorOrder, "shared");
 };
 
+/**
+ * How a document's content reads, on screen and printed: the classes of the element wrapping its
+ * nodes, its first heading as the title. Editing affordances (caret, placeholders, collaborators)
+ * stay out. The title's size needs a `@container` ancestor, which an element cannot be for itself.
+ */
+export const DOCUMENT_CONTENT_CLASS_NAME =
+  "font-sans text-base leading-7 text-foreground antialiased wrap-anywhere [&>:first-child]:mt-0 [&>h1:first-child]:mb-6 [&>h1:first-child]:heading-3xl @sm:[&>h1:first-child]:heading-4xl";
+
 // Resolves no image source: images render as their alt text, and Frames as their path.
 export const serializeDocumentHtml = (document: JSONContent): string =>
   renderToHTMLString({ extensions: documentExtensions, content: document });

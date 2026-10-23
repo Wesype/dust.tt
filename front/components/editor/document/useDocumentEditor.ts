@@ -1,3 +1,4 @@
+import { DOCUMENT_CONTENT_CLASS_NAME } from "@app/components/editor/document/content";
 import {
   loadDfm,
   loggableRefusal,
@@ -132,8 +133,9 @@ export const useDocumentEditor = ({
         "aria-label": t`Document content`,
         "aria-multiline": "true",
         class: cn(
-          "min-h-96 text-base leading-7 wrap-anywhere caret-foreground outline-none [&>:first-child]:mt-0",
-          "[&>h1:first-child]:mb-6 [&>h1:first-child]:heading-3xl @sm:[&>h1:first-child]:heading-4xl",
+          DOCUMENT_CONTENT_CLASS_NAME,
+          // What only editing draws, and printing leaves out.
+          "min-h-96 caret-foreground outline-none",
           "[&_.is-empty]:before:pointer-events-none [&_.is-empty]:before:float-left [&_.is-empty]:before:h-0 [&_.is-empty]:before:text-muted-foreground [&_.is-empty]:before:content-[attr(data-placeholder)]",
           "[&_h1.is-empty]:before:text-foreground/35 print:[&_.is-empty]:before:hidden",
           // Other people's carets in a live document; their color comes inline.
