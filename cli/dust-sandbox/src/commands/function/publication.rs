@@ -27,6 +27,7 @@ use super::RUNNER_JS;
 
 const SANDBOX_TOKEN_ENV: &str = "DUST_SANDBOX_TOKEN";
 const POD_USER_IDENTITY_ENV: &str = "DUST_POD_USER_IDENTITY";
+const POD_VISITOR_EMAIL_ENV: &str = "DUST_POD_VISITOR_EMAIL";
 
 const READY_MARKER: &str = "ready";
 const LOCK_FILE: &str = "lock";
@@ -211,6 +212,7 @@ fn spawn_publication_worker(bundles_dir: &Path, paths: &PublicationPaths) -> Opt
         // arrive per-request in the warm envelope instead.
         .env_remove(SANDBOX_TOKEN_ENV)
         .env_remove(POD_USER_IDENTITY_ENV)
+        .env_remove(POD_VISITOR_EMAIL_ENV)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(log.map(Stdio::from).unwrap_or_else(Stdio::null))

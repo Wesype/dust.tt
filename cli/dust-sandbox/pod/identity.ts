@@ -3,6 +3,7 @@ import { z } from "zod";
 import { invocationEnv } from "./context.ts";
 
 export const POD_USER_IDENTITY_ENV = "DUST_POD_USER_IDENTITY";
+export const POD_VISITOR_EMAIL_ENV = "DUST_POD_VISITOR_EMAIL";
 export const POD_WORKSPACE_ID_ENV = "WORKSPACE_ID";
 
 export interface WorkspaceUserIdentity {
@@ -91,4 +92,13 @@ export function currentUser(): WorkspaceUserIdentity | null {
     isPodMember: value.isPodMember ?? false,
     canWriteFrameSource: value.canWriteFrameSource ?? false,
   });
+}
+
+/**
+ * Return the verified email of the public share visitor who made this call.
+ *
+ * Null for every other call, workspace members included.
+ */
+export function visitorEmail(): string | null {
+  return invocationEnv(POD_VISITOR_EMAIL_ENV) || null;
 }

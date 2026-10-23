@@ -2,9 +2,11 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   currentUser,
   POD_USER_IDENTITY_ENV,
+  POD_VISITOR_EMAIL_ENV,
   POD_WORKSPACE_ID_ENV,
   PodUserIdentityError,
   runWithInvocationEnv,
+  visitorEmail,
 } from "@dust/pod";
 
 const identity = {
@@ -20,6 +22,7 @@ const identity = {
 
 afterEach(() => {
   delete process.env[POD_USER_IDENTITY_ENV];
+  delete process.env[POD_VISITOR_EMAIL_ENV];
   delete process.env[POD_WORKSPACE_ID_ENV];
 });
 
@@ -173,5 +176,46 @@ describe("currentUser inside an invocation context", () => {
     ]);
     expect(a?.sId).toBe("usr_123");
     expect(b?.sId).toBe("usr_456");
+  });
+});
+
+describe("visitorEmail", () => {
+  test("returns the visitor email set on the invocation", () => {
+    process.env[POD_VISITOR_EMAIL_ENV] = "ana@acme.com";
+
+    expect(visitorEmail()).toBe("ana@acme.com");
+  });
+
+  test("returns null when the invocation has no visitor", () => {
+    process.env[POD_VISITOR_EMAIL_ENV] = "";
+    expect(visitorEmail()).toBeNull();
+
+    delete process.env[POD_VISITOR_EMAIL_ENV];
+    expect(visitorEmail()).toBeNull();
+  });
+
+  test("a context without a visitor returns null even when process.env has one", () => {
+    process.env[POD_VISITOR_EMAIL_ENV] = "ana@acme.com";
+
+    expect(
+      runWithInvocationEnv({ [POD_VISITOR_EMAIL_ENV]: "" }, () =>
+        visitorEmail()
+      )
+    ).toBeNull();
+    expect(runWithInvocationEnv({}, () => visitorEmail())).toBeNull();
+  });
+
+  test("concurrent invocations resolve their own visitors", async () => {
+    const call = async (email: string, delayMs: number) =>
+      runWithInvocationEnv({ [POD_VISITOR_EMAIL_ENV]: email }, async () => {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        return visitorEmail();
+      });
+    const [a, b] = await Promise.all([
+      call("ana@acme.com", 30),
+      call("bob@acme.com", 5),
+    ]);
+    expect(a).toBe("ana@acme.com");
+    expect(b).toBe("bob@acme.com");
   });
 });

@@ -233,6 +233,10 @@ module which provides type-safe access to environment variables.
 
 GitHub workflows and action scripts under `.github/` are out of scope and may use `process.env`.
 
+Sandbox runtime code under `cli/dust-sandbox/` (the `@dust/pod` SDK, the functions runner and their
+tests) is also out of scope: it runs inside the sandbox without `@app/lib/api/config` and reads its
+environment directly.
+
 Example:
 
 ```

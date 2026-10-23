@@ -27,9 +27,9 @@ import fs from "fs";
 import path from "path";
 
 const DUST_BEDROCK_IMAGE_VERSION = "1.11.0";
-const DUST_BASE_IMAGE_VERSION = "0.8.128";
+const DUST_BASE_IMAGE_VERSION = "0.8.129";
 // The sandbox image registry workflow reads this line with sed.
-export const DSBX_CLI_VERSION = "0.1.72";
+export const DSBX_CLI_VERSION = "0.1.73";
 // Identity, not coverage list: agent-proxied is a specific Linux user. The
 // nftables ruleset covers SANDBOX_EGRESS_CONTROLLED_UIDS; this constant is
 // the stable identity used when creating the workload account.

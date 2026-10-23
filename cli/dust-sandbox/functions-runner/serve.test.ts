@@ -444,6 +444,7 @@ describe("runner serve", () => {
         ...process.env,
         WARM_TEST_MARKER: "from-spawn",
         DUST_SANDBOX_TOKEN: "spawn-invocation-token",
+        DUST_POD_VISITOR_EMAIL: "spawn-visitor@acme.com",
       },
     });
     try {
@@ -465,6 +466,7 @@ describe("runner serve", () => {
       expect(reply?.outcome?.output).toEqual({
         marker: "from-spawn",
         token: "unset",
+        visitorEmail: "unset",
       });
     } finally {
       proc.kill();

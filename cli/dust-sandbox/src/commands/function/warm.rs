@@ -37,6 +37,8 @@ const WARM_ENABLED_ENV: &str = "DUST_FUNCTION_WARM_ENABLED";
 const SANDBOX_TOKEN_ENV: &str = "DUST_SANDBOX_TOKEN";
 #[cfg(test)]
 const POD_USER_IDENTITY_ENV: &str = "DUST_POD_USER_IDENTITY";
+#[cfg(test)]
+const POD_VISITOR_EMAIL_ENV: &str = "DUST_POD_VISITOR_EMAIL";
 
 /// Bound on the wait for the server's first frame (ack or refusal). It must
 /// comfortably exceed the server's admission-queue deadline (~2s, see
@@ -466,8 +468,10 @@ export default {{
     return Response.json({{
       contextToken: invocationEnv("DUST_SANDBOX_TOKEN") ?? null,
       contextIdentity: invocationEnv("DUST_POD_USER_IDENTITY") ?? null,
+      contextVisitorEmail: invocationEnv("DUST_POD_VISITOR_EMAIL") ?? null,
       childHasToken: childEnv.includes("DUST_SANDBOX_TOKEN="),
       childHasIdentity: childEnv.includes("DUST_POD_USER_IDENTITY="),
+      childHasVisitorEmail: childEnv.includes("DUST_POD_VISITOR_EMAIL="),
     }});
   }},
 }};
@@ -506,6 +510,7 @@ export default {{
         let original_warm_enabled = std::env::var_os(WARM_ENABLED_ENV);
         let original_token = std::env::var_os(SANDBOX_TOKEN_ENV);
         let original_identity = std::env::var_os(POD_USER_IDENTITY_ENV);
+        let original_visitor_email = std::env::var_os(POD_VISITOR_EMAIL_ENV);
 
         let home = tempfile::tempdir().expect("home tempdir");
         std::env::set_var("HOME", home.path());
@@ -529,6 +534,7 @@ export default {{
         std::env::set_var(WARM_ENABLED_ENV, "1");
         std::env::set_var(SANDBOX_TOKEN_ENV, "invocation-token");
         std::env::set_var(POD_USER_IDENTITY_ENV, "invocation-identity");
+        std::env::set_var(POD_VISITOR_EMAIL_ENV, "visitor@acme.com");
 
         let input = serde_json::json!({ "url": "http://localhost/?name=warm" }).to_string();
 
@@ -574,8 +580,10 @@ export default {{
                 "output": {
                     "contextToken": "invocation-token",
                     "contextIdentity": "invocation-identity",
+                    "contextVisitorEmail": "visitor@acme.com",
                     "childHasToken": false,
                     "childHasIdentity": false,
+                    "childHasVisitorEmail": false,
                 }
             })
         );
@@ -585,6 +593,7 @@ export default {{
         restore_env(WARM_ENABLED_ENV, original_warm_enabled);
         restore_env(SANDBOX_TOKEN_ENV, original_token);
         restore_env(POD_USER_IDENTITY_ENV, original_identity);
+        restore_env(POD_VISITOR_EMAIL_ENV, original_visitor_email);
     }
 
     #[test]

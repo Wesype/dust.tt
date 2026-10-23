@@ -84,7 +84,11 @@ const DRAIN_FLUSH_TIMEOUT_MS = 5_000;
 // Per-invocation env vars inherited from the cold run that spawned this
 // worker. Scrubbed at startup: they belong to that invocation, and every
 // request carries its own environment in the request itself.
-const SPAWN_ENV_SCRUB_KEYS = ["DUST_SANDBOX_TOKEN", "DUST_POD_USER_IDENTITY"];
+const SPAWN_ENV_SCRUB_KEYS = [
+  "DUST_SANDBOX_TOKEN",
+  "DUST_POD_USER_IDENTITY",
+  "DUST_POD_VISITOR_EMAIL",
+];
 
 // Mirrors dsbx's function-name validation: the name feeds a directory scan.
 const VALID_NAME = /^[A-Za-z0-9_-]+$/;

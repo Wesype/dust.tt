@@ -4,6 +4,7 @@
  * Surfaces:
  * - `db(name)`: the pod's SQLite state databases, through Drizzle (./db.ts).
  * - `currentUser()`: the workspace-scoped user attributed to this invocation.
+ * - `visitorEmail()`: the verified email of a public share visitor.
  * - `persistentFilesDir()`: path of the Frame's persistent files folder
  *   (./files.ts).
  * - `invocationEnv(name)`: the invocation's environment (./context.ts).

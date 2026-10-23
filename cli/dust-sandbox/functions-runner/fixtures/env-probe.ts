@@ -5,6 +5,7 @@ export default {
     return Response.json({
       marker: process.env.WARM_TEST_MARKER ?? "unset",
       token: process.env.DUST_SANDBOX_TOKEN ?? "unset",
+      visitorEmail: process.env.DUST_POD_VISITOR_EMAIL ?? "unset",
     });
   },
 };
