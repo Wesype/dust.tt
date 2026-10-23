@@ -17,8 +17,8 @@ use crate::{
     storage::{
         self,
         resources::{
-            SUBJECT_MAX_BYTES, SUPERUSER_SUBJECT, directory, file, keys::tenant_subspace, page,
-            tenant::TenantResource,
+            SUBJECT_MAX_BYTES, SUPERUSER_SUBJECT, directory, file, keys::tenant_subspace, outbox,
+            page, tenant::TenantResource,
         },
     },
 };
@@ -52,6 +52,9 @@ const GRANT_MODE_MASK: u32 = GRANT_READ_MODE | GRANT_WRITE_MODE;
 
 #[derive(Debug)]
 pub enum Error {
+    MismatchedMutationResults,
+    InvalidMutation,
+    Outbox(outbox::Error),
     TimestampGeneration,
     InvalidLockId,
     WouldBlock,
@@ -82,6 +85,11 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::MismatchedMutationResults => {
+                f.write_str("filesystem operations and results differ in length")
+            }
+            Self::InvalidMutation => f.write_str("filesystem mutation contains a virtual object"),
+            Self::Outbox(error) => error.fmt(f),
             Self::InvalidLockId => f.write_str("invalid lock ID"),
             Self::WouldBlock => f.write_str("object locked"),
             Self::LockLost => f.write_str("lock lost"),
@@ -113,6 +121,7 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Outbox(error) => Some(error),
             Self::Directory(error) => Some(error.as_ref()),
             Self::File(error) => Some(error.as_ref()),
             _ => None,
@@ -148,6 +157,19 @@ impl From<storage::Error<file::Error>> for storage::Error<Error> {
             storage::Error::InvalidObjectId(error) => Self::InvalidObjectId(error),
             storage::Error::Receipt(error) => Self::Receipt(error),
             storage::Error::Resource(error) => Self::Resource(Error::File(Box::new(error))),
+        }
+    }
+}
+
+impl From<storage::Error<outbox::Error>> for storage::Error<Error> {
+    fn from(error: storage::Error<outbox::Error>) -> Self {
+        match error {
+            storage::Error::Open(error) => Self::Open(error),
+            storage::Error::Transaction(error) => Self::Transaction(error),
+            storage::Error::InvalidKeyHash(error) => Self::InvalidKeyHash(error),
+            storage::Error::InvalidObjectId(error) => Self::InvalidObjectId(error),
+            storage::Error::Receipt(error) => Self::Receipt(error),
+            storage::Error::Resource(error) => Self::Resource(Error::Outbox(error)),
         }
     }
 }

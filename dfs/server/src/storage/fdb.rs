@@ -21,6 +21,8 @@ const CLUSTER_FILE_SEED_ENV: &str = "FDB_CLUSTER_FILE_SEED";
 pub const TRANSACTION_TIMEOUT_MS: i32 = 5_000;
 const NO_COMMIT_VERSION_CODE: i32 = 2021;
 
+pub type Transaction = foundationdb::Transaction;
+
 static DATABASE: OnceLock<Database> = OnceLock::new();
 
 /// The process-wide database, opened on first use. The caller must have booted the network first.

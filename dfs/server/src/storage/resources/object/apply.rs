@@ -10,9 +10,13 @@ use futures::future::try_join_all;
 use super::{Error, Metadata, ObjectResource, locks::LockId};
 use crate::{
     clock,
+    filesystem_events::FilesystemEvent,
     storage::{
-        self,
-        resources::{directory::DirectoryResource, file::FileResource, session::SessionResource},
+        self, fdb,
+        resources::{
+            directory::DirectoryResource, file::FileResource, outbox::OutboxEvent,
+            session::SessionResource,
+        },
     },
 };
 
@@ -31,8 +35,9 @@ impl ObjectResource {
     /**
      * @cc [owner:spolu,label:backend;error-handling] object-apply-results
      * Results MUST preserve request order and duplicates, with exactly one result per operation.
-     * Resource failures MUST become per-operation errors without stopping later operations.
-     * Storage failures MUST abort the attempt and preserve FDB errors for retry.
+     * Operation resource failures MUST become per-operation errors without stopping later operations.
+     * Storage or event-enqueue failures MUST abort the entire transaction, including successful
+     * operations. FDB errors MUST retain their retry behavior.
      */
     /**
      * @cc [owner:spolu,label:backend] object-apply-operation-attributes
@@ -40,11 +45,21 @@ impl ObjectResource {
      * operations MUST NOT rewrite earlier results.
      */
     pub async fn apply(
-        tx: &Transaction,
+        tx: &fdb::Transaction,
         session: &SessionResource,
         operations: Vec<Operation>,
         locks: &HashMap<ObjectId, LockId>,
     ) -> Result<Vec<Result<Mutation, Error>>, storage::Error<Error>> {
+        let object_ids: Vec<_> = operations
+            .iter()
+            .map(|operation| match operation {
+                Operation::Create(operation) => operation.object_id,
+                Operation::Update(operation) => operation.object_id,
+                Operation::Write(operation) => operation.object_id,
+                Operation::Move(operation) => operation.object_id,
+                Operation::Remove(operation) => operation.object_id,
+            })
+            .collect();
         let mut results: Vec<_> = (0..operations.len()).map(|_| None).collect();
         let batches = Self::group_by_targets(operations);
         let completed = try_join_all(batches.into_iter().map(
@@ -66,7 +81,13 @@ impl ObjectResource {
         for (index, result) in completed.into_iter().flatten() {
             results[index] = Some(result);
         }
-        Ok(results.into_iter().flatten().collect())
+        let results: Vec<_> = results.into_iter().flatten().collect();
+        let payloads = FilesystemEvent::from_apply(&object_ids, &results)?
+            .into_iter()
+            .map(FilesystemEvent::into_payload)
+            .collect::<Vec<_>>();
+        OutboxEvent::enqueue(tx, &session.tenant.tenant_id, &payloads)?;
+        Ok(results)
     }
 
     async fn apply_operation(

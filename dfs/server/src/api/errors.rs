@@ -6,10 +6,46 @@ use tonic::Status;
 
 use crate::storage::{
     self, receipt,
-    resources::{directory, file, object, session, tenant},
+    resources::{directory, file, object, outbox, session, tenant},
 };
 
 const TRANSACTION_TOO_LARGE_CODE: i32 = 2101;
+
+impl From<outbox::Error> for ErrorCode {
+    fn from(error: outbox::Error) -> Self {
+        match error {
+            outbox::Error::TooManyEvents => Self::Capacity,
+            outbox::Error::InvalidCursor => Self::InvalidInput,
+            outbox::Error::TimestampGeneration | outbox::Error::InvalidEvent => {
+                tracing::error!(%error, "outbox operation failed");
+                Self::Internal
+            }
+        }
+    }
+}
+
+impl From<outbox::Error> for ErrorDetails {
+    fn from(error: outbox::Error) -> Self {
+        Self {
+            code: ErrorCode::from(error).into(),
+        }
+    }
+}
+
+impl From<outbox::Error> for Status {
+    fn from(error: outbox::Error) -> Self {
+        status(error.into())
+    }
+}
+
+impl From<storage::Error<outbox::Error>> for storage::Error<Status> {
+    fn from(error: storage::Error<outbox::Error>) -> Self {
+        match error {
+            storage::Error::Transaction(error) => Self::Transaction(error),
+            error => Self::Resource(error.into()),
+        }
+    }
+}
 
 #[cfg(test)]
 #[path = "../../tests/api/errors.rs"]
@@ -90,7 +126,10 @@ impl From<object::Error> for ErrorCode {
             object::Error::UnsupportedKind => ErrorCode::Unsupported,
             object::Error::Directory(error) => (*error).into(),
             object::Error::File(error) => (*error).into(),
-            object::Error::TimestampGeneration
+            object::Error::Outbox(error) => error.into(),
+            object::Error::MismatchedMutationResults
+            | object::Error::InvalidMutation
+            | object::Error::TimestampGeneration
             | object::Error::MissingMetadata
             | object::Error::InvalidStoredGrant
             | object::Error::InvalidStoredLock

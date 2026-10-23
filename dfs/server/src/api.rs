@@ -17,6 +17,7 @@ use tonic::{Request, Response, Status};
 
 use crate::{
     auth::KeyHash,
+    filesystem_events::FilesystemEvent,
     storage::{
         self, fdb,
         resources::{
@@ -26,6 +27,7 @@ use crate::{
                 self, ObjectResource,
                 locks::{LockId, lock_ids_by_object},
             },
+            outbox::OutboxEvent,
             session::SessionResource,
             tenant::TenantResource,
         },
@@ -193,7 +195,11 @@ impl Dfs for API {
                 let mut object = ObjectResource::fetch(&tx, tenant, &object_id)
                     .await?
                     .ok_or(object::Error::NotFound)?;
-                object.update_grants(&tx, changes)
+                object.update_grants(&tx, changes)?;
+                if let Some(event) = FilesystemEvent::from_grant_update(object_id, changes)? {
+                    OutboxEvent::enqueue(&tx, &tenant.tenant_id, &[event.into_payload()])?;
+                }
+                Ok::<_, storage::Error<object::Error>>(())
             }
         })
         .await?;
