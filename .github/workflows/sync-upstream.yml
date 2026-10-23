@@ -1,0 +1,74 @@
+name: Sync fork with upstream (dust-tt/dust)
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write   # <-- AJOUT : nécessaire pour gh pr create/merge
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+
+      - name: Sync upstream (reset-based, no merge conflicts possible)
+        id: sync
+        run: |
+          git remote add upstream https://github.com/dust-tt/dust.git
+          git fetch upstream main
+          if git diff --quiet HEAD upstream/main; then
+            echo "✅ Already up to date"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          mkdir -p /tmp/wesype-workflows
+          cp -r .github/workflows/. /tmp/wesype-workflows/
+
+          git reset --hard upstream/main
+
+          rm -rf .github/workflows
+          mkdir -p .github/workflows
+          cp -r /tmp/wesype-workflows/. .github/workflows/
+
+          git add .github/workflows/
+          git commit -m "chore: sync upstream dust-tt/dust $(date -u '+%Y-%m-%d')" --allow-empty
+          git push --force origin main
+
+          echo "✅ Done"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      # ───────────────────────────────────────────────
+      # AJOUT : trigger PR pour forcer un resync Dust
+      # ───────────────────────────────────────────────
+      - name: Trigger Dust resync via dummy PR
+        if: steps.sync.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="dust-sync-ping-$(date -u +%Y%m%d%H%M%S)"
+          git checkout -b "$BRANCH"
+          date -u > .dust-sync-ping
+          git add .dust-sync-ping
+          git commit -m "chore: ping Dust connector after upstream sync"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "chore: trigger Dust resync" \
+            --body "Auto-generated PR to trigger the Dust GitHub connector after syncing with upstream dust-tt/dust." \
+            --base main \
+            --head "$BRANCH"
+
+          gh pr merge "$BRANCH" --squash --admin
