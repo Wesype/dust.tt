@@ -854,6 +854,14 @@ msgid "This conversation can't be shared yet."
 msgstr "Diese Unterhaltung kann noch nicht geteilt werden."
 
 #: front/lib/api_error_messages.ts
+msgid "Only people who can participate in this conversation can change who it's shared with."
+msgstr "Nur Personen, die an dieser Unterhaltung teilnehmen können, können ändern, mit wem sie geteilt wird."
+
+#: front/lib/api_error_messages.ts
+msgid "The access of the conversation's creator can't be changed."
+msgstr "Der Zugriff des Erstellers der Unterhaltung kann nicht geändert werden."
+
+#: front/lib/api_error_messages.ts
 msgid "Spaces can't be selected in a Pod conversation."
 msgstr "In einer Pod-Unterhaltung können keine Bereiche ausgewählt werden."
 

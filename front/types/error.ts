@@ -253,6 +253,8 @@ const API_ERROR_TYPES = [
   "conversation_move_not_supported",
   "conversation_sharing_not_supported_in_pod",
   "conversation_sharing_unavailable",
+  "conversation_sharing_not_allowed",
+  "conversation_owner_access_not_editable",
   "space_selection_not_supported_in_pod",
   "space_not_selectable",
   "mcp_server_restricted_to_skills",

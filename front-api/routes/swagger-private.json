@@ -9133,6 +9133,100 @@
             "description": "Conversation not found"
           }
         }
+      },
+      "patch": {
+        "summary": "Update conversation sharing",
+        "description": "Gives users read or write access to a conversation, or removes it with `none`, by updating the grants of its DFS folder. Requires write access to the conversation.\n",
+        "tags": [
+          "Private Conversations"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wId",
+            "required": true,
+            "description": "ID of the workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "cId",
+            "required": true,
+            "description": "ID of the conversation",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "changes"
+                ],
+                "properties": {
+                  "changes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "userId",
+                        "permission"
+                      ],
+                      "properties": {
+                        "userId": {
+                          "type": "string"
+                        },
+                        "permission": {
+                          "type": "string",
+                          "enum": [
+                            "read",
+                            "write",
+                            "none"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The updated sharing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateConversationSharingResponse"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Updated, and the user can't access the conversation anymore"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "403": {
+            "description": "Not allowed to change the sharing"
+          },
+          "404": {
+            "description": "Conversation or user not found"
+          }
+        }
       }
     },
     "/api/w/{wId}/assistant/conversations/{cId}/wakeups/{wuId}": {

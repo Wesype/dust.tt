@@ -227,6 +227,8 @@ export const API_ERROR_MESSAGES: Record<APIErrorType, MessageDescriptor> = {
   conversation_move_not_supported: msg`This conversation can't be moved into or out of this Pod yet.`,
   conversation_sharing_not_supported_in_pod: msg`Pod conversations are shared with the Pod's members.`,
   conversation_sharing_unavailable: msg`This conversation can't be shared yet.`,
+  conversation_sharing_not_allowed: msg`Only people who can participate in this conversation can change who it's shared with.`,
+  conversation_owner_access_not_editable: msg`The access of the conversation's creator can't be changed.`,
   space_selection_not_supported_in_pod: msg`Spaces can't be selected in a Pod conversation.`,
   space_not_selectable: msg`Only regular spaces can be selected.`,
   mcp_server_restricted_to_skills: msg`This tool can only be used through skills.`,
