@@ -3,6 +3,7 @@ import { Authenticator } from "@app/lib/auth";
 import { DfsClient } from "@app/lib/dfs/client";
 import { DfsFileSystem } from "@app/lib/dfs/file_system";
 import { ConversationResource } from "@app/lib/resources/conversation_resource";
+import type { SpaceResource } from "@app/lib/resources/space_resource";
 import { ConversationFactory } from "@app/tests/utils/ConversationFactory";
 import { FakeDfsTransport } from "@app/tests/utils/dfs/FakeDfsTransport";
 import { InMemoryDfs } from "@app/tests/utils/dfs/InMemoryDfs";
@@ -69,17 +70,7 @@ export class GcsImportFactory {
     depth = 0,
   }: { withActiveEditor?: boolean; depth?: number } = {}) {
     const fixture = await this.pod({ withActiveEditor });
-    const created = await ConversationFactory.create(fixture.auth, {
-      agentConfigurationId: "dust",
-      messagesCreatedAt: [],
-      spaceId: fixture.pod.id,
-      depth,
-    });
-    const conversation = await ConversationResource.fetchById(
-      fixture.auth,
-      created.sId
-    );
-    assert(conversation);
+    const conversation = await this.createPodConversation(fixture, depth);
 
     const source = GcsNotificationFactory.replicationSource({
       workspaceId: fixture.workspace.sId,
@@ -87,6 +78,30 @@ export class GcsImportFactory {
     });
 
     return { ...fixture, conversation, source };
+  }
+
+  // A sub-conversation is spawned by a conversation of the same pod, one level up.
+  private static async createPodConversation(
+    { auth, pod }: { auth: Authenticator; pod: SpaceResource },
+    depth: number
+  ): Promise<ConversationResource> {
+    const parentConversation =
+      depth > 0
+        ? await this.createPodConversation({ auth, pod }, depth - 1)
+        : undefined;
+    const created = await ConversationFactory.create(auth, {
+      agentConfigurationId: "dust",
+      messagesCreatedAt: [],
+      spaceId: pod.id,
+      depth,
+      parentConversation,
+    });
+    const conversation = await ConversationResource.fetchById(
+      auth,
+      created.sId
+    );
+    assert(conversation);
+    return conversation;
   }
 
   static async standaloneConversation({

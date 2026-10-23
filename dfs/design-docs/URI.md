@@ -125,6 +125,8 @@ under its owner's user folder:
             conv-<conversationSId>/    application/vnd.dust.conversation
       .conversations/
         conv-<conversationSId>/        application/vnd.dust.conversation
+          .conversations/
+            conv-<subConversationSId>/ application/vnd.dust.conversation
 ```
 
 Only user folders are created from the tenant root. Pod and conversation folders are created from
@@ -134,6 +136,7 @@ their owner's user folder ID, which front already stores:
 create dfs://<tenant-root-id>/users/<userSId>
 create dfs://<userSId>--<user-folder-id>/pods/<podName>
 create dfs://<userSId>--<user-folder-id>/.conversations/conv-<conversationSId>
+create dfs://conv-<conversationSId>--<conversation-folder-id>/.conversations/conv-<subConversationSId>
 ```
 
 - **Layout:** namespace folders (`users/`, `pods/`, `.conversations/`) keep listings small and leave
@@ -149,6 +152,13 @@ create dfs://<userSId>--<user-folder-id>/.conversations/conv-<conversationSId>
   it needs to be updated to match this design. Pod renames and collisions between pods with the
   same name also remain unimplemented. A rename must preserve the folder ID, and a collision
   must not make distinct pods share a folder.
+- **Sub-conversations:** a conversation spawned by an agent of another conversation (`run_agent`)
+  has its folder in the `.conversations/` folder of that parent conversation, wherever the parent
+  is (a user folder, a pod folder, or another conversation's folder for nested sub-conversations).
+  Front stores the parent on the sub-conversation (`parentConversationId`) and creates the folder
+  with the sub-conversation; the parent's folder is created first if missing.
+  A sub-conversation folder gets no grant of its own and inherits its parent conversation's access.
+  Nesting sub-conversations will help top conversation's agent search the data of subconversations.
 - **Stored reference:** front stores the returned folder ID on the user, the pod, or the
   conversation. All later access to that context's content uses this ID as the anchor, never a path
   from the root or from the user folder.

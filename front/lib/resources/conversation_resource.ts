@@ -3682,6 +3682,19 @@ export class ConversationResource extends BaseResource<ConversationModel> {
     };
   }
 
+  /** The conversation whose agent spawned this sub-conversation, see `parentConversationId`. */
+  async fetchParentConversation(
+    auth: Authenticator
+  ): Promise<ConversationResource | null> {
+    if (this.parentConversationId === null) {
+      return null;
+    }
+    const [parent] = await ConversationResource.fetchByModelIds(auth, [
+      this.parentConversationId,
+    ]);
+    return parent ?? null;
+  }
+
   /**
    * Get the latest agent message id by rank for a given conversation.
    * @returns The latest agent message id, version and rank.

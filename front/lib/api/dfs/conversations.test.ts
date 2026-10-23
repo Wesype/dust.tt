@@ -35,11 +35,14 @@ function setup() {
 }
 
 async function createConversation(
-  auth: Parameters<typeof ConversationFactory.create>[0]
+  auth: Parameters<typeof ConversationFactory.create>[0],
+  { parentConversation }: { parentConversation?: ConversationResource } = {}
 ) {
   const created = await ConversationFactory.create(auth, {
     agentConfigurationId: "dust",
     messagesCreatedAt: [],
+    depth: parentConversation ? parentConversation.depth + 1 : 0,
+    parentConversation,
   });
   const conversation = await ConversationResource.fetchById(auth, created.sId);
   if (!conversation) {
@@ -65,6 +68,22 @@ describe("reflectConversationCreationOnDfs", () => {
       conversation.sId
     );
     expect(stored?.dfsObjectId).toBeTruthy();
+  });
+
+  it("creates the folder of a new sub-conversation in its parent conversation's folder", async () => {
+    const { authenticator, user } = await createResourceTest({});
+    await FeatureFlagFactory.basic(authenticator, "dust_file_system");
+    const { dfs } = setup();
+    const parent = await createConversation(authenticator);
+
+    // Creating a conversation reflects it on dfs.
+    const sub = await createConversation(authenticator, {
+      parentConversation: parent,
+    });
+
+    expect(dfs.paths()).toContain(
+      `/users/${user.sId}/.conversations/conv-${parent.sId}/.conversations/conv-${sub.sId}`
+    );
   });
 
   it("does not throw when creating the folder throws", async () => {

@@ -17,6 +17,18 @@ export function getConversationParticipantGrant(user: UserResource): DfsGrant {
   return { type: "allow", subject: createUserSubject(user), mode: 0o6 };
 }
 
+/** Whether the folder of `conversation` has grants of its own, rather than inheriting them. */
+function conversationHasIndividualGrants(
+  conversation: ConversationResource
+): boolean {
+  return (
+    // In a pod, its access is the pod folder's.
+    conversation.spaceId === null &&
+    // A sub-conversation's access is its parent conversation's folder's.
+    conversation.depth === 0
+  );
+}
+
 /**
  * @cc [owner:fabiencelier,label:security] conversation-folder-grants-sync
  * With the `dust_file_system` feature flag, on the folder of a conversation outside pods, `user`
@@ -25,8 +37,8 @@ export function getConversationParticipantGrant(user: UserResource): DfsGrant {
  * be called with `conversation` read once the participation change is committed, including for a
  * soft-deleted conversation. When its requested spaces change, every user grant attached to its
  * folder whose user fails `canAccessConversation` MUST be detached, and no grant MUST be attached.
- * A conversation without a folder or in a pod is left alone. A dfs failure is logged and does not
- * fail the caller.
+ * A conversation without a folder, in a pod or a sub-conversation is left alone. A dfs failure is
+ * logged and does not fail the caller.
  */
 /**
  * Matches the grant of `user` on the folder of `conversation` with their current participation and
@@ -127,8 +139,8 @@ type GetGrantChanges = (
 
 /**
  * Applies the grant changes returned by `getChanges` to the folder of `conversation`, when the
- * workspace has the `dust_file_system` feature flag, the conversation has a folder, and it is not
- * in a pod. A failure is logged.
+ * workspace has the `dust_file_system` feature flag, the conversation has a folder, and that folder
+ * has grants of its own (see `conversationHasIndividualGrants`). A failure is logged.
  */
 async function updateConversationFolderGrants(
   auth: Authenticator,
@@ -138,8 +150,7 @@ async function updateConversationFolderGrants(
   const folderId = conversation.dfsObjectId;
   if (
     !folderId ||
-    // In a pod, its access is the pod folder's.
-    conversation.spaceId !== null ||
+    !conversationHasIndividualGrants(conversation) ||
     !(await hasFeatureFlag(auth, "dust_file_system"))
   ) {
     return;

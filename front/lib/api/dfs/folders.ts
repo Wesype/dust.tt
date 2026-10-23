@@ -231,16 +231,18 @@ async function getFirstEditor(
 }
 
 /**
- * The folder of `conversation`: under its pod's folder for a conversation in a pod, else under the
- * folder of `user`, or of its first participant when no user is given (backfill). `context.fs` MUST
- * be a session that can write the parent folder.
+ * The folder of `conversation`: under the folder of the conversation that spawned it for a
+ * sub-conversation, else under its pod's folder for a
+ * conversation in a pod, else under the folder of `user`, or of its first participant when no user
+ * is given (backfill). `context.fs` MUST be a session that can write the parent folder.
  */
 /**
  * @cc [owner:fabiencelier,label:security] conversation-folder-grants
- * The folder of a conversation in a pod MUST get no grant: its access is the pod folder's. A folder
- * created here for any other conversation MUST get an ALLOW with `rw` for each of its participants
- * for whom `canAccessConversation` holds, and for no other participant. A
- * folder that already existed in dfs MUST be reused without changing its grants.
+ * The folder of a sub-conversation or of a conversation in a pod MUST get no grant: its access is
+ * its parent conversation's or pod's folder's. A folder created here for any other conversation
+ * MUST get an ALLOW with `rw` for each of its participants for whom `canAccessConversation` holds,
+ * and for no other participant. A folder that already existed in dfs MUST be reused without
+ * changing its grants.
  */
 export async function getOrCreateConversationFolder(
   auth: Authenticator,
@@ -251,18 +253,18 @@ export async function getOrCreateConversationFolder(
   if (conversation.dfsObjectId) {
     return new Ok(conversation.dfsObjectId);
   }
-  const pod = await getConversationPod(auth, conversation);
-  const parentId = pod
-    ? await getOrCreatePodFolder(auth, context, pod, { user })
-    : await getOrCreateConversationOwnerFolder(auth, context, conversation, {
-        user,
-      });
-  if (parentId.isErr()) {
-    return parentId;
+  const parent = await getOrCreateConversationParentFolder(
+    auth,
+    context,
+    conversation,
+    { user }
+  );
+  if (parent.isErr()) {
+    return parent;
   }
   const folder = await ensureFolder(
     context.fs,
-    conversationFolderUri(parentId.value, conversation.sId),
+    conversationFolderUri(parent.value.id, conversation.sId),
     { mimeType: DFS_CONVERSATION_FOLDER_MIME_TYPE }
   );
   if (folder.isErr()) {
@@ -280,7 +282,7 @@ export async function getOrCreateConversationFolder(
   }
   // Only on a folder created here, see `conversation-folder-grants`.
   const participants =
-    pod || !folder.value.created
+    parent.value.inheritsAccess || !folder.value.created
       ? []
       : await getEligibleParticipants(auth, conversation);
   if (participants.length > 0) {
@@ -296,6 +298,47 @@ export async function getOrCreateConversationFolder(
     }
   }
   return new Ok(stored);
+}
+
+/**
+ * The folder holding the folder of `conversation`. `inheritsAccess` is true when the conversation's
+ * access is that folder's (a parent conversation's or a pod's), see `conversation-folder-grants`.
+ */
+async function getOrCreateConversationParentFolder(
+  auth: Authenticator,
+  context: DfsFolderContext,
+  conversation: ConversationResource,
+  { user }: { user?: UserResource }
+): Promise<Result<{ id: DfsObjectId; inheritsAccess: boolean }, DfsError>> {
+  if (conversation.depth > 0) {
+    const parent = await conversation.fetchParentConversation(auth);
+    if (!parent) {
+      return new Err(
+        new DfsError(
+          "invalid_input",
+          `Sub-conversation ${conversation.sId} has no parent conversation.`
+        )
+      );
+    }
+    const parentId = await getOrCreateConversationFolder(
+      auth,
+      context,
+      parent,
+      { user }
+    );
+    return parentId.isErr()
+      ? parentId
+      : new Ok({ id: parentId.value, inheritsAccess: true });
+  }
+  const pod = await getConversationPod(auth, conversation);
+  const parentId = pod
+    ? await getOrCreatePodFolder(auth, context, pod, { user })
+    : await getOrCreateConversationOwnerFolder(auth, context, conversation, {
+        user,
+      });
+  return parentId.isErr()
+    ? parentId
+    : new Ok({ id: parentId.value, inheritsAccess: pod !== null });
 }
 
 /** The pod `conversation` is in, if any. Its folder's access is then driven by the pod's. */

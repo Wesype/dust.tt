@@ -58,13 +58,22 @@ async function createConversation(
   {
     spaceModelId,
     requestedSpaceIds,
-  }: { spaceModelId?: number; requestedSpaceIds?: number[] } = {}
+    depth,
+    parentConversation,
+  }: {
+    spaceModelId?: number;
+    requestedSpaceIds?: number[];
+    depth?: number;
+    parentConversation?: ConversationResource;
+  } = {}
 ) {
   const conversation = await ConversationFactory.create(auth, {
     agentConfigurationId: "dust",
     messagesCreatedAt: [],
     spaceId: spaceModelId,
     requestedSpaceIds,
+    depth,
+    parentConversation,
   });
   const resource = await ConversationResource.fetchById(auth, conversation.sId);
   if (!resource) {
@@ -423,5 +432,63 @@ describe("getOrCreateConversationFolder", () => {
           JSON.stringify(call.request.objectId) === JSON.stringify(folderId)
       )
     ).toEqual([]);
+  });
+
+  it("creates a sub-conversation in its parent conversation's folder, without grants", async () => {
+    const { authenticator, user } = await createResourceTest({});
+    const { dfs, transport, context } = setup();
+    const parent = await createConversation(authenticator);
+    const sub = await createConversation(authenticator, {
+      depth: 1,
+      parentConversation: parent,
+    });
+    // An eligible participant, who would get a grant on a conversation outside pods.
+    await ConversationResource.upsertParticipation(authenticator, {
+      conversation: sub,
+      action: "posted",
+      user: user.toJSON(),
+    });
+
+    const res = await getOrCreateConversationFolder(
+      authenticator,
+      context,
+      sub,
+      { user }
+    );
+
+    expect(res.isOk()).toBe(true);
+    expect(dfs.paths()).toContain(
+      `/users/${user.sId}/.conversations/conv-${parent.sId}/.conversations/conv-${sub.sId}`
+    );
+    const storedParent = await ConversationResource.fetchById(
+      authenticator,
+      parent.sId
+    );
+    expect(storedParent?.dfsObjectId).toBeTruthy();
+    // Its access is the parent conversation folder's.
+    const folderId = { value: Buffer.from(res.isOk() ? res.value : "", "hex") };
+    expect(
+      transport.calls.filter(
+        (call) =>
+          call.method === "UpdateGrants" &&
+          JSON.stringify(call.request.objectId) === JSON.stringify(folderId)
+      )
+    ).toEqual([]);
+  });
+
+  it("fails for a sub-conversation without a parent", async () => {
+    const { authenticator, user } = await createResourceTest({});
+    const { dfs, context } = setup();
+    const sub = await createConversation(authenticator, { depth: 1 });
+
+    const res = await getOrCreateConversationFolder(
+      authenticator,
+      context,
+      sub,
+      { user }
+    );
+
+    expect(res.isErr() && res.error.code).toBe("invalid_input");
+    expect(dfs.paths()).toEqual([]);
   });
 });

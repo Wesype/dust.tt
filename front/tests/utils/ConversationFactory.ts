@@ -107,6 +107,7 @@ export class ConversationFactory {
       spaceId,
       visibility = "unlisted",
       depth,
+      parentConversation,
       triggerId,
       authorless = false,
       t,
@@ -118,6 +119,7 @@ export class ConversationFactory {
       spaceId?: ModelId;
       visibility?: ConversationVisibility;
       depth?: number;
+      parentConversation?: ConversationResource;
       triggerId?: ModelId | null;
       authorless?: boolean;
       t?: Transaction;
@@ -130,6 +132,7 @@ export class ConversationFactory {
       title: "Test Conversation",
       visibility,
       depth,
+      parentConversation,
       triggerId,
       spaceId: spaceId ?? null,
     });

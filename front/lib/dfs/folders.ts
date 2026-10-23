@@ -4,7 +4,8 @@ import type { DfsObjectId } from "@app/types/dfs";
 /**
  * URIs of the context folders of `dfs/design-docs/URI.md`, each anchored at the folder that holds
  * it: user folders at the tenant root, pod folders and conversations outside pods at their owner's
- * user folder, conversations of a pod at the pod folder.
+ * user folder, conversations of a pod at the pod folder, sub-conversations at the folder of the
+ * conversation that spawned them.
  */
 /**
  * @cc [owner:fabiencelier,label:product] folder-layout
@@ -53,7 +54,8 @@ export function podFolderName({
 }
 
 /**
- * `parentFolderId` is the pod folder for a conversation of a pod, else the owner's user folder.
+ * `parentFolderId` is the parent conversation's folder for a sub-conversation, else the pod folder
+ * for a conversation of a pod, else the owner's user folder.
  */
 export function conversationFolderUri(
   parentFolderId: DfsObjectId,
