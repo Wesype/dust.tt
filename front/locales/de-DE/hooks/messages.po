@@ -14,8 +14,8 @@ msgstr ""
 "Plural-Forms: \n"
 
 #: front/hooks/useAnswerUserQuestion.ts
-msgid "Failed to submit answer. Try again."
-msgstr "Die Antwort konnte nicht gesendet werden. Versuchen Sie es erneut."
+msgid "Failed to submit answer"
+msgstr "Die Antwort konnte nicht gesendet werden"
 
 #: front/hooks/useArchivePod.tsx
 msgid "Archive Pod?"

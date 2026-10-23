@@ -1081,14 +1081,6 @@ msgid "Tell the agent what to do differently"
 msgstr ""
 
 #: front/components/assistant/conversation/UserAnswerRequired.tsx
-msgid "Skipping question"
-msgstr ""
-
-#: front/components/assistant/conversation/UserAnswerRequired.tsx
-msgid "Submitting answer"
-msgstr ""
-
-#: front/components/assistant/conversation/UserAnswerRequired.tsx
 msgid "Send answer"
 msgstr ""
 

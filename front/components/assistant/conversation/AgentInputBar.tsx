@@ -698,6 +698,7 @@ export const AgentInputBar = ({ context }: AgentInputBarProps) => {
             "blocked_user_answer_required" ? (
               <UserAnswerRequired
                 blockedAction={userAnswerRequiredItem.blockedAction}
+                outerMessageId={userAnswerRequiredItem.messageId}
                 triggeringUser={
                   userAnswerRequiredItem.blockedAction.userId ===
                   context.user.sId

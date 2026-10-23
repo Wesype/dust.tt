@@ -1081,14 +1081,6 @@ msgid "Tell the agent what to do differently"
 msgstr "Dites à l’agent ce qu’il doit faire autrement"
 
 #: front/components/assistant/conversation/UserAnswerRequired.tsx
-msgid "Skipping question"
-msgstr "Question ignorée"
-
-#: front/components/assistant/conversation/UserAnswerRequired.tsx
-msgid "Submitting answer"
-msgstr "Envoi de la réponse"
-
-#: front/components/assistant/conversation/UserAnswerRequired.tsx
 msgid "Send answer"
 msgstr "Envoyer la réponse"
 

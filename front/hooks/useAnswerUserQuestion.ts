@@ -1,3 +1,4 @@
+import { useSendApiErrorNotification } from "@app/hooks/useNotification";
 import type { UserQuestionAnswer } from "@app/lib/actions/types";
 import { useFetcher } from "@app/lib/swr/swr";
 import { isAPIErrorResponse } from "@app/types/error";
@@ -12,8 +13,8 @@ interface UseAnswerUserQuestionParams {
 export function useAnswerUserQuestion({ owner }: UseAnswerUserQuestionParams) {
   const { t } = useLingui();
   const { fetcher } = useFetcher();
+  const sendApiErrorNotification = useSendApiErrorNotification();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const answerQuestion = useCallback(
     async ({
@@ -28,7 +29,6 @@ export function useAnswerUserQuestion({ owner }: UseAnswerUserQuestionParams) {
       answer: UserQuestionAnswer;
     }) => {
       setIsSubmitting(true);
-      setErrorMessage(null);
 
       try {
         await fetcher(
@@ -50,14 +50,17 @@ export function useAnswerUserQuestion({ owner }: UseAnswerUserQuestionParams) {
         if (isAPIErrorResponse(e) && e.error.type === "action_not_blocked") {
           return { success: true };
         }
-        setErrorMessage(t`Failed to submit answer. Try again.`);
+        sendApiErrorNotification({
+          title: t`Failed to submit answer`,
+          error: e,
+        });
         return { success: false };
       } finally {
         setIsSubmitting(false);
       }
     },
-    [owner.sId, fetcher, t]
+    [owner.sId, fetcher, sendApiErrorNotification, t]
   );
 
-  return { answerQuestion, isSubmitting, errorMessage };
+  return { answerQuestion, isSubmitting };
 }

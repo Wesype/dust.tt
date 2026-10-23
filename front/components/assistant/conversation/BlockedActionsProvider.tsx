@@ -93,7 +93,10 @@ type BlockedActionsContextType = {
     blockedAction: AgentLoopBlockedToolExecution;
   }) => void;
   refreshBlockedActions: () => Promise<void>;
-  removeCompletedAction: (actionId: string) => void;
+  removeCompletedAction: (
+    actionId: string,
+    options?: { revalidate?: boolean }
+  ) => void;
   removeAllBlockedActionsForMessage: (params: {
     messageId: string;
     conversationId: string;
@@ -328,7 +331,10 @@ export function BlockedActionsProvider({
   );
 
   const removeCompletedAction = useCallback(
-    (actionId: string) => {
+    (
+      actionId: string,
+      { revalidate = true }: { revalidate?: boolean } = {}
+    ) => {
       stopPulsingAction(actionId);
 
       setBlockedActionsState((state) => {
@@ -354,8 +360,11 @@ export function BlockedActionsProvider({
       // can trigger an SWR focus revalidation that still sees the action as
       // blocked in the database. Mutating here discards that in-flight stale
       // response and refetches, so the resolved action is not re-inserted in
-      // the queue.
-      void mutateBlockedActions();
+      // the queue. Callers removing an action before it is resolved skip it,
+      // since the refetch would still return the action as blocked.
+      if (revalidate) {
+        void mutateBlockedActions();
+      }
     },
     [stopPulsingAction, mutateBlockedActions]
   );

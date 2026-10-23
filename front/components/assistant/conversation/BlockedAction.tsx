@@ -10,6 +10,8 @@ import type { LightWorkspaceType, UserType } from "@app/types/user";
 
 interface BlockedActionProps {
   blockedAction: AgentLoopBlockedToolExecution;
+  // The message the action is queued under: the outermost agent message for a sub-agent action.
+  outerMessageId: string;
   triggeringUser: UserType | null;
   owner: LightWorkspaceType;
   conversationId: string;
@@ -21,6 +23,7 @@ interface BlockedActionProps {
 
 export function BlockedAction({
   blockedAction,
+  outerMessageId,
   triggeringUser,
   owner,
   conversationId,
@@ -81,6 +84,7 @@ export function BlockedAction({
       return (
         <UserAnswerRequired
           blockedAction={blockedAction}
+          outerMessageId={outerMessageId}
           triggeringUser={triggeringUser}
           owner={owner}
           retryHandler={() =>

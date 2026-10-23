@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LightWorkspaceFactory } from "@app/tests/utils/LightWorkspaceFactory";
 import { UserAnswerRequired } from "./UserAnswerRequired";
 
+const enqueueBlockedActionMock = vi.fn();
 const removeCompletedActionMock = vi.fn();
 const answerQuestionMock = vi.fn();
 const retryHandlerMock = vi.fn().mockResolvedValue(undefined);
@@ -37,6 +38,7 @@ vi.mock(
   "@app/components/assistant/conversation/BlockedActionsProvider",
   () => ({
     useBlockedActionsContext: () => ({
+      enqueueBlockedAction: enqueueBlockedActionMock,
       removeCompletedAction: removeCompletedActionMock,
     }),
   })
@@ -46,7 +48,6 @@ vi.mock("@app/hooks/useAnswerUserQuestion", () => ({
   useAnswerUserQuestion: () => ({
     answerQuestion: answerQuestionMock,
     isSubmitting: false,
-    errorMessage: null,
   }),
 }));
 
@@ -179,9 +180,6 @@ vi.mock("@dust-tt/sparkle", () => {
     </button>
   );
 
-  const LoadingBlock = ({ className }: { className?: string }) => (
-    <div className={className} />
-  );
   const ArrowUp = () => null;
 
   return {
@@ -191,7 +189,6 @@ vi.mock("@dust-tt/sparkle", () => {
     Counter,
     cn,
     Input,
-    LoadingBlock,
     OptionCard,
   };
 });
@@ -273,6 +270,7 @@ describe("UserAnswerRequired", () => {
     const { container } = render(
       <UserAnswerRequired
         blockedAction={makeBlockedAction()}
+        outerMessageId="msg_outer"
         triggeringUser={null}
         owner={owner}
         retryHandler={retryHandlerMock}
@@ -297,6 +295,7 @@ describe("UserAnswerRequired", () => {
     const { container } = render(
       <UserAnswerRequired
         blockedAction={makeBlockedAction()}
+        outerMessageId="msg_outer"
         triggeringUser={null}
         owner={owner}
         retryHandler={retryHandlerMock}
@@ -325,6 +324,7 @@ describe("UserAnswerRequired", () => {
     const { container } = render(
       <UserAnswerRequired
         blockedAction={makeBlockedAction()}
+        outerMessageId="msg_outer"
         triggeringUser={null}
         owner={owner}
         retryHandler={retryHandlerMock}
@@ -348,73 +348,8 @@ describe("UserAnswerRequired", () => {
     expect(removeCompletedActionMock).toHaveBeenCalledWith("action_1");
   });
 
-  it("keeps the submission state visible until the agent retry completes", async () => {
+  it("closes the card without waiting for the answer to be saved", async () => {
     const user = userEvent.setup();
-    let resolveRetry = () => {};
-    retryHandlerMock.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveRetry = resolve;
-        })
-    );
-
-    const { container } = render(
-      <UserAnswerRequired
-        blockedAction={makeBlockedAction()}
-        triggeringUser={null}
-        owner={owner}
-        retryHandler={retryHandlerMock}
-      />
-    );
-
-    await user.click(screen.getByRole("button", { name: /Alpha/i }));
-
-    await waitFor(() => {
-      expect(screen.getByRole("status")).toBeInTheDocument();
-    });
-    expect(
-      screen.queryByRole("button", { name: /Alpha/i })
-    ).not.toBeInTheDocument();
-    expect(removeCompletedActionMock).not.toHaveBeenCalled();
-
-    await act(async () => resolveRetry());
-
-    await finishExitAnimation(container);
-    expect(removeCompletedActionMock).toHaveBeenCalledWith("action_1");
-  });
-
-  it("removes immediately after retry when motion is reduced", async () => {
-    const user = userEvent.setup();
-    let resolveRetry = () => {};
-    shouldReduceMotionMock = true;
-    retryHandlerMock.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveRetry = resolve;
-        })
-    );
-
-    render(
-      <UserAnswerRequired
-        blockedAction={makeBlockedAction()}
-        triggeringUser={null}
-        owner={owner}
-        retryHandler={retryHandlerMock}
-      />
-    );
-
-    await user.click(screen.getByRole("button", { name: /Alpha/i }));
-
-    await waitFor(() => {
-      expect(screen.getByRole("status")).toBeInTheDocument();
-    });
-
-    await act(async () => resolveRetry());
-
-    expect(removeCompletedActionMock).toHaveBeenCalledWith("action_1");
-  });
-
-  it("disables controls and skips when Escape is pressed", async () => {
     let resolveAnswer = (_result: { success: boolean }) => {};
     answerQuestionMock.mockImplementationOnce(
       () =>
@@ -426,6 +361,71 @@ describe("UserAnswerRequired", () => {
     const { container } = render(
       <UserAnswerRequired
         blockedAction={makeBlockedAction()}
+        outerMessageId="msg_outer"
+        triggeringUser={null}
+        owner={owner}
+        retryHandler={retryHandlerMock}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /Alpha/i }));
+
+    await finishExitAnimation(container);
+    expect(removeCompletedActionMock).toHaveBeenCalledExactlyOnceWith(
+      "action_1",
+      { revalidate: false }
+    );
+    expect(retryHandlerMock).not.toHaveBeenCalled();
+
+    await act(async () => resolveAnswer({ success: true }));
+
+    expect(removeCompletedActionMock).toHaveBeenLastCalledWith("action_1");
+    expect(retryHandlerMock).toHaveBeenCalledOnce();
+  });
+
+  it("shows the card again when saving the answer fails", async () => {
+    const user = userEvent.setup();
+    let resolveAnswer = (_result: { success: boolean }) => {};
+    shouldReduceMotionMock = true;
+    answerQuestionMock.mockImplementationOnce(
+      () =>
+        new Promise<{ success: boolean }>((resolve) => {
+          resolveAnswer = resolve;
+        })
+    );
+
+    render(
+      <UserAnswerRequired
+        blockedAction={makeBlockedAction()}
+        outerMessageId="msg_outer"
+        triggeringUser={null}
+        owner={owner}
+        retryHandler={retryHandlerMock}
+      />
+    );
+
+    await user.click(screen.getByRole("button", { name: /Alpha/i }));
+
+    expect(removeCompletedActionMock).toHaveBeenCalledExactlyOnceWith(
+      "action_1",
+      { revalidate: false }
+    );
+
+    await act(async () => resolveAnswer({ success: false }));
+
+    expect(enqueueBlockedActionMock).toHaveBeenCalledWith({
+      messageId: "msg_outer",
+      blockedAction: makeBlockedAction(),
+    });
+    expect(removeCompletedActionMock).toHaveBeenCalledOnce();
+    expect(retryHandlerMock).not.toHaveBeenCalled();
+  });
+
+  it("disables controls and skips when Escape is pressed", async () => {
+    const { container } = render(
+      <UserAnswerRequired
+        blockedAction={makeBlockedAction()}
+        outerMessageId="msg_outer"
         triggeringUser={null}
         owner={owner}
         retryHandler={retryHandlerMock}
@@ -446,19 +446,10 @@ describe("UserAnswerRequired", () => {
       });
     });
 
-    const status = await screen.findByRole("status");
-    const hiddenOption = screen.getByRole("button", {
-      name: /Alpha/i,
-      hidden: true,
-    });
-
-    expect(status).toHaveTextContent("Skipping question");
-    expect(hiddenOption.parentElement).toHaveClass("duration-exit");
-    expect(hiddenOption).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Alpha/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Skip" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Send answer" })).toBeDisabled();
 
-    await act(async () => resolveAnswer({ success: true }));
     await finishExitAnimation(container);
     expect(removeCompletedActionMock).toHaveBeenCalledWith("action_1");
   });
@@ -467,6 +458,7 @@ describe("UserAnswerRequired", () => {
     const { container } = render(
       <UserAnswerRequired
         blockedAction={makeBlockedAction({ multiSelect: true })}
+        outerMessageId="msg_outer"
         triggeringUser={null}
         owner={owner}
         retryHandler={retryHandlerMock}
@@ -506,6 +498,7 @@ describe("UserAnswerRequired", () => {
     const { container } = render(
       <UserAnswerRequired
         blockedAction={makeBlockedAction({ multiSelect: true })}
+        outerMessageId="msg_outer"
         triggeringUser={null}
         owner={owner}
         retryHandler={retryHandlerMock}
@@ -549,6 +542,7 @@ describe("UserAnswerRequired", () => {
     render(
       <UserAnswerRequired
         blockedAction={makeBlockedAction({ multiSelect: true })}
+        outerMessageId="msg_outer"
         triggeringUser={null}
         owner={owner}
         retryHandler={retryHandlerMock}
@@ -572,6 +566,7 @@ describe("UserAnswerRequired", () => {
     const { container } = render(
       <UserAnswerRequired
         blockedAction={makeBlockedAction()}
+        outerMessageId="msg_outer"
         triggeringUser={null}
         owner={owner}
         retryHandler={retryHandlerMock}
@@ -601,6 +596,7 @@ describe("UserAnswerRequired", () => {
     render(
       <UserAnswerRequired
         blockedAction={makeBlockedAction({ multiSelect: true })}
+        outerMessageId="msg_outer"
         triggeringUser={null}
         owner={owner}
         retryHandler={retryHandlerMock}
@@ -634,6 +630,7 @@ describe("UserAnswerRequired", () => {
     render(
       <UserAnswerRequired
         blockedAction={makeBlockedAction({ multiSelect: true })}
+        outerMessageId="msg_outer"
         triggeringUser={null}
         owner={owner}
         retryHandler={retryHandlerMock}

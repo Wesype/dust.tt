@@ -1539,6 +1539,7 @@ function AgentMessageContent({
       // "connected" state of a resolved personal authentication card).
       key={blockedAction.actionId}
       blockedAction={blockedAction}
+      outerMessageId={sId}
       triggeringUser={triggeringUser}
       owner={owner}
       conversationId={conversationId}
