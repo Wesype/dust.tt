@@ -46,8 +46,8 @@ boundaries, and planned search indexing.
 ## Transactional outbound
 
 The [transactional outbound proposal](TRANSACTIONAL_OUTBOUND.md) defines transactional object events
-partitioned by tenant. A Temporal Schedule discovers pending tenants; their router workflows
-route work into extract/search dirty ranges and signal the corresponding stage workflows.
+partitioned by tenant. The relay polls FDB for pending tenants and wakes their router, extract, and
+index stage workflows. The router routes work into extract/index dirty ranges.
 Filesystem writes continue during Temporal outages while events accumulate in FDB.
 
 ## Versions

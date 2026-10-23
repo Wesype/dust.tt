@@ -13,14 +13,14 @@
 ## Architecture
 
 Source mutations and object-ID events commit together in `with_idempotent_transaction`. Events are
-partitioned by tenant. A Temporal Schedule discovers nonempty partitions and signals each tenant's
-router workflow. Its activities resolve MIME type and object-local exclusion, write extract/search
-dirty keys, signal the stage workflows, then remove acknowledged events.
+partitioned by tenant. The relay polls FDB for tenants with work and wakes their stage workflows. The
+router resolves MIME type and object-local exclusion, writes extract/index dirty keys, and deletes
+the events it routed in the same transaction.
 
-Each tenant has separate router, extract, and search workflows. Activities handle up to 100
-objects; search sends approximately 1 MB encoded bulks. Dirty keys remain until work completes.
-Extraction atomically publishes output and marks search dirty, then signals search before completing.
-[Transactional outbound](TRANSACTIONAL_OUTBOUND.md) defines the keys, API, and delivery protocol.
+Each tenant has separate router, extract, and index workflows. Index activities handle up to 100
+objects and send approximately 1 MB encoded bulks. Dirty keys remain until work completes.
+Extraction atomically stores its output and marks index dirty, then wakes the index workflow.
+[Transactional outbound](TRANSACTIONAL_OUTBOUND.md) defines the keys, relay, and stage workflows.
 
 Debounce relevant `Apply` mutations per object with a 10-second buffer. Workers derive eligibility
 from current source-change timestamps; event delivery and duplicate signals do not extend the wait.
@@ -96,13 +96,13 @@ budget.pdf: root_id = reports_id
 | MIME range | Text policy |
 | --- | --- |
 | `text/*` | Aggregate native content. |
-| Binary MIME with configured extractor | Mark extract dirty; successful extraction hands off to search. |
-| Other MIME types | Processing resolves the content policy, then hands off to search for metadata-only publication when appropriate. |
+| Binary MIME with configured extractor | Mark extract dirty. Successful extraction hands off to index. |
+| Other MIME types | Metadata only: name and metadata, no text. |
 
 | Change | Indexing work |
 | --- | --- |
-| File bytes, attributes, xattrs | Rewrite current content and metadata. Extract again only when processor input/configuration changes; drop obsolete extracted text. |
-| Extraction completed | Extract activity atomically marks the original object search-dirty, then signals the tenant search workflow before completing. |
+| File bytes, attributes, xattrs | Rewrite current content and metadata. Extract again only when extractor input/configuration changes. Drop obsolete extracted text. |
+| Extraction completed | Extract activity atomically marks the original object index dirty, then wakes the tenant index workflow. |
 | User/group read grant | Update FDB grants and forward index; invalidate root cache. |
 | File move | Recompute root and ancestry. |
 | Read `DENY` insertion/removal | Recompute affected roots on object and descendants. |
@@ -114,51 +114,51 @@ budget.pdf: root_id = reports_id
 
 ## Tenant workflows and activity stages
 
-`dfs-router/<tenant_id>` routes object events to `dfs-extract/<tenant_id>` and
-`dfs-search/<tenant_id>`. Signals have no payload; tenant identity is a workflow start argument.
-Activities discover work from FDB. See [routing and recovery](TRANSACTIONAL_OUTBOUND.md#discovery-and-tenant-routing).
+`dfs/router/<tenant_id>` routes object events to `dfs/extract/<tenant_id>` and
+`dfs/index/<tenant_id>`. The `wake` signal has no payload. Tenant identity is a workflow start
+argument. Activities discover work from FDB. See [stage workflows](TRANSACTIONAL_OUTBOUND.md#stage-workflows).
 
 | Stage | Input | Completion |
 | --- | --- | --- |
-| `extract` | Up to 100 extract-dirty objects. | Atomically publish output, clear matching extract keys, and mark search dirty; signal search before completing the activity. |
-| `search` | Up to 100 search-dirty objects. | Publish approximately 1 MB bulks or tombstones; clear only successful objects with matching dirty stamps. |
+| `extract` | Up to 10 extract-dirty objects per batch. | Atomically store output, clear matching extract keys, and mark index dirty. Then wake index. |
+| `index` | Up to 100 index-dirty objects per batch. | Publish approximately 1 MB bulks or tombstones. Clear only successful objects with matching dirty stamps. |
 
-Bound per-tenant outstanding batches and shared worker concurrency. Scheduled recovery scans dirty
-ranges and wakes stage workflows even when no events remain. Temporal outages pause dispatch and
-processing; filesystem writes retain events until recovery. Monitor schedule progress, event backlog,
-dirty age, activity failures, and index pressure.
+Bound per-tenant in-flight batches and shared worker concurrency. The relay scans dirty ranges and
+wakes stage workflows even when no events remain. Temporal outages pause dispatch and processing.
+Filesystem writes retain events until recovery. Monitor relay progress, event backlog, dirty age,
+failed ranges, activity failures, and index pressure.
 
 ### Wait and retry
 
 - Debounce relevant `Apply` mutations per object: activities select eligible dirty objects, and the corresponding stage workflow uses a timer for the next eligible work when needed. Processing starts no earlier than the latest source-change timestamp +10 seconds; duplicate signals do not extend it.
-- For example, relevant Applies at 0s, 4s, and 9s produce one processing pass no earlier than 19s, using the latest committed state. The process-to-search handoff does not add another 10-second buffer unless a newer source mutation requires it.
+- For example, relevant Applies at 0s, 4s, and 9s produce one processing pass no earlier than 19s, using the latest committed state. The extract-to-index handoff does not add another 10-second buffer unless a newer source mutation requires it.
 - Recheck FDB revision before work. Newer changes restart the wait, including changes whose signal has not arrived.
 - Count from nondecreasing server timestamps, never signal arrival. Clock skew limits timing accuracy.
 - Ten seconds of silence does not prove upload completion. Clients need no publish marker; later writes trigger another pass.
 - If input changes during processing, abandon the obsolete result and process current input after its wait.
-- Workflow code stays deterministic; FDB, processor, and ES calls run in activities.
+- Workflow code stays deterministic. FDB, extractor, and ES calls run in activities.
 - Configure activity timeouts and exponential retries with a cap on the delay. Heartbeat long extraction/traversal activities; honor cancellation.
-- Retry transient failures without requiring another file change. Invalid input remains a visible failure with its dirty marker intact.
+- Retry transient failures without requiring another file change. Invalid input moves to the stage's failed range, visible for repair.
 - Keep only stage state, IDs, versions, counts, and cursors in workflow history. Stream bytes inside activities; use Continue-As-New to bound long histories.
 - Drain signals before completion/Continue-As-New; carry pending revision and traversal state forward. Reconciliation covers closing-run races.
 - [Temporal activity retries and idempotency](https://docs.temporal.io/activity-definition), [Continue-As-New](https://docs.temporal.io/develop/typescript/workflows/continue-as-new).
 
-## Preprocessing and storage
+## Extraction and storage
 
-- One processor per MIME type. Configuration: `dfs-v1-{env}/search/processors/<mimeType>`, including version.
-- Trusted activities read source storage and invoke the processor. Stream whole files with bounded buffers and backpressure.
-- Call extractors such as Tika directly, or a dedicated processor endpoint for application-specific formats; use conversion services such as Gotenberg where needed. Front must not orchestrate each processing step.
-- Run extraction locally or await/poll an existing processor job. The activity returns only after complete text is durably stored.
-- Use a stable operation ID across activity retries; recover an existing processor job/output after ambiguous success.
-- Validate source version across reads and before accepting output. Reuse extraction only when source and processor versions match.
+- One extractor per MIME type. Configuration: `dfs-v1-{env}/extractors/<mimeType>`, including version.
+- Trusted activities read source storage and invoke the extractor. Stream whole files with bounded buffers and backpressure.
+- Call extractors such as Tika directly, or a dedicated extractor endpoint for application-specific formats. Use conversion services such as Gotenberg where needed. Front must not orchestrate each extraction step.
+- Run extraction locally or await/poll an existing extractor job. The activity returns only after complete text is durably stored.
+- Use a stable operation ID across activity retries. Recover an existing extractor job/output after ambiguous success.
+- Validate source version across reads and before accepting output. Reuse extraction only when source and extractor versions match.
 - Metadata-only changes reuse valid text. Configuration changes mark affected sources through bounded rescans.
-- Only search activities publish to ES. Extract activities atomically store completed extraction, clear matching extract-dirty keys, and mark search dirty through `with_idempotent_transaction`. They then signal search before completing; retries reuse committed output and retry the signal.
+- Only index activities publish to ES. Extract activities atomically store completed extraction, clear matching extract-dirty keys, and mark index dirty through `with_idempotent_transaction`. They then wake index. A failed wake is left to the relay.
 
-### Frames and processor interface
+### Frames and extractor interface
 
-- Define a versioned processor interface for MIME-based dispatch: source references and versions, processor configuration, complete text output, and retryable versus terminal errors. A manifest may declare this interface; its exact shape is a follow-up.
-- Frames can contain a manifest and multiple files. Define the logical source object and input dependencies so a change to any processor input invalidates the extraction and restarts the 10-second debounce for that logical object.
-- The frame processor interprets application-specific structure; DFS owns dispatch, durability, and storage. Decide which frame object owns the search hit and whether implementation files remain independently searchable, using the existing MIME and exclusion rules.
+- Define a versioned extractor interface for MIME-based dispatch: source references and versions, extractor configuration, complete text output, and retryable versus terminal errors. A manifest may declare this interface. Its exact shape is a follow-up.
+- Frames can contain a manifest and multiple files. Define the logical source object and input dependencies so a change to any extractor input invalidates the extraction and restarts the 10-second debounce for that logical object.
+- The frame extractor interprets application-specific structure. DFS owns dispatch, durability, and storage. Decide which frame object owns the search hit and whether implementation files remain independently searchable, using the existing MIME and exclusion rules.
 - Validate all input versions before accepting a compound result; retry if dependencies changed during extraction. The 10-second buffer does not prove a frame upload is complete, so later input writes must trigger another pass.
 
 ### Extracted-text storage
@@ -167,13 +167,13 @@ Tenant keys below omit `dfs-v1-{env}/tenant/<tenantId>/`:
 
 | Key | State |
 | --- | --- |
-| `search/extraction/<objectId>/state` | Current complete generation and active extraction operation. |
-| `search/extraction/<objectId>/generation/<generation>/metadata` | Operation ID, source/configuration versions, status, byte length, expiry. |
-| `search/extraction/<objectId>/generation/<generation>/block/<blockIndex>` | Extracted text; ≤64 KiB per stored block. |
+| `extraction/<objectId>/state` | Current complete generation and active extraction operation. |
+| `extraction/<objectId>/generation/<generation>/metadata` | Operation ID, source/configuration versions, status, byte length, expiry. |
+| `extraction/<objectId>/generation/<generation>/block/<blockIndex>` | Extracted text, up to 64 KiB per stored block. |
 
 - Activities use existing FDB helpers. Each extraction attempt stages a private generation in bounded transactions; bytes never enter workflow history.
-- The final `with_idempotent_transaction` validates source/configuration and active operation, marks output complete, switches current generation, clears matching extract-dirty state, and marks search dirty. Rollback publishes neither output nor handoff. Retries reuse accepted output; Temporal unavailability cannot prevent this FDB commit.
-- The extract activity signals the tenant search workflow before completing; a subsequent search batch publishes the output. Recovery after text storage retries search work without extracting again.
+- The final `with_idempotent_transaction` validates source/configuration and active operation, marks output complete, switches current generation, clears matching extract-dirty state, and marks index dirty. Rollback publishes neither output nor handoff. Retries reuse accepted output. Temporal unavailability cannot prevent this FDB commit.
+- The extract activity then wakes the tenant index workflow. A subsequent index batch publishes the output. Recovery after text storage retries index work without extracting again.
 - Incomplete or superseded attempts cannot publish. Complete generations are immutable and have no ordinary DFS objects, paths, xattrs, or grants.
 - Indexer reads one fixed generation; validate current/input versions during reads and before preparing ES output. Restart on change.
 - Cleanup runs in worker maintenance batches: mark unreferenced or expired incomplete generations deleting, then clear blocks and metadata.
@@ -189,7 +189,7 @@ Tenant keys below omit `dfs-v1-{env}/tenant/<tenantId>/`:
 5. Check every bulk-item result. Fail the activity on unsuccessful items; retry identical body/revision after ambiguous success. Release saved bytes after completion/abandonment.
 
 - Bound activity concurrency, reads, aggregate buffered bytes, and in-flight ES requests. Size extraction and indexing worker capacity independently.
-- Search activities handle at most 100 objects and flush index operations in approximately 1 MB encoded bulks (initial target: 1,000,000 bytes including bulk metadata). Flush smaller final bulks; define explicit handling for oversized individual documents. Measure index pressure and freshness, including refresh, under load.
+- Index activities handle at most 100 objects and flush index operations in approximately 1 MB encoded bulks (initial target: 1,000,000 bytes including bulk metadata). Flush smaller final bulks. Define explicit handling for oversized individual documents. Measure index pressure and freshness, including refresh, under load.
 - Reduce active workers on 429s or rising search latency. Increase gradually when ES has capacity and indexing lags.
 - Track dirty age by stage, tenant-partitioned event backlog, activity failures, bulk item failures, and source-to-searchable lag. Router acceptance never clears object dirty work.
 
@@ -201,14 +201,14 @@ Tenant keys below omit `dfs-v1-{env}/tenant/<tenantId>/`:
 4. Check current permissions before exposing titles or excerpts.
 5. Stream authorized batches within [API limits](API.md#search). Report backend failure explicitly; stale index candidates remain possible.
 
-API follow-up: align the processor contract and multilingual mapping with the search API. Resolve the freshness policy explicitly: the current [API proposal](API.md#search) suppresses stale indexed content and metadata, while this document currently specifies permission checks without the full freshness-validation mechanism.
+API follow-up: align the extractor contract and multilingual mapping with the search API. Resolve the freshness policy explicitly: the current [API proposal](API.md#search) suppresses stale indexed content and metadata, while this document currently specifies permission checks without the full freshness-validation mechanism.
 
 ## Implementation follow-ups
 
 - Finalize the detector and multilingual mapping proposal, including query scoring and excerpts.
-- Implement `OutboxEvent`, scheduled tenant discovery, and per-tenant router/extract/search workflows. Validate atomic dirty writes, reliable signals, fair activity concurrency, and the 10-second debounce.
-- Define processor/manifest and frame contracts, then reconcile API documentation in the follow-up.
-- Validate extraction retries, worker loss and scheduled router failures, Temporal and ES outages, rollback without dispatch, lost acknowledgements, stale compound inputs, duplicate/reordered GCS events, and backfill racing with live writes/deletes.
+- Implement `OutboxEvent`, the relay, and per-tenant router/extract/index stage workflows. Validate atomic dirty writes, wake-up recovery, fair activity concurrency, and the 10-second debounce.
+- Define extractor/manifest and frame contracts, then reconcile API documentation in the follow-up.
+- Validate extraction retries, worker loss and relay failures, Temporal and ES outages, rollback without dispatch, lost acknowledgements, stale compound inputs, duplicate/reordered GCS events, and backfill racing with live writes/deletes.
 
 ## Tenant routing and shard layout
 

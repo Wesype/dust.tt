@@ -1,0 +1,17 @@
+@cc [owner:flvndvd,label:architecture;concurrency] no-transaction-across-temporal
+No FDB transaction MAY stay open across a Temporal RPC. FDB reads, FDB writes, and Temporal client
+calls MUST run in activities, never in workflow code.
+
+@cc [owner:flvndvd,label:backend;error-handling] dirty-keys-are-the-work
+Pending work MUST be recorded only in FDB outbox events and dirty keys. Losing a `wake` signal, a
+workflow, or a worker MUST NOT lose work: the relay MUST find it again from FDB.
+
+@cc [owner:flvndvd,label:architecture] payload-free-wake
+`wake` signals MUST carry no payload. Stage workflows MUST read their work from FDB.
+
+@cc [owner:flvndvd,label:architecture] index-stage-owns-elasticsearch
+Only the index stage MAY write to Elasticsearch.
+
+@cc [owner:flvndvd,label:performance] bounded-workflow-history
+Workflow inputs, results, and state MUST hold only stage identifiers, tenant IDs, object IDs,
+cursors, counts, and timestamps, never file bytes or extracted text.

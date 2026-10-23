@@ -9,6 +9,10 @@ default-run = "dfs-api"
 name = "elasticsearch_create_index"
 path = "bin/elasticsearch/create_index.rs"
 
+[[bin]]
+name = "dfs-indexer"
+path = "bin/indexer.rs"
+
 [dependencies]
 anyhow = "1"
 base64 = "0.22"

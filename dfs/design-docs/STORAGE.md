@@ -236,14 +236,14 @@ writes need not maintain them. Background workers could share an internal tenant
 
 - Source mutations and object-ID events commit together through `OutboxEvent`, under
   `dfs-v1-{env}/outbox/events/<tenant_id>/<event_id>`. Enqueue adds no routing metadata reads.
-- A Temporal Schedule discovers pending tenants and signals their router workflows. Tenant
-  activities resolve MIME type and object-local exclusion, write extract/search dirty keys, signal
-  the corresponding stage workflows, then delete acknowledged events.
-- Activities process up to 100 dirty objects. Extraction atomically publishes output and marks search
-  dirty, then signals search before completing. Search publishes approximately 1 MB bulks and clears
-  only successful objects with matching dirty stamps.
-- Temporal outages leave events in FDB while filesystem writes continue. Scheduled recovery scans
-  dirty ranges to wake stopped stage workflows, including tenants with no remaining events.
+- The relay polls FDB for tenants with work and wakes their router, extract, and index workflows.
+  The router resolves MIME type and object-local exclusion, writes extract/index dirty keys, and
+  deletes the routed events in the same transaction.
+- Extraction atomically stores its output and marks index dirty, then wakes index. Index publishes
+  approximately 1 MB bulks and clears only successful objects with matching dirty stamps. Terminal
+  failures move to per-stage failed ranges.
+- Temporal outages leave events in FDB while filesystem writes continue. The relay also scans dirty
+  ranges to wake stopped stage workflows, including tenants with no remaining events.
 - FDB permissions remain authoritative. API freshness, multilingual mapping, GCS backfill, and
   reindexing follow-ups are tracked in [SEARCH.md](SEARCH.md).
 
