@@ -27,6 +27,7 @@ import {
   toSessionName,
 } from "@app/types/collab";
 import { COLLAB_SOURCE_WRITE_WAIT_MS } from "@app/types/collab_internal";
+import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
 import {
   saveNextRevision,
@@ -53,6 +54,7 @@ import {
   DocumentOwnership,
   getDocumentOwner,
 } from "@front-api/collab/lib/ownership";
+import type { DocumentRelay } from "@front-api/collab/lib/relay";
 import {
   SAVE_RETRY_DELAY_MS,
   getSession,
@@ -1914,6 +1916,97 @@ describe("a document's ownership across collab servers", () => {
     expect(loadCollabSession).not.toHaveBeenCalled();
     const owner = await getDocumentOwner(DOCUMENT_NAME);
     expect(owner.isOk() && owner.value).toEqual(OTHER);
+  });
+
+  it("keeps a document loaded past its grace period while another server holds it", async () => {
+    const holders = { value: true };
+    const hocuspocus = createCollabHocuspocus({
+      ownership,
+      relay: { hasOtherHolders: async () => new Ok(holders.value) },
+    });
+    const writer = await collabAccess(true);
+    vi.useFakeTimers();
+
+    const connection = await hocuspocus.openDirectConnection(
+      DOCUMENT_NAME,
+      writer
+    );
+    await connection.disconnect();
+    await vi.advanceTimersByTimeAsync(UNLOAD_GRACE_PERIOD_MS * 2);
+    expect(hocuspocus.getDocumentsCount()).toBe(1);
+
+    holders.value = false;
+    await vi.advanceTimersByTimeAsync(UNLOAD_GRACE_PERIOD_MS);
+    expect(hocuspocus.getDocumentsCount()).toBe(0);
+  });
+
+  it("keeps a document for the grace period of a browser that left while Redis answered", async () => {
+    let answerFirst: (holders: Result<boolean, Error>) => void = () => {};
+    const hasOtherHolders = vi
+      .fn<DocumentRelay["hasOtherHolders"]>()
+      .mockImplementationOnce(
+        () => new Promise((resolve) => (answerFirst = resolve))
+      )
+      .mockResolvedValue(new Ok(false));
+    const hocuspocus = createCollabHocuspocus({
+      ownership,
+      relay: { hasOtherHolders },
+    });
+    const writer = await collabAccess(true);
+    vi.useFakeTimers();
+
+    const connection = await hocuspocus.openDirectConnection(
+      DOCUMENT_NAME,
+      writer
+    );
+    await connection.disconnect();
+    await vi.advanceTimersByTimeAsync(UNLOAD_GRACE_PERIOD_MS);
+    expect(hasOtherHolders).toHaveBeenCalledTimes(1);
+    const document = hocuspocus.documents.get(DOCUMENT_NAME);
+    if (!document) {
+      throw new Error("The document did not stay loaded.");
+    }
+    // What Hocuspocus calls once a browser's WebSocket closes.
+    await hocuspocus.hooks("onDisconnect", {
+      instance: hocuspocus,
+      clientsCount: 0,
+      context: writer,
+      document,
+      socketId: "s1",
+      documentName: DOCUMENT_NAME,
+      requestHeaders: new Headers(),
+      requestParameters: new URLSearchParams(),
+    });
+    answerFirst(new Ok(false));
+    await vi.advanceTimersByTimeAsync(UNLOAD_GRACE_PERIOD_MS - 1);
+    expect(hocuspocus.getDocumentsCount()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(hocuspocus.getDocumentsCount()).toBe(0);
+  });
+
+  it("keeps a document loaded while Redis cannot tell whether another server holds it", async () => {
+    const hasOtherHolders = vi
+      .fn<DocumentRelay["hasOtherHolders"]>()
+      .mockResolvedValue(new Err(new Error("Redis unreachable.")));
+    const hocuspocus = createCollabHocuspocus({
+      ownership,
+      relay: { hasOtherHolders },
+    });
+    const writer = await collabAccess(true);
+    vi.useFakeTimers();
+
+    const connection = await hocuspocus.openDirectConnection(
+      DOCUMENT_NAME,
+      writer
+    );
+    await connection.disconnect();
+    await vi.advanceTimersByTimeAsync(UNLOAD_GRACE_PERIOD_MS * 2);
+    expect(hocuspocus.getDocumentsCount()).toBe(1);
+
+    hasOtherHolders.mockResolvedValue(new Ok(false));
+    await vi.advanceTimersByTimeAsync(UNLOAD_GRACE_PERIOD_MS);
+    expect(hocuspocus.getDocumentsCount()).toBe(0);
   });
 
   it("releases a document whose load failed", async () => {

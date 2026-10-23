@@ -30,7 +30,7 @@ import {
   parseSessionName,
 } from "@app/types/collab";
 import type { Result } from "@app/types/shared/result";
-import { Err } from "@app/types/shared/result";
+import { Err, Ok } from "@app/types/shared/result";
 import { normalizeError } from "@app/types/shared/utils/error_utils";
 import { safeParseJSON } from "@app/types/shared/utils/json_utils";
 import {
@@ -39,6 +39,7 @@ import {
 } from "@front-api/collab/lib/connection_access";
 import type { DocumentOwnership } from "@front-api/collab/lib/ownership";
 import { createDocumentOwnership } from "@front-api/collab/lib/ownership";
+import type { DocumentRelay } from "@front-api/collab/lib/relay";
 import type { CollabSession } from "@front-api/collab/lib/session";
 import {
   epochMessage,
@@ -54,7 +55,7 @@ import {
   stopWrites,
 } from "@front-api/collab/lib/session";
 import type { Document, LocalTransactionOrigin } from "@hocuspocus/server";
-import { Hocuspocus } from "@hocuspocus/server";
+import { Hocuspocus, isTransactionOrigin } from "@hocuspocus/server";
 
 import { z } from "zod";
 
@@ -222,7 +223,9 @@ async function claimAndLoadSession(
  * load MUST first claim its document (`DocumentOwnership.claim`), and MUST be
  * refused when the claim fails or another server owns it; a document whose load is refused or
  * fails, or that unloads and is not loading again, MUST then be released
- * (`DocumentOwnership.release`), and a failed release MUST be logged, never thrown.
+ * (`DocumentOwnership.release`), and a failed release MUST be logged, never thrown. A change
+ * relayed from another server MUST NOT count as a connection's change. While another server holds
+ * the document, it MUST NOT unload at the end of the grace period.
  */
 /**
  * @cc [owner:PopDaph,label:product] collab-kept-epoch
@@ -234,8 +237,13 @@ async function claimAndLoadSession(
  */
 export function createCollabHocuspocus({
   ownership = createDocumentOwnership(),
-}: { ownership?: DocumentOwnership } = {}): Hocuspocus<CollabContext> {
+  relay,
+}: {
+  ownership?: DocumentOwnership;
+  relay?: DocumentRelay;
+} = {}): Hocuspocus<CollabContext> {
   const hocuspocus = new Hocuspocus<CollabContext>({
+    extensions: relay ? [relay] : [],
     debounce: STORE_DEBOUNCE_MS,
     maxDebounce: STORE_MAX_DEBOUNCE_MS,
 
@@ -324,6 +332,13 @@ export function createCollabHocuspocus({
     },
 
     async onChange({ document, context, transactionOrigin }) {
+      // Another server's edits: its connection made them, not this server's.
+      if (
+        isTransactionOrigin(transactionOrigin) &&
+        transactionOrigin.source === "redis"
+      ) {
+        return;
+      }
       const session = getSession(document);
       if (session && transactionOrigin !== COMMENT_MARK_ORIGIN) {
         session.lastChangedBy = context;
@@ -425,7 +440,33 @@ export function createCollabHocuspocus({
         document.addDirectConnection();
       }
       clearTimeout(session.graceTimer);
-      session.graceTimer = setTimeout(() => {
+      const endGracePeriod = async () => {
+        const timer = session.graceTimer;
+        const otherHolders = relay
+          ? await relay.hasOtherHolders(document.name)
+          : new Ok(false);
+        // A connection left while Redis answered: the grace period it started holds the document.
+        if (session.graceTimer !== timer) {
+          return;
+        }
+        if (otherHolders.isErr()) {
+          logger.warn(
+            {
+              err: otherHolders.error,
+              documentName: document.name,
+              workspaceId: parseSessionName(document.name)?.workspaceId,
+            },
+            "Collab relay could not tell whether other servers hold a document, keeping it"
+          );
+        }
+        // Other servers still hold it, and only this one saves their edits.
+        if (otherHolders.isErr() || otherHolders.value) {
+          session.graceTimer = setTimeout(
+            () => void endGracePeriod(),
+            UNLOAD_GRACE_PERIOD_MS
+          );
+          return;
+        }
         session.graceTimer = undefined;
         document.removeDirectConnection();
         // Unloading would drop the edits the file does not have. The retried save unloads it once
@@ -433,7 +474,11 @@ export function createCollabHocuspocus({
         if (!session.saveFailed) {
           void instance.unloadDocument(document);
         }
-      }, UNLOAD_GRACE_PERIOD_MS);
+      };
+      session.graceTimer = setTimeout(
+        () => void endGracePeriod(),
+        UNLOAD_GRACE_PERIOD_MS
+      );
     },
 
     // A connection joining while saves fail learns it here, the others when it changes.

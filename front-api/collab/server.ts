@@ -24,6 +24,7 @@ import {
   createDocumentOwnership,
   OWNER_RENEW_INTERVAL_MS,
 } from "./lib/ownership";
+import { createCollabRelay } from "./lib/relay";
 import { createCollabRoutes } from "./routes";
 
 /**
@@ -55,7 +56,13 @@ const hostname = config.getCollabServerHostname();
  * the next renewals from running.
  */
 const ownership = createDocumentOwnership();
-const hocuspocus = createCollabHocuspocus({ ownership });
+const hocuspocus = createCollabHocuspocus({
+  ownership,
+  relay: createCollabRelay({
+    redisUri: config.getRedisCollabUri(),
+    serverId: ownership.self.serverId,
+  }),
+});
 
 const app = createHono();
 app.route("/api/healthz", healthzApp);
