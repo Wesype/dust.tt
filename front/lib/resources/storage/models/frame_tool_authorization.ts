@@ -14,9 +14,8 @@ import {
 } from "@app/types/api/frame_publication";
 
 /**
- * Per-user authorization of the tools a Frame's active publication may call.
- * `authorizedTools` is the snapshot the user consented to; a later publication
- * whose `requiredTools` is not a subset requires re-consent.
+ * Per-user, per-Frame accumulating set of tools the viewer Always-allowed.
+ * Pairs are `[mcpServerView.sId, toolName]`, grown at tool-invocation consent.
  */
 export class FrameToolAuthorizationModel extends WorkspaceAwareModel<FrameToolAuthorizationModel> {
   declare createdAt: CreationOptional<Date>;

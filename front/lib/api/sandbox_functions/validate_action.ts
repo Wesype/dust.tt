@@ -4,6 +4,7 @@ import {
   extractArgRequiringApprovalValues,
   setUserAlwaysApprovedTool,
 } from "@app/lib/actions/tool_status";
+import { isLightServerSideMCPToolConfiguration } from "@app/lib/actions/types/guards";
 import {
   buildAuditLogTarget,
   emitAuditLogEvent,
@@ -16,6 +17,7 @@ import {
 } from "@app/lib/api/sandbox_functions/audit";
 import { getSandboxFunctionBlockingEventChannel } from "@app/lib/api/sandbox_functions/publish_blocking_event";
 import type { Authenticator } from "@app/lib/auth";
+import { FrameToolAuthorizationResource } from "@app/lib/resources/frame_tool_authorization_resource";
 import { SandboxFunctionInvocationResource } from "@app/lib/resources/sandbox_function_invocation_resource";
 import { SandboxFunctionMCPActionResource } from "@app/lib/resources/sandbox_function_mcp_action_resource";
 import type { SandboxFunctionResource } from "@app/lib/resources/sandbox_function_resource";
@@ -24,6 +26,7 @@ import { launchSandboxFunctionToolWorkflow } from "@app/temporal/sandbox_functio
 import type { Result } from "@app/types/shared/result";
 import { Err, Ok } from "@app/types/shared/result";
 import { assertNever } from "@app/types/shared/utils/assert_never";
+import assert from "assert";
 
 class SandboxFunctionActionValidationError extends Error {
   constructor(
@@ -39,14 +42,13 @@ class SandboxFunctionActionValidationError extends Error {
  * `running` and launches its execution workflow (approved), or to `denied` (rejected), which the
  * in-sandbox poll surfaces as a 403 rejection. The blocked action was created without a workflow,
  * so approval performs the first launch.
- */
-/**
- * @cc [owner:davidebbo,label:product] sandbox-always-approve-persists-low-and-medium
- * An `always_approved` decision MUST persist a `UserToolApproval` for every stake whose approval
- * card offers the "Always allow" button — `low` (keyed on server + tool) and `medium` (keyed on
- * server + tool + the values of `argumentsRequiringApproval`) — using the same keying as the
- * conversation flavor in `validateActions`. Persisting only a subset silently downgrades the
- * button to a one-time approval and re-prompts the user on every later call.
+ *
+ * @cc [owner:davidebbo,label:product] sandbox-always-approve-persists-frame-and-stake-auth
+ * An `always_approved` decision on a Frame function MUST append `[mcpServerView.sId, toolName]` to
+ * `FrameToolAuthorizationResource` (so a later chat approval cannot silently re-arm the tool on
+ * this Frame) AND MUST also persist the normal stake grant: `setUserAlwaysApprovedTool` for low,
+ * arg-scoped `UserToolApproval` for medium. The action MUST carry a server-side tool configuration
+ * with a view id.
  */
 export async function validateSandboxFunctionAction(
   auth: Authenticator,
@@ -145,32 +147,47 @@ export async function validateSandboxFunctionAction(
 
   const user = auth.user();
   if (approvalState === "always_approved" && user) {
-    // Same keying as the conversation flavor: a low-stake approval is recorded globally per
-    // (server, tool), a medium-stake one per (server, tool, approval-argument values). Neither
-    // carries an agent, so a sandbox function records exactly what a conversation would.
-    // `never_ask` needs no record and `high` is never savable.
-    switch (action.toolConfiguration.permission) {
+    const toolConfiguration = action.toolConfiguration;
+    assert(
+      isLightServerSideMCPToolConfiguration(toolConfiguration) &&
+        toolConfiguration.mcpServerViewId,
+      "Frame function tool approvals require a server-side MCP tool configuration with a view id."
+    );
+    // Frame auth stops the Frame override from re-forcing a silent tool; the stake grant is
+    // what low/medium resolution actually reads on the next call.
+    await FrameToolAuthorizationResource.addAuthorizedToolForUserAndFrame(
+      auth,
+      {
+        frame: sandboxFunction.frame,
+        tool: [toolConfiguration.mcpServerViewId, action.toolName],
+      }
+    );
+    switch (toolConfiguration.permission) {
       case "low":
         await setUserAlwaysApprovedTool(auth, {
-          mcpServerId: action.toolConfiguration.toolServerId,
-          functionCallName: action.toolConfiguration.name,
+          mcpServerId: toolConfiguration.toolServerId,
+          functionCallName: toolConfiguration.name,
         });
         break;
-      case "medium":
+      case "medium": {
+        const argumentsRequiringApproval =
+          toolConfiguration.argumentsRequiringApproval ?? [];
+        const argsAndValues = extractArgRequiringApprovalValues(
+          argumentsRequiringApproval,
+          action.inputs
+        );
         await user.createToolApproval(auth, {
-          mcpServerId: action.toolConfiguration.toolServerId,
-          toolName: action.toolConfiguration.name,
-          argsAndValues: extractArgRequiringApprovalValues(
-            action.toolConfiguration.argumentsRequiringApproval ?? [],
-            action.inputs
-          ),
+          mcpServerId: toolConfiguration.toolServerId,
+          toolName: toolConfiguration.name,
+          argsAndValues,
         });
         break;
+      }
       case "never_ask":
       case "high":
         break;
       default:
-        assertNever(action.toolConfiguration.permission);
+        assertNever(toolConfiguration.permission);
     }
   }
 

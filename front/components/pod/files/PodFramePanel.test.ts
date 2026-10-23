@@ -17,7 +17,6 @@ const frameV2Metadata = {
 
 interface Mocks {
   canWriteFrameSource: boolean;
-  hasAuthorizedRequiredTools: boolean;
   contentCalls: Record<string, unknown>[];
   draftMode: boolean;
   fileMetadata: Record<string, unknown>;
@@ -37,7 +36,6 @@ interface Mocks {
 
 const mocks = vi.hoisted<Mocks>(() => ({
   canWriteFrameSource: true,
-  hasAuthorizedRequiredTools: true,
   contentCalls: [],
   draftMode: false,
   fileMetadata: {},
@@ -84,13 +82,6 @@ vi.mock(
   "@app/components/assistant/conversation/interactive_content/frame/FrameEditControls",
   () => ({
     FrameEditControls: () => createElement("div", null, "edit-controls"),
-  })
-);
-
-vi.mock(
-  "@app/components/assistant/conversation/interactive_content/frame/FrameToolConsentGate",
-  () => ({
-    FrameToolConsentGate: () => createElement("div", null, "tool-consent-gate"),
   })
 );
 
@@ -199,9 +190,6 @@ vi.mock("@app/lib/swr/frames", () => ({
       canWriteFrameSource: mocks.canWriteFrameSource,
       draftMode: mocks.draftMode,
       hasFrameFunctions: mocks.hasFrameFunctions,
-      requiredTools: [],
-      isLastPublisher: false,
-      hasAuthorizedRequiredTools: mocks.hasAuthorizedRequiredTools,
       isFramePermissionsLoading: false,
       packageRoot: null,
       mutateFramePermissions: vi.fn(),
@@ -280,7 +268,6 @@ beforeEach(() => {
   mocks.isPodFilesLoading = false;
   mocks.hasFrameFunctions = false;
   mocks.canWriteFrameSource = true;
-  mocks.hasAuthorizedRequiredTools = true;
   mocks.draftMode = false;
 });
 
@@ -340,13 +327,10 @@ describe("PodFramePanel", () => {
     expect(mocks.podActions).toMatchObject({ fileName: "Legacy.tsx" });
   });
 
-  it("holds a Frames v2 behind tool consent until its tools are authorized", () => {
-    mocks.hasAuthorizedRequiredTools = false;
-
+  it("renders a Frames v2 without an open-time tool consent gate", () => {
     render(createElement(PodFramePanel, panelProps));
 
-    expect(screen.getByText("tool-consent-gate")).toBeInTheDocument();
-    expect(mocks.iframeProps).toBeNull();
+    expect(mocks.iframeProps).not.toBeNull();
   });
 
   it("waits for the Pod listing before rendering the Frame", () => {

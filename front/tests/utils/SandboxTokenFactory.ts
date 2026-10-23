@@ -4,6 +4,7 @@ import {
   generateSandboxFunctionInvocationToken,
 } from "@app/lib/api/sandbox/access_tokens";
 import { Authenticator } from "@app/lib/auth";
+import { FramePublicationResource } from "@app/lib/resources/frame_publication_resource";
 import { InternalMCPServerInMemoryResource } from "@app/lib/resources/internal_mcp_server_in_memory_resource";
 import { SandboxFunctionInvocationResource } from "@app/lib/resources/sandbox_function_invocation_resource";
 import { SandboxFunctionResource } from "@app/lib/resources/sandbox_function_resource";
@@ -242,6 +243,8 @@ export async function createPersistedSandboxFunctionInvocationTokenTestContext({
       activePublicationId: publicationId,
     },
   });
+  // Publisher-bound so silent (never_ask / prior approval) tools run without Frame consent.
+  await FramePublicationResource.makeNew(auth, { frame, publicationId });
   await withTransaction((transaction) =>
     SandboxFunctionResource.createForFramePublication(
       auth,
@@ -304,6 +307,7 @@ export async function createPersistedSandboxFunctionInvocationTokenTestContext({
   return {
     ...context,
     auth,
+    frame,
     podSpace,
     sandboxFunction,
     invocation,
@@ -336,6 +340,8 @@ export async function createPersistedFrameFunctionInvocationTokenTestContext({
       activePublicationId: publicationId,
     },
   });
+  // Publisher-bound so silent (never_ask / prior approval) tools run without Frame consent.
+  await FramePublicationResource.makeNew(auth, { frame, publicationId });
   await withTransaction((transaction) =>
     SandboxFunctionResource.createForFramePublication(
       auth,

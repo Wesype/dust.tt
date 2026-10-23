@@ -27,12 +27,15 @@ export async function makeMCPApproveExecutionEventBase(
     inputs,
     approvalLabelInputs = inputs,
     approvalSubjectName,
+    publisherName,
   }: {
     actionId: string;
     toolConfiguration: ApprovalToolConfiguration;
     inputs: Record<string, unknown>;
     approvalLabelInputs?: Record<string, unknown>;
     approvalSubjectName: string;
+    /** Last Frame publisher; only set for sandbox-function approvals. */
+    publisherName?: string;
   }
 ): Promise<MCPApproveExecutionEventBase> {
   const argumentsRequiringApproval =
@@ -67,6 +70,7 @@ export async function makeMCPApproveExecutionEventBase(
       mcpServerName: toolConfiguration.mcpServerName,
       displayLabel: displayLabels?.done,
       agentName: approvalSubjectName,
+      ...(publisherName ? { publisherName } : {}),
       icon: toolConfiguration.icon,
       displayedAs: getInternalMCPServerDisplayedAs(
         toolConfiguration.toolServerId

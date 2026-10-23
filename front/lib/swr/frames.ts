@@ -1,18 +1,12 @@
 import { useDownloadPdf } from "@app/hooks/useDownloadPdf";
-import { useFormatErrorDescription } from "@app/hooks/useFormatErrorDescription";
 import { useSendApiErrorNotification } from "@app/hooks/useNotification";
 import { clientFetch } from "@app/lib/egress/client";
 import {
-  emptyArray,
   getErrorFromResponse,
   useFetcher,
   useSWRWithDefaults,
 } from "@app/lib/swr/swr";
-import type {
-  GetFramePermissionsResponseBody,
-  PostFrameToolAuthorizationResponseBody,
-} from "@app/types/api/frame_permissions";
-import type { FrameToolCallPair } from "@app/types/api/frame_publication";
+import type { GetFramePermissionsResponseBody } from "@app/types/api/frame_permissions";
 import type { EditTextFn } from "@app/types/assistant/visualization";
 import { normalizeAsInternalDustError } from "@app/types/shared/utils/error_utils";
 import type { LightWorkspaceType } from "@app/types/user";
@@ -93,11 +87,6 @@ export function useFramePermissions({
     packageRoot: data?.packageRoot ?? null,
     frameName: data?.frameName ?? null,
     hasFrameFunctions: data?.hasFunctions ?? false,
-    requiredTools: data?.requiredTools ?? emptyArray<FrameToolCallPair>(),
-    authorizedTools: data?.authorizedTools ?? emptyArray<FrameToolCallPair>(),
-    isLastPublisher: data?.isLastPublisher ?? false,
-    lastPublisherName: data?.lastPublisherName ?? null,
-    hasAuthorizedRequiredTools: data?.hasAuthorizedRequiredTools ?? true,
     hasFramePermissions: data !== undefined,
     isFramePermissionsLoading: !isDisabled && isLoading,
     isFramePermissionsError: error,
@@ -106,54 +95,6 @@ export function useFramePermissions({
     livePublicationId: data?.livePublicationId ?? null,
     mutateFramePermissions: mutate,
   };
-}
-
-/**
- * Persist the viewer's consent to a Frame's required tools.
- * Callers should refresh permissions (e.g. via `mutateFramePermissions`) after success.
- */
-export function useAuthorizeFrameTools({
-  owner,
-  frameId,
-}: {
-  owner: Pick<LightWorkspaceType, "sId">;
-  frameId: string;
-}) {
-  const formatErrorDescription = useFormatErrorDescription();
-
-  const doAuthorize = useCallback(
-    async (
-      authorizedTools: FrameToolCallPair[]
-    ): Promise<{ success: true } | { success: false; error: string }> => {
-      try {
-        const response = await clientFetch(
-          `/api/w/${owner.sId}/frames/${encodeURIComponent(frameId)}/tool-authorizations`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ authorizedTools }),
-          }
-        );
-        if (!response.ok) {
-          const errorData = await getErrorFromResponse(response);
-          return {
-            success: false,
-            error: formatErrorDescription(errorData),
-          };
-        }
-        (await response.json()) as PostFrameToolAuthorizationResponseBody;
-        return { success: true };
-      } catch (error) {
-        return {
-          success: false,
-          error: formatErrorDescription(error),
-        };
-      }
-    },
-    [formatErrorDescription, frameId, owner.sId]
-  );
-
-  return { doAuthorize };
 }
 
 export function useEditFrameText({

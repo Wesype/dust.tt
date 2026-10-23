@@ -1,30 +1,26 @@
-import { authorizedToolsCoverRequired } from "@app/lib/api/frames/tool_authorization_coverage";
+import { isToolAuthorized } from "@app/lib/api/frames/tool_authorization_coverage";
 import { describe, expect, it } from "vitest";
 
-describe("authorizedToolsCoverRequired", () => {
-  it("treats an empty required set as satisfied", () => {
-    expect(authorizedToolsCoverRequired([], [])).toBe(true);
-    expect(authorizedToolsCoverRequired([["a", "b"]], [])).toBe(true);
+describe("isToolAuthorized", () => {
+  it("returns false for an empty authorized set", () => {
+    expect(isToolAuthorized([], ["msv_a", "search"])).toBe(false);
   });
 
-  it("requires every required pair to be present in authorized", () => {
+  it("matches an exact server/tool pair", () => {
     expect(
-      authorizedToolsCoverRequired(
+      isToolAuthorized(
         [
-          ["slack", "post"],
-          ["github", "read"],
+          ["msv_a", "search"],
+          ["msv_b", "post"],
         ],
-        [["slack", "post"]]
+        ["msv_a", "search"]
       )
     ).toBe(true);
-    expect(
-      authorizedToolsCoverRequired(
-        [["slack", "post"]],
-        [
-          ["slack", "post"],
-          ["github", "read"],
-        ]
-      )
-    ).toBe(false);
+    expect(isToolAuthorized([["msv_a", "search"]], ["msv_a", "other"])).toBe(
+      false
+    );
+    expect(isToolAuthorized([["msv_a", "search"]], ["msv_b", "search"])).toBe(
+      false
+    );
   });
 });

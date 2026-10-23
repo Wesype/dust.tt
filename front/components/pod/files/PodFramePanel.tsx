@@ -4,7 +4,6 @@ import { ConversationSidePanelHeader } from "@app/components/assistant/conversat
 import { CenteredState } from "@app/components/assistant/conversation/interactive_content/CenteredState";
 import { FrameCodeView } from "@app/components/assistant/conversation/interactive_content/frame/FrameCodeView";
 import { FrameToolbar } from "@app/components/assistant/conversation/interactive_content/frame/FrameToolbar";
-import { FrameToolConsentGate } from "@app/components/assistant/conversation/interactive_content/frame/FrameToolConsentGate";
 import { PreviewActionButtons } from "@app/components/assistant/conversation/interactive_content/frame/PreviewActionButtons";
 import { useFrameEditSession } from "@app/components/assistant/conversation/interactive_content/frame/useFrameEditSession";
 import { useLiveFrameEditing } from "@app/components/assistant/conversation/interactive_content/frame/useLiveFrameEditing";
@@ -86,8 +85,6 @@ export function PodFramePanel({ fileId, owner, pod }: PodFramePanelProps) {
     canEditV2,
     canWriteFrameSource,
     hasFrameFunctions,
-    requiredTools,
-    hasAuthorizedRequiredTools,
     isFramePermissionsLoading,
     mutateFramePermissions,
     status: draftStatus,
@@ -97,8 +94,6 @@ export function PodFramePanel({ fileId, owner, pod }: PodFramePanelProps) {
     isV2,
     disabled: !isV2,
   });
-  const needsToolConsent =
-    isV2 && !isFramePermissionsLoading && !hasAuthorizedRequiredTools;
 
   const { fileShare } = useShareInteractiveContentFile({ fileId, owner });
 
@@ -166,17 +161,6 @@ export function PodFramePanel({ fileId, owner, pod }: PodFramePanelProps) {
       <CenteredState>
         <Spinner />
       </CenteredState>
-    );
-  } else if (needsToolConsent) {
-    body = (
-      <FrameToolConsentGate
-        owner={owner}
-        frameId={fileId}
-        requiredTools={requiredTools}
-        onAuthorized={async () => {
-          await mutateFramePermissions();
-        }}
-      />
     );
   } else {
     body = (

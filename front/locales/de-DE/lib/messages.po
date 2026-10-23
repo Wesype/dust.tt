@@ -618,10 +618,6 @@ msgid "The frame runtime is unavailable."
 msgstr "Die Frame-Laufzeitumgebung ist nicht verfügbar."
 
 #: front/lib/api_error_messages.ts
-msgid "This Frame requires authorization before its tools can be used."
-msgstr "Dieses Frame benötigt Zustimmung, bevor seine Tools verwendet werden können."
-
-#: front/lib/api_error_messages.ts
 msgid "A Frame's manifest can't be moved or renamed on its own. Move or rename the Frame's folder instead."
 msgstr "Das Manifest eines Frames kann nicht separat verschoben oder umbenannt werden. Verschieben oder benennen Sie stattdessen den Ordner des Frames um."
 

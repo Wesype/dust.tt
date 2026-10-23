@@ -41,7 +41,9 @@ type ToolValidationRequest = Pick<
   | "metadata"
   | "approvalArgsLabel"
   | "argumentsRequiringApproval"
->;
+> & {
+  sandboxFunctionId?: string;
+};
 
 type ApprovalProgressProps = {
   current: number;
@@ -211,14 +213,20 @@ export function ToolValidationCard({
   };
 
   const {
-    metadata: { agentName, mcpServerName },
+    metadata: { agentName, mcpServerName, publisherName },
   } = validationRequest;
 
   const serverName = asDisplayName(mcpServerName);
-  const approvalTitle = t`Allow ${agentName} to use ${serverName}?`;
   const displayLabel =
     validationRequest.metadata.displayLabel ??
     asDisplayName(validationRequest.metadata.toolName);
+  // Frame function approvals name the Frame (and its last publisher); agent approvals name the
+  // agent and the MCP server.
+  const approvalTitle = validationRequest.sandboxFunctionId
+    ? publisherName
+      ? t`Allow ${agentName} by ${publisherName} to use ${displayLabel}?`
+      : t`Allow ${agentName} to use ${displayLabel}?`
+    : t`Allow ${agentName} to use ${serverName}?`;
   const showDetailsInline =
     canCurrentUserRespond && toolOverride?.detailsInline === true;
 

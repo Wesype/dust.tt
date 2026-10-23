@@ -791,6 +791,7 @@ const NotificationToolApproveBubbleUpContentSchema = z.object({
     mcpServerName: z.string(),
     toolName: z.string(),
     agentName: z.string(),
+    publisherName: z.string().optional(),
     icon: z
       .union([InternalAllowedIconSchema, CustomResourceIconSchema])
       .optional(),

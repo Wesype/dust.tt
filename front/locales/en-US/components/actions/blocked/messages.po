@@ -59,6 +59,14 @@ msgid "Review details"
 msgstr "Review details"
 
 #: front/components/actions/blocked/ToolValidationCard.tsx
+msgid "Allow {agentName} by {publisherName} to use {displayLabel}?"
+msgstr "Allow {agentName} by {publisherName} to use {displayLabel}?"
+
+#: front/components/actions/blocked/ToolValidationCard.tsx
+msgid "Allow {agentName} to use {displayLabel}?"
+msgstr "Allow {agentName} to use {displayLabel}?"
+
+#: front/components/actions/blocked/ToolValidationCard.tsx
 msgid "Allow {agentName} to use {serverName}?"
 msgstr "Allow {agentName} to use {serverName}?"
 
@@ -204,6 +212,10 @@ msgstr "Allow agent to list wake-ups?"
 #: front/components/actions/blocked/toolValidationLabels.ts
 msgid "Allow agent to cancel a wake-up?"
 msgstr "Allow agent to cancel a wake-up?"
+
+#: front/components/actions/blocked/toolValidationLabels.ts
+msgid "Allow this Frame to use the “{toolName}” tool without asking again"
+msgstr "Allow this Frame to use the “{toolName}” tool without asking again"
 
 #: front/components/actions/blocked/toolValidationLabels.ts
 msgid "Allow every time an agent uses the “{toolName}” tool"

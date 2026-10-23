@@ -277,38 +277,6 @@ msgstr "Zuletzt angesehen {timeAgo}"
 msgid "Last viewed {exactTime}"
 msgstr "Zuletzt angesehen: {exactTime}"
 
-#: front/components/assistant/conversation/interactive_content/frame/FrameToolConsentGate.tsx
-msgid "Allow Frame “{frameName}” by {lastPublisherName} to use tools?"
-msgstr "Erlauben Sie Frame “{frameName}” von {lastPublisherName} die Verwendung von Tools?"
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameToolConsentGate.tsx
-msgid "Allow Frame “{frameName}” to use tools?"
-msgstr "Erlauben Sie Frame “{frameName}” die Verwendung von Tools?"
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameToolConsentGate.tsx
-msgid "Allow this Frame by {lastPublisherName} to use tools?"
-msgstr "Erlauben Sie dieses Frame von {lastPublisherName} die Verwendung von Tools?"
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameToolConsentGate.tsx
-msgid "Allow this Frame to use tools?"
-msgstr "Erlauben Sie dieses Frame die Verwendung von Tools?"
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameToolConsentGate.tsx
-msgid "New tools were added since you last allowed access. Review the list before continuing."
-msgstr "Neue Tools wurden seit Ihrer letzten Zustimmung hinzugefügt. Überprüfen Sie die Liste vor dem Fortfahren."
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameToolConsentGate.tsx
-msgid "This Frame can call the tools below on your behalf. Review them before continuing."
-msgstr "Dieses Frame kann die unten aufgeführten Tools für Sie aufrufen. Überprüfen Sie sie vor dem Fortfahren."
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameToolConsentGate.tsx
-msgid "New"
-msgstr "Neu"
-
-#: front/components/assistant/conversation/interactive_content/frame/FrameToolConsentGate.tsx
-msgid "Allow access"
-msgstr "Zugriff erlauben"
-
 #: front/components/assistant/conversation/interactive_content/frame/FrameToolbar.tsx
 msgid "Switch to rendering"
 msgstr "Vorschau anzeigen"

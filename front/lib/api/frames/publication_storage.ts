@@ -4,10 +4,7 @@ import {
   emitAuditLogEvent,
   getAuditLogContext,
 } from "@app/lib/api/audit/workos_audit";
-import {
-  extractFrameFunctionToolCalls,
-  sortAndDedupeToolCalls,
-} from "@app/lib/api/frames/extract_tool_calls";
+import { extractFrameFunctionToolCalls } from "@app/lib/api/frames/extract_tool_calls";
 import {
   buildFrameFunctionsTarArchive,
   FRAME_FUNCTIONS_ARCHIVE_CONTENT_TYPE,
@@ -48,7 +45,6 @@ import type {
   FramePublicationDescriptor,
   FramePublicationStatus,
   FramePublishMode,
-  FrameToolCallPair,
 } from "@app/types/api/frame_publication";
 import {
   FRAME_PUBLICATION_SCHEMA_VERSION,
@@ -211,10 +207,7 @@ function checkPublicFrameFunction({
 type FramePublicationContracts = Pick<
   FramePublicationDescriptor,
   "databases" | "functions"
-> & {
-  /** Frame-level union of every function's toolCalls, sorted and deduped. */
-  requiredTools: FrameToolCallPair[];
-};
+>;
 
 function sourceContentByPath(
   sourceFilesByPath: ReadonlyMap<string, FramePublicationSourceFile>
@@ -345,7 +338,6 @@ export function buildFramePublicationContracts({
 
   const sourceByPath = sourceContentByPath(sourceFilesByPath);
   const functions: FramePublicationDescriptor["functions"] = [];
-  const requiredTools: FrameToolCallPair[] = [];
   for (const fn of manifest.functions) {
     const artifact = functionArtifactsByName.get(fn.name);
     if (!artifact) {
@@ -389,7 +381,6 @@ export function buildFramePublicationContracts({
         )
       );
     }
-    requiredTools.push(...toolCalls);
 
     for (const schedule of fn.schedules) {
       const scheduleInput = checkValueAgainstJsonSchema(
@@ -436,7 +427,6 @@ export function buildFramePublicationContracts({
   return new Ok({
     databases,
     functions,
-    requiredTools: sortAndDedupeToolCalls(requiredTools),
   });
 }
 
@@ -525,7 +515,6 @@ export async function storeFramePublication(
   await FramePublicationResource.makeNew(auth, {
     frame,
     publicationId: identity.publicationId,
-    requiredTools: contracts.value.requiredTools,
   });
 
   const publicationFiles: Array<{

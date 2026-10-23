@@ -64,17 +64,9 @@ vi.mock("@app/temporal/sandbox_functions/client", async (importOriginal) => {
   };
 });
 
-vi.mock("@app/lib/actions/tool_status", async (importOriginal) => {
-  const mod =
-    await importOriginal<typeof import("@app/lib/actions/tool_status")>();
-  return {
-    ...mod,
-    setUserAlwaysApprovedTool: vi.fn(),
-  };
-});
-
-import { setUserAlwaysApprovedTool } from "@app/lib/actions/tool_status";
+import { isToolAuthorized } from "@app/lib/api/frames/tool_authorization_coverage";
 import { getSandboxFunctionInvocationEvents } from "@app/lib/api/sandbox_functions/events";
+import { FrameToolAuthorizationResource } from "@app/lib/resources/frame_tool_authorization_resource";
 import {
   launchSandboxFunctionInvocationWorkflow,
   launchSandboxFunctionToolWorkflow,
@@ -773,8 +765,8 @@ describe("POST /api/w/:wId/sandbox-functions/:functionIdOrSlug/invocations/:invo
     expect(refetched?.status).toBe("errored");
   });
 
-  it("records an always-approve for low-stake tools", async () => {
-    const { workspace, sandboxFunction, invocation, action, view } =
+  it("records Frame auth and a low-stake always-approve", async () => {
+    const { workspace, sandboxFunction, invocation, action, view, callerAuth } =
       await setupBlockedAction({ permission: "low" });
     vi.spyOn(getRedisHybridManager(), "removeEvent").mockResolvedValue(
       undefined
@@ -789,16 +781,28 @@ describe("POST /api/w/:wId/sandbox-functions/:functionIdOrSlug/invocations/:invo
     });
 
     expect(response.status).toBe(200);
-    expect(vi.mocked(setUserAlwaysApprovedTool)).toHaveBeenCalledWith(
-      expect.anything(),
-      {
+    const authorization =
+      await FrameToolAuthorizationResource.fetchForUserAndFrame(
+        callerAuth,
+        sandboxFunction.frame
+      );
+    expect(authorization).not.toBeNull();
+    expect(
+      isToolAuthorized(authorization!.authorizedTools, [
+        view.sId,
+        "math_operation",
+      ])
+    ).toBe(true);
+    await expect(
+      callerAuth.getNonNullableUser().hasApprovedTool(callerAuth, {
         mcpServerId: view.mcpServerId,
-        functionCallName: "math_operation",
-      }
-    );
+        toolName: "math_operation",
+        argsAndValues: null,
+      })
+    ).resolves.toBe(true);
   });
 
-  it("records an always-approve for medium-stake tools with no approval arguments", async () => {
+  it("records Frame auth and a medium-stake always-approve with no approval arguments", async () => {
     const { workspace, sandboxFunction, invocation, action, view, callerAuth } =
       await setupBlockedAction({ permission: "medium" });
     vi.spyOn(getRedisHybridManager(), "removeEvent").mockResolvedValue(
@@ -814,8 +818,19 @@ describe("POST /api/w/:wId/sandbox-functions/:functionIdOrSlug/invocations/:invo
     });
 
     expect(response.status).toBe(200);
-    // A medium tool declaring no approval arguments records an empty argument set, which every
-    // later call matches: the approval is permanent, same as the conversation flavor.
+    const authorization =
+      await FrameToolAuthorizationResource.fetchForUserAndFrame(
+        callerAuth,
+        sandboxFunction.frame
+      );
+    expect(authorization).not.toBeNull();
+    expect(
+      isToolAuthorized(authorization!.authorizedTools, [
+        view.sId,
+        "math_operation",
+      ])
+    ).toBe(true);
+    // Empty approval-arg set: every later call matches, same as chat.
     await expect(
       callerAuth.getNonNullableUser().hasApprovedTool(callerAuth, {
         mcpServerId: view.mcpServerId,
@@ -845,6 +860,18 @@ describe("POST /api/w/:wId/sandbox-functions/:functionIdOrSlug/invocations/:invo
     });
 
     expect(response.status).toBe(200);
+    const authorization =
+      await FrameToolAuthorizationResource.fetchForUserAndFrame(
+        callerAuth,
+        sandboxFunction.frame
+      );
+    expect(authorization).not.toBeNull();
+    expect(
+      isToolAuthorized(authorization!.authorizedTools, [
+        view.sId,
+        "math_operation",
+      ])
+    ).toBe(true);
     const user = callerAuth.getNonNullableUser();
     await expect(
       user.hasApprovedTool(callerAuth, {
@@ -853,7 +880,6 @@ describe("POST /api/w/:wId/sandbox-functions/:functionIdOrSlug/invocations/:invo
         argsAndValues: { channel: "general" },
       })
     ).resolves.toBe(true);
-    // Another value for the same argument still requires a fresh approval.
     await expect(
       user.hasApprovedTool(callerAuth, {
         mcpServerId: view.mcpServerId,

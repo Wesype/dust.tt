@@ -35,7 +35,10 @@ export type ToolValidationLabelData = Pick<
   | "metadata"
   | "approvalArgsLabel"
   | "argumentsRequiringApproval"
->;
+> & {
+  // Present on Frame / sandbox-function approvals; Always allow is Frame-scoped then.
+  sandboxFunctionId?: string;
+};
 
 /** Overrides validation labels and details placement for specific MCP tools. */
 const MCP_TOOL_OVERRIDES: Partial<
@@ -254,6 +257,11 @@ export function getToolValidationAlwaysAllowLabel(
 ): string {
   const toolName = asDisplayName(data.metadata.toolName);
   if (data.stake !== "medium") {
+    if (data.sandboxFunctionId) {
+      return t(
+        msg`Allow this Frame to use the “${toolName}” tool without asking again`
+      );
+    }
     return t(msg`Allow every time an agent uses the “${toolName}” tool`);
   }
   const toolOverride = getToolOverride(data.metadata);

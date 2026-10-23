@@ -15,6 +15,11 @@ import {
   emitAuditLogEvent,
   getAuditLogContext,
 } from "@app/lib/api/audit/workos_audit";
+import {
+  getFrameToolApprovalSubject,
+  hasAuthorizedFrameTool,
+  isFrameLastPublisher,
+} from "@app/lib/api/frames/tool_authorization";
 import { resolveSandboxFunctionServerConfiguration } from "@app/lib/api/sandbox/company_default_configurations";
 import {
   buildSandboxFunctionAuditMetadata,
@@ -275,24 +280,48 @@ export async function createSandboxFunctionMCPAction(
     );
   }
 
-  const { toolConfiguration, companyConfig } = toolConfigurationRes.value;
+  const { toolConfiguration: resolvedToolConfiguration, companyConfig } =
+    toolConfigurationRes.value;
   // Inject company defaults when we have them. Without a company default, keep rawInputs
   // unchanged so callers that already pass configuration URIs (pre-hideInternalConfiguration
   // clients) still work — MCP validation rejects missing required fields.
   const augmentedInputs = companyConfig
     ? getAugmentedInputs(auth, {
-        actionConfiguration: toolConfiguration,
+        actionConfiguration: resolvedToolConfiguration,
         rawInputs,
       })
     : rawInputs;
 
   const stakeStatusStarted = performance.now();
-  const { status: executionStatus } = await getExecutionStatusFromConfig(auth, {
-    actionConfiguration: toolConfiguration,
+  const { status: stakeStatus } = await getExecutionStatusFromConfig(auth, {
+    actionConfiguration: resolvedToolConfiguration,
     context: {
       toolInputs: augmentedInputs,
     },
   });
+
+  // Frame-scoped consent only intervenes when a stored chat approval would run the tool
+  // silently (low/medium with UserToolApproval). Tools whose stake is never_ask run as-is;
+  // when the stake already requires validation, regular stake applies unchanged. Last
+  // publisher is exempt; otherwise a prior Frame Always-allow keeps the silent run, and
+  // anyone else is forced to a low-stake ask.
+  let executionStatus = stakeStatus;
+  let toolConfiguration = resolvedToolConfiguration;
+  const frameTool: [string, string] = [view.sId, toolName];
+  if (
+    stakeStatus === "ready_allowed_implicitly" &&
+    !(await isFrameLastPublisher(auth, sandboxFunction.frame)) &&
+    !(await hasAuthorizedFrameTool(auth, {
+      frame: sandboxFunction.frame,
+      tool: frameTool,
+    }))
+  ) {
+    executionStatus = "blocked_validation_required";
+    toolConfiguration = {
+      ...resolvedToolConfiguration,
+      permission: "low",
+    };
+  }
   const stakeStatusMs = roundMs(stakeStatusStarted);
 
   let actionStatus: "running" | "blocked_validation_required";
@@ -348,11 +377,16 @@ export async function createSandboxFunctionMCPAction(
       break;
     }
     case "blocked_validation_required": {
+      const { frameName, publisherName } = await getFrameToolApprovalSubject(
+        auth,
+        sandboxFunction.frame
+      );
       const approvalEventBase = await makeMCPApproveExecutionEventBase(auth, {
         actionId: action.sId,
         toolConfiguration,
         inputs: augmentedInputs,
-        approvalSubjectName: sandboxFunction.slug,
+        approvalSubjectName: frameName,
+        publisherName: publisherName ?? undefined,
       });
       const approvalEvent: SandboxFunctionMCPApproveExecutionEvent = {
         ...approvalEventBase,

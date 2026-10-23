@@ -1,7 +1,6 @@
 import { AuthenticatedVisualizationActionIframe } from "@app/components/assistant/conversation/actions/AuthenticatedVisualizationActionIframe";
 import { FrameCodeView } from "@app/components/assistant/conversation/interactive_content/frame/FrameCodeView";
 import { FrameToolbar } from "@app/components/assistant/conversation/interactive_content/frame/FrameToolbar";
-import { FrameToolConsentGate } from "@app/components/assistant/conversation/interactive_content/frame/FrameToolConsentGate";
 import { PreviewActionButtons } from "@app/components/assistant/conversation/interactive_content/frame/PreviewActionButtons";
 import { useFrameEditSession } from "@app/components/assistant/conversation/interactive_content/frame/useFrameEditSession";
 import { useLiveFrameEditing } from "@app/components/assistant/conversation/interactive_content/frame/useLiveFrameEditing";
@@ -138,8 +137,6 @@ export function PodHoverFrameViewer({
     canEditV2,
     canWriteFrameSource,
     hasFrameFunctions,
-    requiredTools,
-    hasAuthorizedRequiredTools,
     isFramePermissionsLoading,
     mutateFramePermissions,
     status: draftStatus,
@@ -149,8 +146,6 @@ export function PodHoverFrameViewer({
     isV2,
     disabled: !isV2,
   });
-  const needsToolConsent =
-    isV2 && !isFramePermissionsLoading && !hasAuthorizedRequiredTools;
 
   const { fileShare } = useShareInteractiveContentFile({
     fileId,
@@ -247,10 +242,8 @@ export function PodHoverFrameViewer({
   );
 
   const showPreviewActions =
-    !(isV2 && isFramePermissionsLoading) && !needsToolConsent && !isReloading;
-  // Consent occupies the viewport; pin/share/edit chrome would sit on top of it.
-  const showToolbar =
-    !(isV2 && isFramePermissionsLoading) && !needsToolConsent && !isReloading;
+    !(isV2 && isFramePermissionsLoading) && !isReloading;
+  const showToolbar = !(isV2 && isFramePermissionsLoading) && !isReloading;
 
   const body =
     isV2 && isFramePermissionsLoading ? (
@@ -261,15 +254,6 @@ export function PodHoverFrameViewer({
       <div className="flex h-full items-center justify-center">
         <Spinner />
       </div>
-    ) : needsToolConsent ? (
-      <FrameToolConsentGate
-        owner={owner}
-        frameId={fileId}
-        requiredTools={requiredTools}
-        onAuthorized={async () => {
-          await mutateFramePermissions();
-        }}
-      />
     ) : showCode ? (
       <FrameCodeView
         code={isV2 ? (frameSource ?? undefined) : fileContent}

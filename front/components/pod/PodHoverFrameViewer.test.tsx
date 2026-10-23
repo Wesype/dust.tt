@@ -5,8 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   canWriteFrameSource: true,
-  hasAuthorizedRequiredTools: true,
-  requiredTools: [] as [string, string][],
   draftMode: false,
   iframe: vi.fn((_props: unknown) => null),
 }));
@@ -75,20 +73,11 @@ vi.mock("@app/lib/swr/files", () => ({
     fileShare: { shareUrl: "https://dust.tt/share/frame/token" },
   }),
 }));
-vi.mock(
-  "@app/components/assistant/conversation/interactive_content/frame/FrameToolConsentGate",
-  () => ({
-    FrameToolConsentGate: () => <div>tool-consent-gate</div>,
-  })
-);
 vi.mock("@app/lib/swr/frames", () => ({
   useFramePermissions: () => ({
     canWriteFrameSource: mocks.canWriteFrameSource,
     draftMode: mocks.draftMode,
     hasFrameFunctions: false,
-    requiredTools: mocks.requiredTools,
-    isLastPublisher: false,
-    hasAuthorizedRequiredTools: mocks.hasAuthorizedRequiredTools,
     isFramePermissionsLoading: false,
     packageRoot: null,
     mutateFramePermissions: vi.fn(),
@@ -102,8 +91,6 @@ const owner = LightWorkspaceFactory.build();
 
 beforeEach(() => {
   mocks.canWriteFrameSource = true;
-  mocks.hasAuthorizedRequiredTools = true;
-  mocks.requiredTools = [];
   mocks.draftMode = false;
 });
 
@@ -223,10 +210,7 @@ describe("PodHoverFrameViewer", () => {
     ).toBeInTheDocument();
   });
 
-  it("hides the toolbar while the tool consent screen is shown", () => {
-    mocks.hasAuthorizedRequiredTools = false;
-    mocks.requiredTools = [["gmail", "send_email"]];
-
+  it("shows the toolbar for a Frame with tools (consent is deferred to invocation)", () => {
     render(
       <PodHoverFrameViewer
         owner={owner}
@@ -245,11 +229,10 @@ describe("PodHoverFrameViewer", () => {
       />
     );
 
-    expect(screen.getByText("tool-consent-gate")).toBeInTheDocument();
-    expect(screen.queryByText("edit-controls")).not.toBeInTheDocument();
+    expect(screen.getByText("edit-controls")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Hide banner" })
-    ).not.toBeInTheDocument();
-    expect(mocks.iframe).not.toHaveBeenCalled();
+      screen.getByRole("button", { name: "Hide banner" })
+    ).toBeInTheDocument();
+    expect(mocks.iframe).toHaveBeenCalled();
   });
 });

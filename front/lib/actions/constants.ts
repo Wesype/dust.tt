@@ -79,6 +79,8 @@ export type MCPValidationMetadataType = {
   mcpServerName: string;
   displayLabel?: string;
   agentName: string;
+  /** Last publisher of the Frame (sandbox-function approvals only). */
+  publisherName?: string;
   pubsubMessageId?: string;
   icon?: InternalAllowedIconType | CustomResourceIconType;
   displayedAs?: "agent" | "server";

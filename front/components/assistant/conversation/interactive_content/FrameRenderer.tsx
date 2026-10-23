@@ -6,7 +6,6 @@ import { FrameCodeView } from "@app/components/assistant/conversation/interactiv
 import { FrameDraftControls } from "@app/components/assistant/conversation/interactive_content/frame/FrameDraftControls";
 import { FrameDraftModeBorder } from "@app/components/assistant/conversation/interactive_content/frame/FrameDraftModeBorder";
 import { FrameToolbar } from "@app/components/assistant/conversation/interactive_content/frame/FrameToolbar";
-import { FrameToolConsentGate } from "@app/components/assistant/conversation/interactive_content/frame/FrameToolConsentGate";
 import { PreviewActionButtons } from "@app/components/assistant/conversation/interactive_content/frame/PreviewActionButtons";
 import { useFrameEditSession } from "@app/components/assistant/conversation/interactive_content/frame/useFrameEditSession";
 import { useSidePanelFrameTracking } from "@app/components/assistant/conversation/interactive_content/useFrameTracking";
@@ -177,8 +176,6 @@ export function FrameRenderer({
     canWriteFrameSource,
     packageRoot,
     hasFrameFunctions,
-    requiredTools,
-    hasAuthorizedRequiredTools,
     isFramePermissionsLoading,
     hasFramePermissions,
     draftPublicationId,
@@ -192,9 +189,6 @@ export function FrameRenderer({
     cacheKey: contentHash,
     disabled: renderMode !== "v2",
   });
-  // Retained permissions keep the gate up while a new contentHash refetches them.
-  const needsToolConsent =
-    renderMode === "v2" && hasFramePermissions && !hasAuthorizedRequiredTools;
   const framePackageRoot =
     framePath && framePath.includes("/")
       ? framePath.slice(0, framePath.lastIndexOf("/"))
@@ -461,15 +455,6 @@ export function FrameRenderer({
       <div className="flex-1 overflow-hidden">
         {isLoading || isFramePathPending || isFileContentLoading ? (
           <Spinner />
-        ) : needsToolConsent ? (
-          <FrameToolConsentGate
-            owner={owner}
-            frameId={fileId}
-            requiredTools={requiredTools}
-            onAuthorized={async () => {
-              await mutateFramePermissions();
-            }}
-          />
         ) : (
           <>
             <FrameDraftModeBorder isDraftMode={isDraftMode}>

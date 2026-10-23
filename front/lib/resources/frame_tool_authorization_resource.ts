@@ -57,29 +57,41 @@ export class FrameToolAuthorizationResource extends BaseResource<FrameToolAuthor
   }
 
   /**
-   * Upsert the caller's consent to the given tool pairs (typically the active
-   * publication's `requiredTools`).
+   * Union one tool pair into the caller's Frame authorization (deduped).
+   * Pairs are stored as `[mcpServerView.sId, toolName]`.
    */
-  static async upsertForUserAndFrame(
+  static async addAuthorizedToolForUserAndFrame(
     auth: Authenticator,
     {
       frame,
-      authorizedTools,
+      tool,
     }: {
       frame: FileResource;
-      authorizedTools: FrameToolCallPair[];
+      tool: FrameToolCallPair;
     }
   ): Promise<FrameToolAuthorizationResource> {
     this.assertFrameOfWorkspace(auth, frame);
     const user = auth.getNonNullableUser();
-    const parsedTools = FrameToolCallPairSchema.array().parse(authorizedTools);
+    const parsedTool = FrameToolCallPairSchema.parse(tool);
     const workspaceId = auth.getNonNullableWorkspace().id;
+
+    const existing = await this.fetchForUserAndFrame(auth, frame);
+    const nextTools = existing
+      ? [...existing.authorizedTools]
+      : ([] as FrameToolCallPair[]);
+    if (
+      !nextTools.some(
+        ([server, tool]) => server === parsedTool[0] && tool === parsedTool[1]
+      )
+    ) {
+      nextTools.push(parsedTool);
+    }
 
     const [row] = await this.model.upsert({
       workspaceId,
       fileId: frame.id,
       userId: user.id,
-      authorizedTools: parsedTools,
+      authorizedTools: nextTools,
     });
 
     return new this(this.model, row.get());

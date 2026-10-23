@@ -50,11 +50,6 @@ describe("GET /api/w/:wId/frames/:frameId/permissions", () => {
       livePublishedAt: null,
       draftPublicationId: null,
       draftMode: false,
-      requiredTools: [],
-      authorizedTools: [],
-      isLastPublisher: false,
-      lastPublisherName: null,
-      hasAuthorizedRequiredTools: true,
     });
   });
 
@@ -259,11 +254,6 @@ describe("GET /api/w/:wId/frames/:frameId/permissions", () => {
       livePublishedAt: null,
       draftPublicationId: null,
       draftMode: false,
-      requiredTools: [],
-      authorizedTools: [],
-      isLastPublisher: false,
-      lastPublisherName: null,
-      hasAuthorizedRequiredTools: true,
     });
   });
 

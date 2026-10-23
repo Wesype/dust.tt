@@ -7,8 +7,6 @@ export function getSandboxFunctionInvocationErrorStatusCode(
   switch (code) {
     case "user_authentication_required":
       return 401;
-    case "frame_tool_authorization_required":
-      return 403;
     case "frame_runtime_unavailable":
       return 409;
     default:
