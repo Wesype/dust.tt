@@ -1,4 +1,5 @@
 import {
+  ArrowUp,
   Breadcrumbs,
   Button,
   ButtonsSwitch,
@@ -29,22 +30,28 @@ import {
   Edit04,
   Eye,
   Globe01,
+  Input,
   LayoutAlt02,
   Link01,
   LinkExternal01,
   Lock01,
   Pin02,
+  PopoverContent,
+  PopoverRoot,
+  PopoverTrigger,
   RefreshCw01,
   ReverseLeft,
   Separator,
+  SliderToggle,
   Terminal,
   TextArea,
+  Tooltip,
+  Trash01,
   Users01,
-  XClose,
   useCopyToClipboard,
   useSendNotification,
 } from "@dust-tt/sparkle";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { ConversationView } from "./ConversationView";
 import { PanelLayout, PanelLayoutPanel } from "./PanelLayout";
@@ -62,9 +69,17 @@ const frameAgent =
 
 const SHARE_URL = "https://dust.tt/share/frame/board-q4-report";
 
-type FrameMode = "view" | "code" | "edit";
+// The regular arrow pointer, filled with the highlight color and given a white
+// border plus a drop shadow so it reads on the page and on the metric cards.
+// The hotspot sits on the arrow tip. oklch is the blue-500 token value; the
+// SVG cannot read CSS variables.
+const EDIT_CURSOR_SVG =
+  "%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Cfilter id='s' x='-50%25' y='-50%25' width='200%25' height='200%25'%3E%3CfeDropShadow dx='0' dy='1' stdDeviation='1' flood-opacity='0.35'/%3E%3C/filter%3E%3Cpath d='M5 3l12.5 11.6h-6.2l3.3 6.7-2.6 1.3-3.4-6.8L5 19.6z' fill='oklch(65.39%25 0.1893 252.74)' stroke='white' stroke-width='1.4' stroke-linejoin='round' filter='url(%23s)'/%3E%3C/svg%3E";
+const EDIT_CURSOR = `url("data:image/svg+xml,${EDIT_CURSOR_SVG}") 5 3, pointer`;
+
+type FrameMode = "view" | "code";
 type ShareScope = "invite" | "workspace" | "public";
-type DraftConfirm = "cancel" | "validate" | "deactivate";
+type DraftConfirm = "delete" | "validate" | "deactivate";
 
 interface BoardReport {
   title: string;
@@ -76,7 +91,7 @@ interface BoardReport {
   ask: string;
 }
 
-const INITIAL_REPORT: BoardReport = {
+const REPORT: BoardReport = {
   title: "Board Q4 report",
   period: "October 2026",
   summary:
@@ -158,125 +173,169 @@ The frame is open on the right. It covers revenue, what landed, the risks, and t
   };
 }
 
-function EditableText({
-  value,
-  editing,
-  className,
-  onChange,
-}: {
-  value: string;
-  editing: boolean;
-  className?: string;
-  onChange: (value: string) => void;
-}) {
+function DirectEditForm({ onSubmit }: { onSubmit: (prompt: string) => void }) {
+  const [prompt, setPrompt] = useState("");
+  const canSend = prompt.trim().length > 0;
+
   return (
-    <div
-      className={[
-        className,
-        editing ? "cursor-text rounded-sm outline-none" : "",
-      ].join(" ")}
-      contentEditable={editing}
-      suppressContentEditableWarning
-      onBlur={(event) => {
-        const next = event.currentTarget.textContent ?? "";
-        if (next !== value) {
-          onChange(next);
+    <form
+      className="flex items-center gap-1.5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (canSend) {
+          onSubmit(prompt);
         }
       }}
     >
-      {value}
-    </div>
+      <Input
+        autoFocus
+        size="sm"
+        variant="borderless"
+        placeholder="Ask for a change"
+        value={prompt}
+        onChange={(event) => setPrompt(event.target.value)}
+        containerClassName="min-w-0 grow"
+      />
+      <Button
+        type="submit"
+        icon={ArrowUp}
+        size="xs"
+        variant="highlight"
+        isRounded
+        disabled={!canSend}
+        aria-label="Send"
+      />
+    </form>
   );
+}
+
+interface EditableBlockProps {
+  id: string;
+  isDirectEdit: boolean;
+  isOpen: boolean;
+  onOpenChange: (id: string | null) => void;
+  onSubmit: (id: string, prompt: string) => void;
+  className?: string;
+  children: ReactNode;
+}
+
+function EditableBlock({
+  id,
+  isDirectEdit,
+  isOpen,
+  onOpenChange,
+  onSubmit,
+  className,
+  children,
+}: EditableBlockProps) {
+  if (!isDirectEdit) {
+    return <div className={className}>{children}</div>;
+  }
+
+  return (
+    <PopoverRoot
+      open={isOpen}
+      onOpenChange={(open) => onOpenChange(open ? id : null)}
+    >
+      <PopoverTrigger asChild>
+        <div
+          className={[
+            className ?? "",
+            // Outline rather than border or ring: it sits outside the box, so
+            // the block never shifts when it highlights. The width is always
+            // there (v4 width utilities also set the style) and only the color
+            // changes, which keeps the highlight animatable.
+            "rounded-lg outline-2 outline-offset-4 transition-[outline-color] duration-150 motion-reduce:transition-none",
+            // Only one outline color class at a time: these are plain strings,
+            // so two of them would leave the winner up to stylesheet order.
+            isOpen
+              ? "outline-highlight-400"
+              : "outline-transparent hover:outline-highlight-200",
+          ].join(" ")}
+        >
+          {children}
+        </div>
+      </PopoverTrigger>
+      <PopoverContent align="start" side="bottom" className="w-[320px] p-1.5">
+        <DirectEditForm onSubmit={(prompt) => onSubmit(id, prompt)} />
+      </PopoverContent>
+    </PopoverRoot>
+  );
+}
+
+interface BoardReportViewProps {
+  report: BoardReport;
+  isDirectEdit: boolean;
+  editBlockId: string | null;
+  onEditBlockChange: (id: string | null) => void;
+  onSubmitEdit: (id: string, prompt: string) => void;
 }
 
 function BoardReportView({
   report,
-  editing,
-  onChange,
-}: {
-  report: BoardReport;
-  editing: boolean;
-  onChange: (report: BoardReport) => void;
-}) {
-  const update = (patch: Partial<BoardReport>) =>
-    onChange({ ...report, ...patch });
+  isDirectEdit,
+  editBlockId,
+  onEditBlockChange,
+  onSubmitEdit,
+}: BoardReportViewProps) {
+  const blockProps = (id: string) => ({
+    id,
+    isDirectEdit,
+    isOpen: editBlockId === id,
+    onOpenChange: onEditBlockChange,
+    onSubmit: onSubmitEdit,
+  });
 
   return (
-    <div className="h-full overflow-auto bg-background px-8 py-7">
-      <p className="text-xs font-medium text-muted-foreground">Board report</p>
-      <EditableText
-        value={report.title}
-        editing={editing}
-        className="mt-1 text-2xl font-semibold tracking-tight"
-        onChange={(title) => update({ title })}
-      />
-      <p className="mt-1 text-sm text-muted-foreground">{report.period}</p>
-      <EditableText
-        value={report.summary}
-        editing={editing}
-        className="mt-4 max-w-xl text-sm leading-6"
-        onChange={(summary) => update({ summary })}
-      />
+    <div
+      className="h-full overflow-auto bg-background px-8 py-7"
+      style={isDirectEdit ? { cursor: EDIT_CURSOR } : undefined}
+    >
+      <EditableBlock {...blockProps("header")}>
+        <p className="text-xs font-medium text-muted-foreground">
+          Board report
+        </p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+          {report.title}
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">{report.period}</p>
+      </EditableBlock>
+      <EditableBlock {...blockProps("summary")}>
+        <p className="mt-4 max-w-xl text-sm leading-6">{report.summary}</p>
+      </EditableBlock>
       <div className="mt-6 grid grid-cols-3 gap-3">
-        {report.metrics.map((metric, index) => (
-          <div key={metric.label} className="rounded-xl border px-4 py-3">
+        {report.metrics.map((metric) => (
+          <EditableBlock
+            key={metric.label}
+            {...blockProps(`metric-${metric.label}`)}
+            className="rounded-xl border px-4 py-3"
+          >
             <p className="text-xs text-muted-foreground">{metric.label}</p>
-            <EditableText
-              value={metric.value}
-              editing={editing}
-              className="mt-1 text-xl font-semibold"
-              onChange={(value) => {
-                const metrics = report.metrics.map((item, itemIndex) =>
-                  itemIndex === index ? { ...item, value } : item
-                );
-                update({ metrics });
-              }}
-            />
+            <p className="mt-1 text-xl font-semibold">{metric.value}</p>
             <p className="mt-1 text-xs text-muted-foreground">{metric.note}</p>
-          </div>
+          </EditableBlock>
         ))}
       </div>
-      <h2 className="mt-8 text-sm font-semibold">What landed</h2>
-      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6">
-        {report.landed.map((item, index) => (
-          <li key={index}>
-            <EditableText
-              value={item}
-              editing={editing}
-              onChange={(value) => {
-                const landed = report.landed.map((entry, entryIndex) =>
-                  entryIndex === index ? value : entry
-                );
-                update({ landed });
-              }}
-            />
-          </li>
-        ))}
-      </ul>
-      <h2 className="mt-6 text-sm font-semibold">Risks</h2>
-      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6">
-        {report.risks.map((item, index) => (
-          <li key={index}>
-            <EditableText
-              value={item}
-              editing={editing}
-              onChange={(value) => {
-                const risks = report.risks.map((entry, entryIndex) =>
-                  entryIndex === index ? value : entry
-                );
-                update({ risks });
-              }}
-            />
-          </li>
-        ))}
-      </ul>
-      <h2 className="mt-6 text-sm font-semibold">Ask</h2>
-      <EditableText
-        value={report.ask}
-        editing={editing}
-        className="mt-2 max-w-xl text-sm leading-6"
-        onChange={(ask) => update({ ask })}
-      />
+      <EditableBlock {...blockProps("landed")}>
+        <h2 className="mt-8 text-sm font-semibold">What landed</h2>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6">
+          {report.landed.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </EditableBlock>
+      <EditableBlock {...blockProps("risks")}>
+        <h2 className="mt-6 text-sm font-semibold">Risks</h2>
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6">
+          {report.risks.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </EditableBlock>
+      <EditableBlock {...blockProps("ask")}>
+        <h2 className="mt-6 text-sm font-semibold">Ask</h2>
+        <p className="mt-2 max-w-xl text-sm leading-6">{report.ask}</p>
+      </EditableBlock>
     </div>
   );
 }
@@ -285,16 +344,15 @@ export function FrameView() {
   const conversation = useMemo(() => buildFrameConversation(frameAgent), []);
   const [isFrameOpen, setIsFrameOpen] = useState(true);
   const [mode, setMode] = useState<FrameMode>("view");
+  // Whether a draft exists at all, managed from the Draft menu, and whether
+  // the panel shows that draft instead of what everyone else sees.
   const [hasDraft, setHasDraft] = useState(false);
-  const [isDraftMode, setIsDraftMode] = useState(false);
-  const [prodReport, setProdReport] = useState<BoardReport>(INITIAL_REPORT);
-  const [draftReport, setDraftReport] = useState<BoardReport>(INITIAL_REPORT);
-  // Working copy of a direct edit: unsaved, so it never touches prodReport
-  // until Save.
-  const [directReport, setDirectReport] = useState<BoardReport | null>(null);
+  const [isViewingDraft, setIsViewingDraft] = useState(false);
+  const [isDirectEdit, setIsDirectEdit] = useState(false);
+  const [editBlockId, setEditBlockId] = useState<string | null>(null);
   // The kind outlives the open state so the dialog keeps its copy while it
   // animates closed.
-  const [confirmKind, setConfirmKind] = useState<DraftConfirm>("cancel");
+  const [confirmKind, setConfirmKind] = useState<DraftConfirm>("delete");
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [shareScope, setShareScope] = useState<ShareScope>("workspace");
   const [isPinned, setIsPinned] = useState(false);
@@ -317,53 +375,42 @@ export function FrameView() {
     [frameCode]
   );
 
-  const editing = mode === "edit";
-  const isDirectEditing = editing && !isDraftMode;
-  const displayedReport = isDraftMode
-    ? draftReport
-    : (directReport ?? prodReport);
-
-  const updateDisplayedReport = (next: BoardReport) => {
-    if (isDraftMode) {
-      setDraftReport(next);
-      return;
-    }
-    setDirectReport(next);
-  };
-
   const handleModeChange = (next: string) => {
-    if (next !== "view" && next !== "code" && next !== "edit") {
+    if (next !== "view" && next !== "code") {
       return;
-    }
-    if (next === "edit") {
-      if (hasDraft && !isDraftMode) {
-        setIsDraftMode(true);
-      } else if (!isDraftMode) {
-        setDirectReport(prodReport);
-      }
-    } else {
-      // Leaving edit without saving drops the direct-edit changes.
-      setDirectReport(null);
-      if (next === "view") {
-        setIsDraftMode(false);
-      }
     }
     setMode(next);
-  };
-
-  const handleSaveDirectEdit = () => {
-    if (directReport) {
-      setProdReport(directReport);
+    if (next === "code") {
+      setIsDirectEdit(false);
+      setEditBlockId(null);
     }
-    setDirectReport(null);
-    setMode("view");
-    sendNotification({ type: "success", title: "Changes saved" });
   };
 
-  const handleCancelDirectEdit = () => {
-    setDirectReport(null);
-    setMode("view");
+  const handleToggleDirectEdit = () => {
+    setIsDirectEdit((editing) => !editing);
+    setEditBlockId(null);
   };
+
+  // Sending a change ends the editing pass: one prompt, one edit.
+  const handleSubmitEdit = () => {
+    setEditBlockId(null);
+    setIsDirectEdit(false);
+  };
+
+  // Escape first closes the open popover (Radix handles that), so leaving edit
+  // mode takes a second press once no block is selected.
+  useEffect(() => {
+    if (!isDirectEdit) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !editBlockId) {
+        setIsDirectEdit(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isDirectEdit, editBlockId]);
 
   const openConfirm = (kind: DraftConfirm) => {
     setConfirmKind(kind);
@@ -371,45 +418,33 @@ export function FrameView() {
   };
 
   const handleValidateDraft = () => {
-    setProdReport(draftReport);
     setHasDraft(false);
-    setIsDraftMode(false);
-    setDirectReport(null);
-    setMode("view");
+    setIsViewingDraft(false);
     sendNotification({ type: "success", title: "Draft validated" });
     setIsConfirmOpen(false);
   };
 
-  const handleCancelDraft = () => {
-    setDraftReport(prodReport);
+  const handleDeleteDraft = () => {
     setHasDraft(false);
-    setIsDraftMode(false);
-    setDirectReport(null);
-    setMode("view");
-    sendNotification({ type: "success", title: "Draft canceled" });
+    setIsViewingDraft(false);
+    sendNotification({ type: "success", title: "Draft deleted" });
     setIsConfirmOpen(false);
   };
 
-  const handleKeepDraft = () => {
-    setIsDraftMode(false);
-    setDirectReport(null);
-    setMode("view");
-    setIsConfirmOpen(false);
+  // The See Draft toggle only switches which version the panel shows.
+  const handleToggleSeeDraft = () => {
+    setIsViewingDraft((viewing) => !viewing);
   };
 
-  const handleToggleDraftMode = () => {
-    if (isDraftMode) {
+  // The Draft menu owns whether a draft exists. Leaving draft mode has to
+  // resolve the draft, so it asks to validate or delete it.
+  const handleToggleDraft = () => {
+    if (hasDraft) {
       openConfirm("deactivate");
       return;
     }
-    if (!hasDraft) {
-      // A direct edit in progress becomes the draft.
-      setDraftReport(directReport ?? prodReport);
-      setHasDraft(true);
-    }
-    setDirectReport(null);
-    setIsDraftMode(true);
-    setMode("edit");
+    setHasDraft(true);
+    setIsViewingDraft(true);
   };
 
   const keepEditing = {
@@ -417,47 +452,41 @@ export function FrameView() {
     variant: "outline" as const,
     onClick: () => setIsConfirmOpen(false),
   };
-  const cancelDraft = {
-    label: "Cancel draft",
+  const deleteDraft = {
+    label: "Delete draft",
     variant: "warning" as const,
-    onClick: handleCancelDraft,
+    onClick: handleDeleteDraft,
+  };
+  const validateDraft = {
+    label: "Validate draft",
+    variant: "highlight" as const,
+    onClick: handleValidateDraft,
   };
   const confirmCopy = {
     validate: {
       title: "Validate this draft?",
       description: "Validate will modify the frame for all users of the frame.",
       left: keepEditing,
-      right: {
-        label: "Validate draft",
-        variant: "highlight" as const,
-        onClick: handleValidateDraft,
-      },
+      right: validateDraft,
     },
-    cancel: {
-      title: "Cancel this draft?",
-      description: "Cancel will lose all the changes made in this draft.",
+    delete: {
+      title: "Delete this draft?",
+      description: "Deleting will lose all the changes made in this draft.",
       left: keepEditing,
-      right: cancelDraft,
+      right: deleteDraft,
     },
     deactivate: {
-      title: "Leave Draft mode?",
+      title: "De-activate Draft mode?",
       description:
-        "Keep the draft to come back to it later, or cancel it to lose the changes made in it.",
-      left: {
-        label: "Keep the draft",
-        variant: "outline" as const,
-        onClick: handleKeepDraft,
-      },
-      right: cancelDraft,
+        "The draft has to be resolved first. Validate it to apply the changes to the frame, or delete it to lose them.",
+      left: deleteDraft,
+      right: validateDraft,
     },
   }[confirmKind];
 
   const handleCopyCode = async () => {
     await copyToClipboard(frameCode);
   };
-
-  // Draft mode and a direct edit share the same framed chrome, in their own color.
-  const isFramed = isDraftMode || isDirectEditing;
 
   const handleCopyShareLink = async () => {
     await copyToClipboard(SHARE_URL);
@@ -469,6 +498,77 @@ export function FrameView() {
 
   const frameActions = (
     <>
+      <div
+        className={[
+          "grid transition-[grid-template-columns,opacity] duration-[260ms] ease-[cubic-bezier(.4,0,.2,1)] motion-reduce:transition-none",
+          hasDraft
+            ? "grid-cols-[1fr] opacity-100"
+            : "pointer-events-none grid-cols-[0fr] opacity-0",
+        ].join(" ")}
+      >
+        <div className="overflow-hidden">
+          <div className="mr-1 flex items-center rounded-xl border border-border-dark bg-muted-background py-1 pl-2 pr-2">
+            <Tooltip
+              label={
+                isViewingDraft
+                  ? "Show the frame everyone sees"
+                  : "Show the draft"
+              }
+              tooltipTriggerAsChild
+              trigger={
+                // SliderToggle takes neither a ref nor extra props, so the
+                // tooltip hangs off a wrapper instead of the toggle itself.
+                <span className="flex">
+                  <SliderToggle
+                    selected={isViewingDraft}
+                    onClick={handleToggleSeeDraft}
+                  />
+                </span>
+              }
+            />
+            <span className="ml-2 whitespace-nowrap text-sm font-medium">
+              See Draft
+            </span>
+            <div
+              className={[
+                "grid transition-[grid-template-columns,opacity] duration-[260ms] ease-[cubic-bezier(.4,0,.2,1)] motion-reduce:transition-none",
+                isViewingDraft
+                  ? "grid-cols-[1fr] opacity-100"
+                  : "pointer-events-none grid-cols-[0fr] opacity-0",
+              ].join(" ")}
+            >
+              <div className="overflow-hidden">
+                <div className="flex items-center gap-2 pl-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        aria-label="Draft actions"
+                        icon={DotsHorizontal}
+                        size="xs"
+                        variant="outline"
+                      />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem
+                        label="Delete draft"
+                        icon={Trash01}
+                        onClick={() => openConfirm("delete")}
+                      />
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button
+                    icon={Check}
+                    label="Validate"
+                    size="xs"
+                    variant="highlight"
+                    onClick={() => openConfirm("validate")}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <ButtonsSwitchList
         size="sm"
         value={mode}
@@ -476,37 +576,16 @@ export function FrameView() {
       >
         <ButtonsSwitch value="view" icon={Eye} tooltip="View" />
         <ButtonsSwitch value="code" icon={Terminal} tooltip="Code" />
-        <ButtonsSwitch value="edit" icon={Edit04} tooltip="Edit" />
       </ButtonsSwitchList>
-      <div
-        className={[
-          "grid transition-[grid-template-columns,opacity] duration-[260ms] ease-[cubic-bezier(.4,0,.2,1)] motion-reduce:transition-none",
-          isFramed
-            ? "grid-cols-[1fr] opacity-100"
-            : "pointer-events-none grid-cols-[0fr] opacity-0",
-        ].join(" ")}
-      >
-        <div className="flex items-center gap-1 overflow-hidden">
-          <Button
-            icon={XClose}
-            label="Cancel"
-            size="sm"
-            variant="outline"
-            onClick={
-              isDraftMode ? () => openConfirm("cancel") : handleCancelDirectEdit
-            }
-          />
-          <Button
-            icon={Check}
-            label={isDraftMode ? "Validate" : "Save"}
-            size="sm"
-            variant="highlight"
-            onClick={
-              isDraftMode ? () => openConfirm("validate") : handleSaveDirectEdit
-            }
-          />
-        </div>
-      </div>
+      <Button
+        icon={Edit04}
+        size="sm"
+        variant={isDirectEdit ? "highlight" : "ghost"}
+        tooltip={isDirectEdit ? "Stop editing" : "Edit"}
+        aria-label="Edit"
+        disabled={mode === "code"}
+        onClick={handleToggleDirectEdit}
+      />
       <Separator orientation="vertical" className="h-5 self-center" />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -632,22 +711,19 @@ export function FrameView() {
           <DropdownMenuSeparator />
           <DropdownMenuLabel label="Draft" />
           <DropdownMenuItem
-            label={
-              isDraftMode ? "De-activate Draft mode" : "Activate Draft mode"
-            }
-            onClick={handleToggleDraftMode}
+            label={hasDraft ? "De-activate Draft mode" : "Activate Draft mode"}
+            onClick={handleToggleDraft}
           />
-          {!isDraftMode &&
-            (hasDraft ? (
-              <p className="w-[240px] px-2 pb-2 text-xs font-semibold text-foreground">
-                One draft ongoing
-              </p>
-            ) : (
-              <p className="w-[240px] px-2 pb-2 text-xs font-normal text-muted-foreground">
-                Your changes stay hidden from other members until you validate
-                the draft.
-              </p>
-            ))}
+          {hasDraft ? (
+            <p className="w-[240px] px-2 pb-2 text-xs font-semibold text-foreground">
+              One draft ongoing
+            </p>
+          ) : (
+            <p className="w-[240px] px-2 pb-2 text-xs font-normal text-muted-foreground">
+              Your changes stay hidden from other members until you validate the
+              draft.
+            </p>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem
             label={isPinned ? "Unpin from Pod banner" : "Pin as Pod banner"}
@@ -735,15 +811,14 @@ export function FrameView() {
           <div className="relative h-full min-h-0 w-full">
             <div
               className={[
-                "h-full w-full transition-[padding,background-color] duration-[260ms] ease-[cubic-bezier(.4,0,.2,1)] motion-reduce:transition-none",
-                isDraftMode ? "bg-info" : "bg-highlight",
-                isFramed ? "p-[6px]" : "p-0",
+                "h-full w-full bg-info transition-[padding] duration-[260ms] ease-[cubic-bezier(.4,0,.2,1)] motion-reduce:transition-none",
+                isViewingDraft ? "p-[6px]" : "p-0",
               ].join(" ")}
             >
               <div
                 className={[
                   "h-full w-full overflow-hidden bg-background transition-[border-radius] duration-[260ms] ease-[cubic-bezier(.4,0,.2,1)] motion-reduce:transition-none",
-                  isFramed ? "rounded-lg" : "rounded-none",
+                  isViewingDraft ? "rounded-lg" : "rounded-none",
                 ].join(" ")}
               >
                 {mode === "code" ? (
@@ -763,29 +838,25 @@ export function FrameView() {
                   </div>
                 ) : (
                   <BoardReportView
-                    // Remount on every state change: contentEditable text is
-                    // owned by the DOM once typed, so canceling must rebuild it.
-                    key={`${isDraftMode ? "draft" : "prod"}-${editing ? "edit" : "read"}`}
-                    report={displayedReport}
-                    editing={editing}
-                    onChange={updateDisplayedReport}
+                    report={REPORT}
+                    isDirectEdit={isDirectEdit}
+                    editBlockId={editBlockId}
+                    onEditBlockChange={setEditBlockId}
+                    onSubmitEdit={handleSubmitEdit}
                   />
                 )}
               </div>
             </div>
             <div
-              aria-hidden={!isFramed}
+              aria-hidden={!isViewingDraft}
               className={[
-                "absolute right-0 top-0 z-10 rounded-bl-lg px-2 py-1 text-xs font-medium transition-[opacity,translate,background-color] duration-[260ms] ease-[cubic-bezier(.4,0,.2,1)] motion-reduce:transition-none",
-                isDraftMode
-                  ? "bg-info text-golden-950"
-                  : "bg-highlight text-white",
-                isFramed
+                "absolute right-0 top-0 z-10 rounded-bl-lg bg-info px-2 py-1 text-xs font-medium text-golden-950 transition-[opacity,translate] duration-[260ms] ease-[cubic-bezier(.4,0,.2,1)] motion-reduce:transition-none",
+                isViewingDraft
                   ? "translate-y-0 opacity-100"
                   : "pointer-events-none -translate-y-2 opacity-0",
               ].join(" ")}
             >
-              {isDraftMode ? "Draft" : "Edit"}
+              Draft
             </div>
           </div>
         </PanelLayoutPanel>
