@@ -7,6 +7,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 import type {
   AgentMessageType,
+  CompactionMessageType,
   ConversationType,
   UserMessageType,
 } from "../assistant/conversation";
@@ -93,10 +94,23 @@ export type PokeAgentMessageType = Omit<AgentMessageType, "actions"> & {
   actions: PokeAgentActionType[];
 };
 
+export type PokeApiKeyType = {
+  id: ModelId;
+  name: string;
+  isSystem: boolean;
+};
+
+export type PokeUserMessageType = UserMessageType & {
+  // The key the message was posted with; null when it was not posted with a key or the key was
+  // deleted.
+  apiKey?: PokeApiKeyType | null;
+};
+
 export type PokeConversationType = Omit<ConversationType, "content"> & {
   content: (
-    | UserMessageType[]
+    | PokeUserMessageType[]
     | PokeAgentMessageType[]
     | ContentFragmentType[]
+    | CompactionMessageType[]
   )[];
 };

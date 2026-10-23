@@ -16,8 +16,8 @@ interface PokeAssistantTemplatesResponse extends FetchAssistantTemplatesResponse
   dustRegionSyncEnabled: boolean;
 }
 
-import type { ConversationType } from "@app/types/assistant/conversation";
 import type { DataSourceType } from "@app/types/data_source";
+import type { PokeConversationType } from "@app/types/poke";
 import type { LightWorkspaceType } from "@app/types/user";
 
 export function usePokePullTemplates() {
@@ -99,7 +99,7 @@ export function usePokeConversation({
   conversationId: string | null;
 }) {
   const { fetcher } = useFetcher();
-  const conversationFetcher: Fetcher<{ conversation: ConversationType }> =
+  const conversationFetcher: Fetcher<{ conversation: PokeConversationType }> =
     fetcher;
 
   const { data, error, mutate } = useSWR(

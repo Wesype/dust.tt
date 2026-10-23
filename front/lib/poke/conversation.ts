@@ -2,11 +2,14 @@ import { getConversation } from "@app/lib/api/assistant/conversation/fetch";
 import { isLLMTraceId } from "@app/lib/api/llm/traces/buffer";
 import type { Authenticator } from "@app/lib/auth";
 import { AgentMessageModel } from "@app/lib/models/agent/conversation";
+import { ConversationResource } from "@app/lib/resources/conversation_resource";
+import { KeyResource } from "@app/lib/resources/key_resource";
 import type { ConversationError } from "@app/types/assistant/conversation";
 import type {
   PokeAgentMessageType,
   PokeConversationType,
 } from "@app/types/poke";
+import type { ModelId } from "@app/types/shared/model_id";
 import type { Result } from "@app/types/shared/result";
 import { Ok } from "@app/types/shared/result";
 
@@ -44,9 +47,32 @@ export async function getPokeConversation(
       agentMessagesWithRunIds.map((m) => [m.id, m.runIds])
     );
 
+    const conversationResource = await ConversationResource.fetchById(
+      auth,
+      conversationId,
+      { includeDeleted }
+    );
+    const apiKeyModelIdsByMessageModelId = conversationResource
+      ? await conversationResource.getApiKeyModelIdsByMessageModelId(auth)
+      : new Map<ModelId, ModelId>();
+    const apiKeys = await KeyResource.fetchByWorkspaceAndModelIds({
+      workspace: owner,
+      modelIds: [...new Set(apiKeyModelIdsByMessageModelId.values())],
+    });
+    const apiKeysByModelId = new Map(
+      apiKeys.map((key) => [key.id, key.toPokeJSON()])
+    );
+
     // Cycle through the messages and actions and enrich them with runId(s) and timestamps.
     for (const messages of pokeConversation.content) {
       for (const m of messages) {
+        if (m.type === "user_message") {
+          const apiKeyModelId = apiKeyModelIdsByMessageModelId.get(m.id);
+          m.apiKey = apiKeyModelId
+            ? (apiKeysByModelId.get(apiKeyModelId) ?? null)
+            : null;
+        }
+
         if (m.type === "agent_message") {
           const runIds = runIdsByAgentMessageId.get(m.agentMessageId) ?? null;
 

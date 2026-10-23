@@ -5,10 +5,10 @@ import { getSafeSourceUrl } from "@app/lib/utils/source_urls";
 import type {
   CompactionMessageStatus,
   CompactionMessageType,
-  UserMessageType,
 } from "@app/types/assistant/conversation";
 import type { ContentFragmentType } from "@app/types/content_fragment";
 import { isFileContentFragment } from "@app/types/content_fragment";
+import type { PokeUserMessageType } from "@app/types/poke";
 import {
   ChevronDown,
   ConversationMessage,
@@ -34,7 +34,7 @@ const COMPACTION_STATUS: Record<
 };
 
 interface UserMessageViewProps {
-  message: UserMessageType;
+  message: PokeUserMessageType;
   useMarkdown: boolean;
 }
 
@@ -95,6 +95,15 @@ export const UserMessageView = ({
               color={USER_VISIBILITY[message.visibility]?.color ?? "primary"}
             />
             <span>{formatDateTime(message.created)}</span>
+            {message.apiKey && (
+              <span>
+                with {message.apiKey.isSystem ? "system key" : "key"}{" "}
+                <span className="font-medium text-foreground">
+                  {message.apiKey.name}
+                </span>{" "}
+                (id {message.apiKey.id})
+              </span>
+            )}
             {message.context.origin === "wakeup" && (
               <StatusBadge label="wake-up" color="highlight" />
             )}

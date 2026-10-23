@@ -3873,6 +3873,43 @@ export class ConversationResource extends BaseResource<ConversationModel> {
   }
 
   /**
+   * Returns the model id of the API key (workspace or system) each user message of this
+   * conversation was posted with, keyed by the message model id. Every version is included,
+   * deleted ones too. Messages posted without a key are absent from the map.
+   */
+  async getApiKeyModelIdsByMessageModelId(
+    auth: Authenticator
+  ): Promise<Map<ModelId, ModelId>> {
+    const owner = auth.getNonNullableWorkspace();
+
+    const messages = await MessageModel.findAll({
+      attributes: ["id"],
+      where: {
+        workspaceId: owner.id,
+        conversationId: this.id,
+      },
+      include: [
+        {
+          model: UserMessageModel,
+          as: "userMessage",
+          required: true,
+          attributes: ["userContextApiKeyId"],
+          where: { userContextApiKeyId: { [Op.ne]: null } },
+        },
+      ],
+    });
+
+    const apiKeyModelIdsByMessageModelId = new Map<ModelId, ModelId>();
+    for (const message of messages) {
+      const apiKeyModelId = message.userMessage?.userContextApiKeyId;
+      if (apiKeyModelId) {
+        apiKeyModelIdsByMessageModelId.set(message.id, apiKeyModelId);
+      }
+    }
+    return apiKeyModelIdsByMessageModelId;
+  }
+
+  /**
    * Returns the context to carry over to a wake-up run: the client-side MCP servers and the
    * model explicitly requested on the latest non wake-up user message of the conversation. This
    * anchors wake-ups on the last human turn so they keep running with the model the user picked

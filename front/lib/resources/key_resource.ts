@@ -20,6 +20,7 @@ import { renderLightWorkspaceType } from "@app/lib/workspace";
 import type { LightGroupType } from "@app/types/groups";
 import { CAP_ELIGIBLE_GROUP_KINDS } from "@app/types/groups";
 import type { KeyType } from "@app/types/key";
+import type { PokeApiKeyType } from "@app/types/poke";
 import type { ModelId } from "@app/types/shared/model_id";
 import type { Result } from "@app/types/shared/result";
 import { redactString } from "@app/types/shared/utils/string_utils";
@@ -243,6 +244,27 @@ export class KeyResource extends BaseResource<KeyModel> {
     return new this(KeyResource.model, key.get());
   }
 
+  static async fetchByWorkspaceAndModelIds({
+    workspace,
+    modelIds,
+  }: {
+    workspace: LightWorkspaceType;
+    modelIds: ModelId[];
+  }): Promise<KeyResource[]> {
+    if (modelIds.length === 0) {
+      return [];
+    }
+
+    const keys = await this.model.findAll({
+      where: {
+        id: { [Op.in]: modelIds },
+        workspaceId: workspace.id,
+      },
+    });
+
+    return keys.map((key) => new this(KeyResource.model, key.get()));
+  }
+
   static async fetchByName(
     auth: Authenticator,
     { name, onlyActive }: { name: string; onlyActive?: boolean }
@@ -407,6 +429,18 @@ export class KeyResource extends BaseResource<KeyModel> {
       monthlyCapAwuCredits: this.monthlyCapAwuCredits,
       monthlyUsageMicroUsd,
       isSpendCapped,
+    };
+  }
+
+  /**
+   * @cc [owner:fabiencelier,label:security] poke-json-no-secret
+   * `toPokeJSON` MUST NOT include the key secret, redacted or not.
+   */
+  toPokeJSON(): PokeApiKeyType {
+    return {
+      id: this.id,
+      name: this.name,
+      isSystem: this.isSystem,
     };
   }
 
